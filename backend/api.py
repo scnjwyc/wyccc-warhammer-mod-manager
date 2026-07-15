@@ -81,6 +81,7 @@ class API:
             "set_mod_type": self._set_mod_type,
             "set_mod_types": self._set_mod_types,
             "set_mod_hidden": self._set_mod_hidden,
+            "set_mod_warning_ignored": self._set_mod_warning_ignored,
             "preview_load_order": self._preview_load_order,
             "save_load_order": self._save_load_order,
             "launch_game": self._launch_game,
@@ -275,6 +276,12 @@ class API:
                         f"?id={mod.workshop_id}"
                     )
                 mod.hidden = bool(custom.get("hidden"))
+                raw_ignored_warning_codes = custom.get("ignored_warning_codes")
+                mod.ignored_warning_codes = (
+                    list(raw_ignored_warning_codes)
+                    if isinstance(raw_ignored_warning_codes, list)
+                    else []
+                )
             self._assets = {mod.id: mod for mod in scan_result.mods}
             self._asset_aliases = {
                 alias: mod.id
@@ -363,6 +370,20 @@ class API:
     def _set_mod_hidden(self, mod_id: str, hidden: bool) -> dict[str, Any]:
         asset = self._require_asset(mod_id)
         asset.hidden = self.state_repository.set_mod_hidden(asset.id, hidden)
+        return asset.to_dict()
+
+    def _set_mod_warning_ignored(
+        self,
+        mod_id: str,
+        warning_code: str,
+        ignored: bool,
+    ) -> dict[str, Any]:
+        asset = self._require_asset(mod_id)
+        asset.ignored_warning_codes = self.state_repository.set_mod_warning_ignored(
+            asset.id,
+            warning_code,
+            bool(ignored),
+        )
         return asset.to_dict()
 
     def _preview_load_order(self, ordered_mod_ids: list[str]) -> dict[str, Any]:
@@ -984,6 +1005,9 @@ class API:
             raise ValueError(f"文件不存在：{path}")
         resolved = path.resolve(strict=False)
         if os.name == "nt":
-            subprocess.Popen(["explorer.exe", f"/select,{resolved}"])
+            # Explorer parses /select from the raw command line rather than via
+            # the normal argv rules. Keeping the quotes after the comma avoids
+            # falling back to the user's Documents folder for paths with spaces.
+            subprocess.Popen(f'explorer.exe /select,"{resolved}"')
             return
         API._open_path(resolved.parent)

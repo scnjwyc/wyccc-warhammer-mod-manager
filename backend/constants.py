@@ -6,7 +6,12 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
+
+IGNORABLE_MOD_WARNING_CODES = (
+    "mod_newer_than_game",
+    "missing_dependency",
+)
 
 # Built-in update manifests are checked together. Chinese users prefer Gitee
 # when both repositories publish the same version; all other languages prefer

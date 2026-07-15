@@ -56,6 +56,7 @@ class ModAsset:
     required_workshop_items: list[dict[str, str]] = field(default_factory=list)
     missing_dependencies: list[dict[str, str]] = field(default_factory=list)
     warnings: list[dict[str, Any]] = field(default_factory=list)
+    ignored_warning_codes: list[str] = field(default_factory=list)
 
     @property
     def effective_name(self) -> str:
@@ -71,6 +72,13 @@ class ModAsset:
         payload["mod_types"] = selected_types
         payload["mod_type"] = selected_types[0]
         payload["sources"] = list(self.sources or [self.source])
+        ignored_warning_codes = list(dict.fromkeys(self.ignored_warning_codes))
+        payload["ignored_warning_codes"] = ignored_warning_codes
+        payload["warnings"] = [
+            warning
+            for warning in self.warnings
+            if str(warning.get("code") or "") not in ignored_warning_codes
+        ]
         payload["effective_name"] = self.effective_name
         return payload
 

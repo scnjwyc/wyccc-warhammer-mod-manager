@@ -9,12 +9,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.api import API
+from backend.models import ModAsset
 from backend.storage import StateRepository
 from tests.helpers import write_pack
 
 
 class StorageContractTests(unittest.TestCase):
-    def test_schema_one_database_migrates_type_and_hidden_columns(self) -> None:
+    def test_schema_one_database_migrates_user_intent_columns(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "state.db"
             with closing(sqlite3.connect(database)) as connection:
@@ -44,13 +45,14 @@ class StorageContractTests(unittest.TestCase):
                     "mod_types": ["unknown"],
                     "published_workshop_id": "",
                     "hidden": False,
+                    "ignored_warning_codes": [],
                 },
             )
             with closing(sqlite3.connect(database)) as connection:
                 schema_version = connection.execute(
                     "SELECT value FROM system_info WHERE key = 'schema_version'"
                 ).fetchone()[0]
-            self.assertEqual(schema_version, "6")
+            self.assertEqual(schema_version, "7")
 
     def test_legacy_presets_migrate_to_playsets_and_current_order_becomes_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -119,6 +121,7 @@ class StorageContractTests(unittest.TestCase):
                     "mod_types": ["unknown"],
                     "published_workshop_id": "",
                     "hidden": False,
+                    "ignored_warning_codes": [],
                 },
             )
 
@@ -135,6 +138,24 @@ class StorageContractTests(unittest.TestCase):
                 [custom_type["id"], "ui"],
             )
             self.assertTrue(repository.list_user_mod_data()["a"]["hidden"])
+            self.assertEqual(
+                repository.set_mod_warning_ignored("a", "missing_dependency", True),
+                ["missing_dependency"],
+            )
+            self.assertEqual(
+                repository.set_mod_warning_ignored("a", "mod_newer_than_game", True),
+                ["mod_newer_than_game", "missing_dependency"],
+            )
+            self.assertEqual(
+                repository.list_user_mod_data()["a"]["ignored_warning_codes"],
+                ["mod_newer_than_game", "missing_dependency"],
+            )
+            self.assertEqual(
+                repository.set_mod_warning_ignored("a", "missing_dependency", False),
+                ["mod_newer_than_game"],
+            )
+            with self.assertRaisesRegex(ValueError, "不支持忽略"):
+                repository.set_mod_warning_ignored("a", "unknown_warning", True)
             with self.assertRaisesRegex(ValueError, "默认类型无法"):
                 repository.delete_mod_type("ui")
             repository.delete_mod_type(custom_type["id"])
@@ -340,6 +361,7 @@ class ApiContractTests(unittest.TestCase):
                 self.assertEqual(mod["mod_type"], "unknown")
                 self.assertEqual(mod["mod_types"], ["unknown"])
                 self.assertFalse(mod["hidden"])
+                self.assertEqual(mod["ignored_warning_codes"], [])
 
                 saved_user_data = api.call(
                     "save_mod_user_data",
@@ -558,6 +580,77 @@ class ApiContractTests(unittest.TestCase):
                 [call.args[:2] for call in steam_operation.call_args_list],
                 [("force_update", "123"), ("unsubscribe", "123")],
             )
+
+    def test_warning_ignore_rpc_filters_and_restores_supported_mod_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            asset = ModAsset(
+                id="local:data:warning",
+                pack_name="warning.pack",
+                display_name="Warning Mod",
+                path=str(Path(temporary) / "warning.pack"),
+                directory=temporary,
+                source="data",
+                warnings=[
+                    {
+                        "code": "mod_newer_than_game",
+                        "severity": "warning",
+                        "message": "MOD 过期",
+                    },
+                    {
+                        "code": "missing_dependency",
+                        "severity": "error",
+                        "message": "缺少依赖",
+                    },
+                ],
+            )
+            api._assets = {asset.id: asset}
+
+            ignored = api.call(
+                "set_mod_warning_ignored",
+                [asset.id, "missing_dependency", True],
+            )
+            self.assertTrue(ignored["ok"])
+            self.assertEqual(ignored["data"]["ignored_warning_codes"], ["missing_dependency"])
+            self.assertEqual(
+                [warning["code"] for warning in ignored["data"]["warnings"]],
+                ["mod_newer_than_game"],
+            )
+            self.assertEqual(len(asset.warnings), 2)
+
+            restored = api.call(
+                "set_mod_warning_ignored",
+                [asset.id, "missing_dependency", False],
+            )
+            self.assertEqual(
+                [warning["code"] for warning in restored["data"]["warnings"]],
+                ["mod_newer_than_game", "missing_dependency"],
+            )
+            self.assertEqual(
+                api.state_repository.list_user_mod_data()[asset.id]["ignored_warning_codes"],
+                [],
+            )
+
+            unsupported = api.call(
+                "set_mod_warning_ignored",
+                [asset.id, "pack_parse_error", True],
+            )
+            self.assertFalse(unsupported["ok"])
+            self.assertIn("不支持忽略", unsupported["error"]["message"])
+
+    def test_windows_file_reveal_uses_explorer_select_with_the_path_quoted_after_comma(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pack_path = Path(temporary) / "Data Mod.pack"
+            pack_path.write_bytes(b"pack")
+            resolved = pack_path.resolve(strict=False)
+
+            with (
+                patch("backend.api.os.name", "nt"),
+                patch("backend.api.subprocess.Popen") as popen,
+            ):
+                API._reveal_file(pack_path)
+
+            popen.assert_called_once_with(f'explorer.exe /select,"{resolved}"')
 
     def test_bulk_data_sync_skips_existing_local_packs_and_only_updates_managed_copies(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from .constants import IGNORABLE_MOD_WARNING_CODES
 from .mod_types import (
     DEFAULT_MOD_TYPE_ID,
     DEFAULT_MOD_TYPE_IDS,
@@ -68,6 +69,7 @@ class StateRepository:
                     mod_types TEXT NOT NULL DEFAULT '[]',
                     published_workshop_id TEXT NOT NULL DEFAULT '',
                     hidden INTEGER NOT NULL DEFAULT 0,
+                    ignored_warning_codes TEXT NOT NULL DEFAULT '[]',
                     updated_at INTEGER NOT NULL
                 );
 
@@ -146,6 +148,10 @@ class StateRepository:
                 connection.execute(
                     "ALTER TABLE user_mod_data ADD COLUMN published_workshop_id TEXT NOT NULL DEFAULT ''"
                 )
+            if "ignored_warning_codes" not in user_data_columns:
+                connection.execute(
+                    "ALTER TABLE user_mod_data ADD COLUMN ignored_warning_codes TEXT NOT NULL DEFAULT '[]'"
+                )
             for row in connection.execute(
                 "SELECT mod_id, mod_type, mod_types FROM user_mod_data"
             ).fetchall():
@@ -160,7 +166,7 @@ class StateRepository:
                 )
             self._initialize_playsets(connection)
             connection.execute(
-                "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', '6')"
+                "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', '7')"
             )
 
     @classmethod
@@ -315,7 +321,8 @@ class StateRepository:
     def list_user_mod_data(self) -> dict[str, dict[str, Any]]:
         with self._lock, self._connect() as connection:
             rows = connection.execute(
-                "SELECT mod_id, alias, notes, mod_type, mod_types, published_workshop_id, hidden "
+                "SELECT mod_id, alias, notes, mod_type, mod_types, published_workshop_id, hidden, "
+                "ignored_warning_codes "
                 "FROM user_mod_data"
             ).fetchall()
         return {
@@ -326,9 +333,23 @@ class StateRepository:
                 "mod_types": self._decode_mod_types(row["mod_types"], row["mod_type"]),
                 "published_workshop_id": row["published_workshop_id"] or "",
                 "hidden": bool(row["hidden"]),
+                "ignored_warning_codes": self._decode_ignored_warning_codes(
+                    row["ignored_warning_codes"]
+                ),
             }
             for row in rows
         }
+
+    @staticmethod
+    def _decode_ignored_warning_codes(raw_value: Any) -> list[str]:
+        try:
+            decoded = json.loads(str(raw_value or "[]"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+        if not isinstance(decoded, list):
+            return []
+        selected = {str(item) for item in decoded}
+        return [code for code in IGNORABLE_MOD_WARNING_CODES if code in selected]
 
     def save_user_mod_data(self, mod_id: str, alias: str, notes: str) -> dict[str, str]:
         now = int(time.time() * 1000)
@@ -514,6 +535,43 @@ class StateRepository:
                 (str(mod_id), int(normalized), now),
             )
         return normalized
+
+    def set_mod_warning_ignored(
+        self,
+        mod_id: str,
+        warning_code: str,
+        ignored: bool,
+    ) -> list[str]:
+        normalized_code = str(warning_code or "").strip()
+        if normalized_code not in IGNORABLE_MOD_WARNING_CODES:
+            raise ValueError("该 MOD 问题不支持忽略")
+        now = int(time.time() * 1000)
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT ignored_warning_codes FROM user_mod_data WHERE mod_id = ?",
+                (str(mod_id),),
+            ).fetchone()
+            selected = set(
+                self._decode_ignored_warning_codes(
+                    row["ignored_warning_codes"] if row else "[]"
+                )
+            )
+            if ignored:
+                selected.add(normalized_code)
+            else:
+                selected.discard(normalized_code)
+            ordered = [code for code in IGNORABLE_MOD_WARNING_CODES if code in selected]
+            connection.execute(
+                """
+                INSERT INTO user_mod_data(mod_id, ignored_warning_codes, updated_at)
+                VALUES(?, ?, ?)
+                ON CONFLICT(mod_id) DO UPDATE SET
+                    ignored_warning_codes = excluded.ignored_warning_codes,
+                    updated_at = excluded.updated_at
+                """,
+                (str(mod_id), json.dumps(ordered, ensure_ascii=False), now),
+            )
+        return ordered
 
     def get_data_sync_item(self, pack_name: str) -> dict[str, Any] | None:
         normalized = Path(str(pack_name)).name

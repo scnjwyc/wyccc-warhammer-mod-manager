@@ -29,7 +29,7 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertEqual(default_settings()["update_manifest_url"], "")
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.2.0")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.3.0")
 
     def test_schema_one_settings_migrate_to_background_refresh_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -140,7 +140,7 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-            self.assertEqual(migrated["last_seen_app_version"], "0.2.0")
+            self.assertEqual(migrated["last_seen_app_version"], "0.3.0")
 
 
 if __name__ == "__main__":

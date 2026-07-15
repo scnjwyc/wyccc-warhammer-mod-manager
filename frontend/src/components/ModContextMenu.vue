@@ -15,7 +15,7 @@ const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = 384
+  const height = 420
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -41,6 +41,7 @@ const batchLabel = label => (
 const selectedTypes = computed(() => new Set(
   props.mod?.mod_types?.length ? props.mod.mod_types : [props.mod?.mod_type || 'unknown'],
 ))
+const ignoredWarningCodes = computed(() => new Set(props.mod?.ignored_warning_codes || []))
 
 const run = (action, value = null, close = true) => {
   if (close) emit('close')
@@ -137,6 +138,36 @@ const run = (action, value = null, close = true) => {
           </button>
           <button v-if="canPublish && hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-update')">
             <span class="context-menu-icon">⇧</span><span>{{ batchLabel('更新到工坊') }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="context-menu-parent" data-testid="context-ignore-warning-menu">
+        <span class="context-menu-icon">!</span>
+        <span>{{ batchLabel('忽略问题') }}</span>
+        <span class="context-menu-arrow">›</span>
+        <div class="context-submenu" role="menu">
+          <button
+            type="button"
+            class="context-menu-item"
+            role="menuitemcheckbox"
+            :aria-checked="ignoredWarningCodes.has('mod_newer_than_game')"
+            :class="{ checked: ignoredWarningCodes.has('mod_newer_than_game') }"
+            @click.stop="run('toggle-warning-ignore', 'mod_newer_than_game', false)"
+          >
+            <span class="context-menu-check">{{ ignoredWarningCodes.has('mod_newer_than_game') ? '✓' : '' }}</span>
+            <span>{{ batchLabel('忽略 MOD 过期') }}</span>
+          </button>
+          <button
+            type="button"
+            class="context-menu-item"
+            role="menuitemcheckbox"
+            :aria-checked="ignoredWarningCodes.has('missing_dependency')"
+            :class="{ checked: ignoredWarningCodes.has('missing_dependency') }"
+            @click.stop="run('toggle-warning-ignore', 'missing_dependency', false)"
+          >
+            <span class="context-menu-check">{{ ignoredWarningCodes.has('missing_dependency') ? '✓' : '' }}</span>
+            <span>{{ batchLabel('忽略缺失依赖') }}</span>
           </button>
         </div>
       </div>

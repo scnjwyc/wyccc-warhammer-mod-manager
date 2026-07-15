@@ -51,4 +51,32 @@ describe('anchored mod selection', () => {
     expect(store.activeIds).toEqual(['a', 'c', 'e', 'b', 'd'])
     expect(store.dirty).toBe(true)
   })
+
+  it('persists an ignored warning category and immediately updates visible warnings', async () => {
+    const store = useAppStore()
+    store.mods = [{
+      id: 'a',
+      pack_name: 'a.pack',
+      effective_name: 'A',
+      warnings: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖' }],
+      ignored_warning_codes: [],
+    }]
+    invokeMock.mockResolvedValueOnce({
+      ...store.mods[0],
+      warnings: [],
+      ignored_warning_codes: ['missing_dependency'],
+    })
+
+    await store.setModWarningIgnored('a', 'missing_dependency', true)
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'set_mod_warning_ignored',
+      'a',
+      'missing_dependency',
+      true,
+    )
+    expect(store.mods[0].warnings).toEqual([])
+    expect(store.mods[0].ignored_warning_codes).toEqual(['missing_dependency'])
+    expect(store.warningCount).toBe(0)
+  })
 })

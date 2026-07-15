@@ -52,14 +52,18 @@ class PackagedRuntimeTests(unittest.TestCase):
         version_info = (root / "packaging" / "version_info.txt").read_text(encoding="utf-8")
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.2.0")
+        self.assertEqual(APP_VERSION, "0.3.0")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("filevers=(0, 2, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.2.0')", version_info)
-        self.assertEqual([release["version"] for release in changelog[:2]], ["0.2.0", "0.1.0"])
-        self.assertIn("Gitee", str(changelog[0]))
-        self.assertNotIn("Gitee", str(changelog[1]))
+        self.assertIn("filevers=(0, 3, 0, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.3.0')", version_info)
+        self.assertEqual(
+            [release["version"] for release in changelog[:3]],
+            ["0.3.0", "0.2.0", "0.1.0"],
+        )
+        self.assertIn("Data", str(changelog[0]))
+        self.assertIn("Gitee", str(changelog[1]))
+        self.assertNotIn("Gitee", str(changelog[2]))
 
     def test_desktop_mode_requires_pywebview(self) -> None:
         with patch.dict(sys.modules, {"webview": None}):

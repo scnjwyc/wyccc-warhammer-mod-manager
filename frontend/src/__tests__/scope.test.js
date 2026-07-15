@@ -109,4 +109,15 @@ describe('deliberately small product scope', () => {
     expect(stylesSource).toMatch(/\.playset-select > span\s*\{[^}]*white-space:\s*nowrap/s)
     expect(stylesSource).toMatch(/\.playset-select select\s*\{[^}]*border:\s*1px solid #594238/s)
   })
+
+  it('centers the warning entry in the enabled-list heading instead of using a bottom strip', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+    const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
+
+    expect(appSource).toContain(':warning-count="store.warningCount"')
+    expect(appSource).toContain('@show-warnings="showWarnings = true"')
+    expect(appSource).toContain('<WarningModal')
+    expect(appSource).not.toContain('class="warning-area"')
+    expect(stylesSource).toMatch(/\.panel-warning-button\s*\{[^}]*left:\s*50%[^}]*transform:\s*translateX\(-50%\)/s)
+  })
 })

@@ -6,6 +6,20 @@ from typing import Any
 
 APP_CHANGELOG: list[dict[str, Any]] = [
     {
+        "version": "0.3.0",
+        "date": "2026-07-15",
+        "entries": [
+            {
+                "title": "问题管理与文件定位",
+                "changes": [
+                    {"type": "fix", "text": "修复 Data 目录中的 MOD 无法在资源管理器中准确定位 Pack 文件的问题。"},
+                    {"type": "feature", "text": "右键菜单新增“忽略问题”，支持按 MOD 忽略或恢复过期与缺失依赖警告。"},
+                    {"type": "feature", "text": "将警告入口移到“已启用 MOD”标题栏中央，并新增可逐条忽略问题的居中窗口。"},
+                ],
+            }
+        ],
+    },
+    {
         "version": "0.2.0",
         "date": "2026-07-15",
         "entries": [

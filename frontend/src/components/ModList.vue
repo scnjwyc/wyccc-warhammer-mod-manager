@@ -11,9 +11,18 @@ const props = defineProps({
   thumbnails: { type: Object, default: () => ({}) },
   typeMap: { type: Object, default: () => ({}) },
   visualSorted: { type: Boolean, default: false },
+  warningCount: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['select', 'enable', 'disable', 'reorder', 'move', 'context-menu'])
+const emit = defineEmits([
+  'select',
+  'enable',
+  'disable',
+  'reorder',
+  'move',
+  'context-menu',
+  'show-warnings',
+])
 const draggingId = ref('')
 
 const sourceLabel = {
@@ -54,6 +63,16 @@ const onDrop = (targetId) => {
         <span class="eyebrow">{{ active ? 'LOAD ORDER' : 'LIBRARY' }}</span>
         <h2>{{ title }}</h2>
       </div>
+      <button
+        v-if="active && warningCount"
+        type="button"
+        class="panel-warning-button"
+        data-testid="panel-warning-button"
+        @click="emit('show-warnings')"
+      >
+        <span aria-hidden="true">!</span>
+        {{ warningCount }} 条警告
+      </button>
       <span class="count-badge">{{ mods.length }}</span>
     </header>
 

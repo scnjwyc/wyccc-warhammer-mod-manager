@@ -13,6 +13,7 @@ const mod = {
   mod_type: 'ui',
   mod_types: ['ui'],
   hidden: false,
+  ignored_warning_codes: [],
 }
 
 const types = [
@@ -32,7 +33,7 @@ describe('ModContextMenu', () => {
     for (const label of [
       '停用', '修改类型', '类型管理', '指定加载顺序', '列表顶部', '列表底部',
       '访问创意工坊', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
-      '复制模组到 Data 文件夹',
+      '复制模组到 Data 文件夹', '忽略问题', '忽略 MOD 过期', '忽略缺失依赖',
     ]) {
       expect(wrapper.text()).toContain(label)
     }
@@ -57,6 +58,7 @@ describe('ModContextMenu', () => {
 
     for (const label of [
       '停用（3项）', '修改类型（3项）', '移动到（3项）', 'Steam 操作（3项）',
+      '忽略问题（3项）', '忽略 MOD 过期（3项）', '忽略缺失依赖（3项）',
       '打开文件目录（3项）', '从列表中隐藏（3项）', '复制模组到 Data 文件夹（3项）',
       'UI（3项）', '指定加载顺序（3项）', '列表顶部（3项）', '列表底部（3项）',
       '访问创意工坊（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
@@ -101,12 +103,39 @@ describe('ModContextMenu', () => {
     expect(wrapper.get('[data-testid="context-steam-menu"]').text()).toContain('不可用')
   })
 
+  it('toggles persistent warning categories and shows ignored state', async () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod: { ...mod, ignored_warning_codes: ['missing_dependency'] },
+        types,
+      },
+    })
+
+    const missingDependency = buttonByText(wrapper, '忽略缺失依赖')
+    expect(missingDependency.attributes('aria-checked')).toBe('true')
+    expect(missingDependency.classes()).toContain('checked')
+
+    await buttonByText(wrapper, '忽略 MOD 过期').trigger('click')
+    expect(wrapper.emitted('action')[0][0]).toMatchObject({
+      action: 'toggle-warning-ignore',
+      value: 'mod_newer_than_game',
+      mod: { id: mod.id },
+    })
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
   it('keeps submenu parents hover-only instead of making them clickable or focusable', async () => {
     const wrapper = mount(ModContextMenu, {
       props: { open: true, x: 100, y: 100, mod, active: true, types },
     })
 
-    for (const testId of ['context-type-menu', 'context-move-menu', 'context-steam-menu']) {
+    for (const testId of [
+      'context-type-menu',
+      'context-move-menu',
+      'context-steam-menu',
+      'context-ignore-warning-menu',
+    ]) {
       const parent = wrapper.get(`[data-testid="${testId}"]`)
       expect(parent.attributes('tabindex')).toBeUndefined()
       expect(parent.element.tagName).toBe('DIV')

@@ -11,6 +11,7 @@ import SortMenu from './components/SortMenu.vue'
 import TagSearchBox from './components/TagSearchBox.vue'
 import TypeManagerModal from './components/TypeManagerModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
+import WarningModal from './components/WarningModal.vue'
 import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 
 const store = useAppStore()
@@ -262,6 +263,19 @@ const handleContextAction = async ({ action, value, mod }) => {
       for (const modId of actionIds) {
         if (store.modMap.get(modId)?.hidden !== hidden) await store.setModHidden(modId, hidden)
       }
+    } else if (action === 'toggle-warning-ignore') {
+      const ignored = new Set(mod.ignored_warning_codes || [])
+      const shouldIgnore = !ignored.has(value)
+      for (const modId of actionIds) {
+        const targetIgnored = new Set(store.modMap.get(modId)?.ignored_warning_codes || [])
+        if (targetIgnored.has(value) !== shouldIgnore) {
+          await store.setModWarningIgnored(modId, value, shouldIgnore)
+        }
+      }
+      const warningLabel = value === 'missing_dependency' ? '缺失依赖' : 'MOD 过期'
+      store.notify(
+        `${shouldIgnore ? '已忽略' : '已恢复'} ${actionIds.length} 个 MOD 的${warningLabel}提示`,
+      )
     } else if (action === 'copy-to-data') {
       const targets = actionIds
         .map(modId => store.modMap.get(modId))
@@ -331,6 +345,17 @@ const syncWorkshopToData = async () => {
 const selectWarning = async item => {
   if (!item.modId) return
   await store.selectMod(item.modId)
+  showWarnings.value = false
+}
+
+const ignoreWarning = async item => {
+  if (!item.ignorable || !item.modId || !item.code) return
+  try {
+    await store.setModWarningIgnored(item.modId, item.code, true)
+    store.notify(`已忽略“${item.modName}”的${item.code === 'missing_dependency' ? '缺失依赖' : 'MOD 过期'}提示`)
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
 }
 
 const openSaveGames = async () => {
@@ -491,39 +516,15 @@ onBeforeUnmount(() => {
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
         :visual-sorted="store.sortMode !== 'priority'"
+        :warning-count="store.warningCount"
         @select="store.selectMod"
         @disable="disableSelected"
         @reorder="store.reorder"
         @move="store.move"
         @context-menu="openModContextMenu"
+        @show-warnings="showWarnings = true"
       />
     </main>
-
-    <div v-if="store.warningCount" class="warning-area">
-      <button
-        type="button"
-        class="warning-strip"
-        :aria-expanded="showWarnings"
-        @click="showWarnings = !showWarnings"
-      >
-        <span>!</span>
-        发现 {{ store.warningCount }} 条警告
-        <small>{{ showWarnings ? '收起详情' : '查看详情' }}</small>
-      </button>
-      <div v-if="showWarnings" class="warning-panel">
-        <button
-          v-for="item in store.warningItems"
-          :key="item.id"
-          type="button"
-          :class="`severity-${item.severity}`"
-          :disabled="!item.modId"
-          @click="selectWarning(item)"
-        >
-          <strong v-if="item.modName">{{ item.modName }}</strong>
-          <span>{{ item.message }}</span>
-        </button>
-      </div>
-    </div>
 
     <footer class="action-footer">
       <div class="footer-left">
@@ -613,6 +614,15 @@ onBeforeUnmount(() => {
       @close="showSaveGames = false"
       @refresh="store.loadSaveGames"
       @load="launchSave"
+    />
+
+    <WarningModal
+      :open="showWarnings"
+      :items="store.warningItems"
+      :busy="store.busy"
+      @close="showWarnings = false"
+      @select="selectWarning"
+      @ignore="ignoreWarning"
     />
 
     <ShareModal

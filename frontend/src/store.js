@@ -19,7 +19,7 @@ const enqueuePlaysetWrite = task => {
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.2.0',
+    appVersion: '0.3.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -69,15 +69,20 @@ export const useAppStore = defineStore('app', {
         severity: 'warning',
         modId: '',
         modName: '',
+        code: '',
+        ignorable: false,
       }))
       for (const mod of state.mods) {
         for (const [index, warning] of (mod.warnings || []).entries()) {
+          const code = warning.code || ''
           items.push({
-            id: `${mod.id}:${warning.code || index}`,
+            id: `${mod.id}:${code || index}`,
             message: warning.message || String(warning),
             severity: warning.severity || 'warning',
             modId: mod.id,
             modName: mod.effective_name || mod.display_name || mod.pack_name,
+            code,
+            ignorable: ['mod_newer_than_game', 'missing_dependency'].includes(code),
           })
         }
       }
@@ -747,6 +752,14 @@ export const useAppStore = defineStore('app', {
     },
     async openModFolder(modId) {
       await invoke('open_mod_folder', modId)
+    },
+    async setModWarningIgnored(modId, warningCode, ignored) {
+      return this.withBusy(ignored ? '忽略 MOD 问题' : '恢复 MOD 问题', async () => {
+        const updated = await invoke('set_mod_warning_ignored', modId, warningCode, ignored)
+        const index = this.mods.findIndex(mod => mod.id === updated.id)
+        if (index >= 0) this.mods[index] = updated
+        return updated
+      })
     },
     async openWorkshopFolder(modId) {
       await invoke('open_workshop_folder', modId)

@@ -80,7 +80,7 @@ describe('MOD context menu', () => {
         },
       },
     })
-    const checkboxes = wrapper.findAll('[role="menuitemcheckbox"]')
+    const checkboxes = wrapper.findAll('.type-submenu [role="menuitemcheckbox"]')
     expect(checkboxes.map(item => item.attributes('aria-checked'))).toEqual(['true', 'true', 'false'])
     await checkboxes[1].trigger('click')
     expect(wrapper.emitted('action')[0][0]).toMatchObject({ action: 'toggle-type', value: 'ui' })

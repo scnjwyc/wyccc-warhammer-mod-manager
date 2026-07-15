@@ -106,4 +106,20 @@ describe('ModList previews and source collisions', () => {
     expect(badge.classes()).toContain('error')
     expect(badge.text()).toBe('! 缺少依赖')
   })
+
+  it('places the warning entry in the active-list heading and opens it on click', async () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: '已启用 MOD',
+        active: true,
+        mods: [duplicateMod],
+        warningCount: 3,
+      },
+    })
+
+    const warningButton = wrapper.get('[data-testid="panel-warning-button"]')
+    expect(warningButton.text()).toContain('3 条警告')
+    await warningButton.trigger('click')
+    expect(wrapper.emitted('show-warnings')).toHaveLength(1)
+  })
 })
