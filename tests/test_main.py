@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from backend.constants import APP_NAME
+from backend.changelog import get_all_changelogs
+from backend.constants import APP_NAME, APP_VERSION
 from main import main as run_app
 from main import resolve_runtime_data_dir, run_desktop
 from scripts import build as build_script
@@ -41,6 +44,22 @@ class PackagedRuntimeTests(unittest.TestCase):
                 DEFAULT_RELEASE_DIR,
                 Path(r"G:\Wyccc's Mod Manager"),
             )
+
+    def test_release_version_and_changelog_are_synchronized(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+        frontend = json.loads((root / "frontend" / "package.json").read_text(encoding="utf-8"))
+        version_info = (root / "packaging" / "version_info.txt").read_text(encoding="utf-8")
+        changelog = get_all_changelogs()
+
+        self.assertEqual(APP_VERSION, "0.2.0")
+        self.assertEqual(project["project"]["version"], APP_VERSION)
+        self.assertEqual(frontend["version"], APP_VERSION)
+        self.assertIn("filevers=(0, 2, 0, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.2.0')", version_info)
+        self.assertEqual([release["version"] for release in changelog[:2]], ["0.2.0", "0.1.0"])
+        self.assertIn("Gitee", str(changelog[0]))
+        self.assertNotIn("Gitee", str(changelog[1]))
 
     def test_desktop_mode_requires_pywebview(self) -> None:
         with patch.dict(sys.modules, {"webview": None}):
