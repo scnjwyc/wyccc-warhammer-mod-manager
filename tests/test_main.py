@@ -50,6 +50,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
         frontend = json.loads((root / "frontend" / "package.json").read_text(encoding="utf-8"))
         version_info = (root / "packaging" / "version_info.txt").read_text(encoding="utf-8")
+        update_manifest = json.loads(
+            (root / "packaging" / "update-manifest.json").read_text(encoding="utf-8")
+        )
         changelog = get_all_changelogs()
 
         self.assertEqual(APP_VERSION, "0.3.0")
@@ -57,6 +60,14 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertEqual(frontend["version"], APP_VERSION)
         self.assertIn("filevers=(0, 3, 0, 0)", version_info)
         self.assertIn("StringStruct('ProductVersion', '0.3.0')", version_info)
+        self.assertEqual(update_manifest["schema_version"], 1)
+        self.assertEqual(update_manifest["app"], APP_NAME)
+        self.assertEqual(update_manifest["version"], APP_VERSION)
+        self.assertEqual(update_manifest["published_at"], changelog[0]["date"])
+        self.assertEqual(update_manifest["changelog"], changelog[0]["entries"])
+        self.assertTrue(update_manifest["download"]["url"].startswith("https://"))
+        self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
+        self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:3]],
             ["0.3.0", "0.2.0", "0.1.0"],
