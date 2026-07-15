@@ -8,13 +8,14 @@ const props = defineProps({
   mod: { type: Object, default: null },
   active: { type: Boolean, default: false },
   types: { type: Array, default: () => [] },
+  selectionCount: { type: Number, default: 1 },
 })
 
 const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = 346
+  const height = 384
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -33,6 +34,10 @@ const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.so
 const canCopyToData = computed(() => !!props.mod?.path && !sources.value.has('data'))
 const canPublish = computed(() => sources.value.has('data'))
 const hasSteamActions = computed(() => hasWorkshop.value || canPublish.value)
+const isBatchSelection = computed(() => Number(props.selectionCount) > 1)
+const batchLabel = label => (
+  isBatchSelection.value ? `${label}（${Number(props.selectionCount)}项）` : label
+)
 const selectedTypes = computed(() => new Set(
   props.mod?.mod_types?.length ? props.mod.mod_types : [props.mod?.mod_type || 'unknown'],
 ))
@@ -54,12 +59,12 @@ const run = (action, value = null, close = true) => {
     <nav class="context-menu" :class="{ 'submenus-left': submenuToLeft }" :style="menuStyle" role="menu" aria-label="MOD 操作">
       <button type="button" class="context-menu-item" role="menuitem" @click="run('toggle-active')">
         <span class="context-menu-icon">{{ active ? '⊘' : '✓' }}</span>
-        <span>{{ active ? '停用' : '启用' }}</span>
+        <span>{{ batchLabel(active ? '停用' : '启用') }}</span>
       </button>
 
       <div class="context-menu-parent" data-testid="context-type-menu">
         <span class="context-menu-icon">◆</span>
-        <span>修改类型</span>
+        <span>{{ batchLabel('修改类型') }}</span>
         <span class="context-menu-arrow">›</span>
         <div class="context-submenu type-submenu" role="menu">
           <button
@@ -73,7 +78,7 @@ const run = (action, value = null, close = true) => {
             @click.stop="run('toggle-type', type.id, false)"
           >
             <span class="context-menu-check">{{ selectedTypes.has(type.id) ? '✓' : '' }}</span>
-            <span>{{ type.name }}</span>
+            <span>{{ batchLabel(type.name) }}</span>
           </button>
           <div class="context-menu-divider"></div>
           <button type="button" class="context-menu-item" role="menuitem" @click.stop="run('manage-types')">
@@ -90,18 +95,18 @@ const run = (action, value = null, close = true) => {
         data-testid="context-move-menu"
       >
         <span class="context-menu-icon">↕</span>
-        <span>移动到</span>
+        <span>{{ batchLabel('移动到') }}</span>
         <span v-if="active" class="context-menu-arrow">›</span>
         <span v-else class="context-menu-unavailable">不可用</span>
         <div v-if="active" class="context-submenu" role="menu">
           <button type="button" class="context-menu-item" @click.stop="run('move-specific')">
-            <span class="context-menu-icon">#</span><span>指定加载顺序</span>
+            <span class="context-menu-icon">#</span><span>{{ batchLabel('指定加载顺序') }}</span>
           </button>
           <button type="button" class="context-menu-item" @click.stop="run('move-top')">
-            <span class="context-menu-icon">⇈</span><span>列表顶部</span>
+            <span class="context-menu-icon">⇈</span><span>{{ batchLabel('列表顶部') }}</span>
           </button>
           <button type="button" class="context-menu-item" @click.stop="run('move-bottom')">
-            <span class="context-menu-icon">⇊</span><span>列表底部</span>
+            <span class="context-menu-icon">⇊</span><span>{{ batchLabel('列表底部') }}</span>
           </button>
         </div>
       </div>
@@ -113,38 +118,50 @@ const run = (action, value = null, close = true) => {
         data-testid="context-steam-menu"
       >
         <span class="context-menu-icon steam-icon">S</span>
-        <span>Steam 操作</span>
+        <span>{{ batchLabel('Steam 操作') }}</span>
         <span v-if="hasSteamActions" class="context-menu-arrow">›</span>
         <span v-else class="context-menu-unavailable">不可用</span>
         <div v-if="hasSteamActions" class="context-submenu" role="menu">
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('open-workshop')">
-            <span class="context-menu-icon">↗</span><span>访问创意工坊</span>
+            <span class="context-menu-icon">↗</span><span>{{ batchLabel('访问创意工坊') }}</span>
           </button>
           <button v-if="hasWorkshop" type="button" class="context-menu-item danger-item" @click.stop="run('unsubscribe')">
-            <span class="context-menu-icon">⊘</span><span>取消订阅</span>
+            <span class="context-menu-icon">⊘</span><span>{{ batchLabel('取消订阅') }}</span>
           </button>
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('force-update')">
-            <span class="context-menu-icon">↻</span><span>强制更新</span>
+            <span class="context-menu-icon">↻</span><span>{{ batchLabel('强制更新') }}</span>
           </button>
           <div v-if="hasWorkshop && canPublish" class="context-menu-divider"></div>
           <button v-if="canPublish && !hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-upload')">
-            <span class="context-menu-icon">↑</span><span>上传到工坊</span>
+            <span class="context-menu-icon">↑</span><span>{{ batchLabel('上传到工坊') }}</span>
           </button>
           <button v-if="canPublish && hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-update')">
-            <span class="context-menu-icon">⇧</span><span>更新到工坊</span>
+            <span class="context-menu-icon">⇧</span><span>{{ batchLabel('更新到工坊') }}</span>
           </button>
         </div>
       </div>
 
       <div class="context-menu-divider"></div>
 
-      <button type="button" class="context-menu-item" @click="run('open-rpfm')">
+      <button type="button" class="context-menu-item" @click="run('open-folder')">
+        <span class="context-menu-icon">▣</span>
+        <span>{{ batchLabel('打开文件目录') }}</span>
+      </button>
+      <button
+        type="button"
+        class="context-menu-item"
+        :disabled="isBatchSelection"
+        :title="isBatchSelection ? '批量选择时不能在 RPFM 中打开' : ''"
+        data-testid="context-open-rpfm"
+        @click="run('open-rpfm')"
+      >
         <span class="context-menu-icon">R</span>
         <span>在 RPFM 打开</span>
+        <span v-if="isBatchSelection" class="context-menu-unavailable">仅限单项</span>
       </button>
       <button type="button" class="context-menu-item" @click="run('toggle-hidden')">
         <span class="context-menu-icon">{{ mod.hidden ? '◉' : '◌' }}</span>
-        <span>{{ mod.hidden ? '取消隐藏' : '从列表中隐藏' }}</span>
+        <span>{{ batchLabel(mod.hidden ? '取消隐藏' : '从列表中隐藏') }}</span>
       </button>
       <button
         type="button"
@@ -154,7 +171,7 @@ const run = (action, value = null, close = true) => {
         @click="run('copy-to-data')"
       >
         <span class="context-menu-icon">⇩</span>
-        <span>复制模组到 Data 文件夹</span>
+        <span>{{ batchLabel('复制模组到 Data 文件夹') }}</span>
         <span v-if="!canCopyToData" class="context-menu-unavailable">已在 Data</span>
       </button>
     </nav>

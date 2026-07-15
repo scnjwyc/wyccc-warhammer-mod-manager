@@ -527,6 +527,11 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(merged["sources"], ["data", "workshop"])
 
             with patch.object(api, "_reveal_file") as reveal_file:
+                opened_folder = api.call("open_mod_folder", [merged["id"]])
+            self.assertTrue(opened_folder["ok"])
+            reveal_file.assert_called_once_with(Path(merged["path"]))
+
+            with patch.object(api, "_reveal_file") as reveal_file:
                 opened_workshop_folder = api.call("open_workshop_folder", [merged["id"]])
             self.assertTrue(opened_workshop_folder["ok"])
             self.assertEqual(

@@ -31,7 +31,7 @@ describe('ModContextMenu', () => {
 
     for (const label of [
       '停用', '修改类型', '类型管理', '指定加载顺序', '列表顶部', '列表底部',
-      '访问创意工坊', '取消订阅', '强制更新', '在 RPFM 打开', '从列表中隐藏',
+      '访问创意工坊', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
       '复制模组到 Data 文件夹',
     ]) {
       expect(wrapper.text()).toContain(label)
@@ -40,6 +40,38 @@ describe('ModContextMenu', () => {
     await buttonByText(wrapper, '音效').trigger('click')
     expect(wrapper.emitted('action')[0][0]).toMatchObject({ action: 'toggle-type', value: 'custom:audio', mod })
     expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('shows batch counts on top-level actions and disables the RPFM action', async () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        x: 100,
+        y: 100,
+        mod: { ...mod, sources: ['data', 'workshop'] },
+        active: true,
+        types,
+        selectionCount: 3,
+      },
+    })
+
+    for (const label of [
+      '停用（3项）', '修改类型（3项）', '移动到（3项）', 'Steam 操作（3项）',
+      '打开文件目录（3项）', '从列表中隐藏（3项）', '复制模组到 Data 文件夹（3项）',
+      'UI（3项）', '指定加载顺序（3项）', '列表顶部（3项）', '列表底部（3项）',
+      '访问创意工坊（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
+    ]) {
+      expect(wrapper.text()).toContain(label)
+    }
+
+    const rpfm = wrapper.get('[data-testid="context-open-rpfm"]')
+    expect(rpfm.attributes('disabled')).toBeDefined()
+    expect(rpfm.attributes('title')).toContain('批量选择')
+    expect(rpfm.text()).toContain('仅限单项')
+    expect(rpfm.text()).not.toContain('3项')
+
+    await buttonByText(wrapper, '打开文件目录').trigger('click')
+    expect(wrapper.emitted('action')[0][0]).toMatchObject({ action: 'open-folder', mod: { id: mod.id } })
   })
 
   it('disables copying when the merged entry already exists in Data', () => {

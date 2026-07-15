@@ -173,7 +173,9 @@ python scripts/build.py --package --output-dir "G:\Wyccc's Mod Manager"
 
 ### 发布自动更新
 
-自动更新使用一个公开的 HTTPS JSON 清单。清单格式见 `packaging/update-manifest.example.json`；每次发布时需要填写新版本号、EXE 的公开 HTTPS 下载地址、文件字节数、SHA-256 和更新说明。发布前把长期稳定的清单地址写入 `backend/constants.py` 的 `DEFAULT_UPDATE_MANIFEST_URL`，普通用户即可直接自动检查；设置页也允许切换到私有更新通道。
+自动更新会检查 GitHub 与 Gitee 仓库中的公开 HTTPS JSON 清单，地址定义在 `backend/constants.py`。当前语言为中文时优先采用 Gitee，其他语言优先采用 GitHub；两个源都会检查，如果版本不同则采用较新的版本，如果版本相同则采用首选源。某个源不可访问或清单无效时，会自动使用另一个有效源。设置页仍可填写自定义清单地址，作为对两个内置源的显式覆盖。
+
+两个仓库都应发布 `packaging/update-manifest.json`，格式见 `packaging/update-manifest.example.json`。每次发布时需要在两个仓库同步填写新版本号、对应 EXE 的公开 HTTPS 下载地址、文件字节数、SHA-256 和更新说明。
 
 可用 PowerShell 计算发布 EXE 的校验值与大小：
 

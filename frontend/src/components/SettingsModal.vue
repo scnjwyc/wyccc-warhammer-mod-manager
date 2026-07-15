@@ -139,21 +139,21 @@ const browse = async kind => {
             <span><strong>启动时自动检查更新</strong><small>每 24 小时最多检查一次；只提示新版本，不会静默下载或安装</small></span>
           </label>
           <label class="field-label update-manifest-field">
-            <span>更新清单地址</span>
+            <span>自定义更新清单地址（可选）</span>
             <input
               v-model="draft.update_manifest_url"
               type="url"
               data-testid="update-manifest-url"
-              placeholder="https://example.com/update-manifest.json"
+              placeholder="留空时自动检查 Gitee 与 GitHub"
             />
-            <small class="field-help">发布者应在正式版中内置 HTTPS JSON 地址；也可在这里切换私有更新通道。手动检查会立即采用并保存当前地址。</small>
+            <small class="field-help">中文优先使用 Gitee，其他语言优先使用 GitHub；两个仓库都会检查，版本相同时采用首选源。填写地址后将只使用该自定义更新通道。</small>
           </label>
           <div class="settings-inline-actions">
             <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('show-changelog')">更新日志</button>
             <button
               type="button"
               class="secondary-button update-check-button"
-              :disabled="!!busy || !String(draft.update_manifest_url || '').trim()"
+              :disabled="!!busy"
               @click="emit('check-update', String(draft.update_manifest_url || '').trim())"
             >
               {{ busy === '检查软件更新' ? busy : '检查更新' }}

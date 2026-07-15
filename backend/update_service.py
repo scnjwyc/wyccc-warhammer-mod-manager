@@ -14,7 +14,13 @@ from typing import Any
 from urllib import parse, request
 
 from .app_settings import SettingsService
-from .constants import APP_NAME, APP_SLUG, APP_VERSION
+from .constants import (
+    APP_NAME,
+    APP_SLUG,
+    APP_VERSION,
+    GITEE_UPDATE_MANIFEST_URL,
+    GITHUB_UPDATE_MANIFEST_URL,
+)
 
 
 UPDATE_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
@@ -112,37 +118,68 @@ class UpdateService:
     def should_check_automatically(settings: dict[str, Any], now: int | None = None) -> bool:
         if not settings.get("check_updates_automatically"):
             return False
-        if not str(settings.get("update_manifest_url") or "").strip():
-            return False
         current_time = int(now if now is not None else time.time())
         last_check = int(settings.get("last_update_check_at") or 0)
         return current_time - last_check >= UPDATE_CHECK_INTERVAL_SECONDS
 
+    @staticmethod
+    def preferred_repository_sources(language: str) -> tuple[tuple[str, str], ...]:
+        github = ("github", GITHUB_UPDATE_MANIFEST_URL)
+        gitee = ("gitee", GITEE_UPDATE_MANIFEST_URL)
+        if str(language or "").strip().casefold().startswith("zh"):
+            return (gitee, github)
+        return (github, gitee)
+
     def check(self, *, manual: bool = True, manifest_url: str | None = None) -> dict[str, Any]:
         with self._lock:
             settings = self.settings_service.get()
+            explicit_override = manifest_url is not None
             configured_url = (
                 str(manifest_url).strip()
-                if manifest_url is not None
+                if explicit_override
                 else str(settings.get("update_manifest_url") or "").strip()
             )
-            if not configured_url:
-                if manual:
-                    raise ValueError("尚未配置更新清单地址，请先在设置的“软件更新”中填写 HTTPS 地址")
-                return {
-                    "configured": False,
-                    "has_update": False,
-                    "current_version": APP_VERSION,
-                    "status": "unconfigured",
-                }
+            if configured_url:
+                sources = (("custom", _validate_url(configured_url, allow_file=True)),)
+            else:
+                sources = self.preferred_repository_sources(str(settings.get("language") or ""))
 
-            manifest_url = _validate_url(configured_url, allow_file=True)
-            payload, final_manifest_url = self._read_json(manifest_url)
-            info = self._parse_manifest(payload, final_manifest_url)
+            candidates: list[dict[str, Any]] = []
+            failures: list[tuple[str, Exception]] = []
+            for source, source_url in sources:
+                try:
+                    validated_url = _validate_url(source_url, allow_file=True)
+                    payload, final_manifest_url = self._read_json(validated_url)
+                    candidate = self._parse_manifest(payload, final_manifest_url)
+                    candidate["source"] = source
+                    candidates.append(candidate)
+                except Exception as exc:
+                    failures.append((source, exc))
+
+            if not candidates:
+                if len(sources) == 1 and failures:
+                    raise failures[0][1]
+                source_labels = {"gitee": "Gitee", "github": "GitHub", "custom": "自定义源"}
+                failed_names = (
+                    "、".join(source_labels.get(source, source) for source, _ in failures)
+                    or "Gitee、GitHub"
+                )
+                cause = failures[0][1] if failures else None
+                raise ValueError(f"无法从更新源检查新版本：{failed_names}") from cause
+
+            # Sources are already in language-preference order. Only replace the
+            # selected candidate when another repository has a strictly newer
+            # version, so equal versions keep the preferred regional host.
+            info = candidates[0]
+            for candidate in candidates[1:]:
+                if _version_key(candidate["version"]) > _version_key(info["version"]):
+                    info = candidate
+
             checked_at = int(time.time())
             saved_changes: dict[str, Any] = {"last_update_check_at": checked_at}
-            if manifest_url != str(settings.get("update_manifest_url") or "").strip():
-                saved_changes["update_manifest_url"] = manifest_url
+            stored_url = str(settings.get("update_manifest_url") or "").strip()
+            if explicit_override and configured_url != stored_url:
+                saved_changes["update_manifest_url"] = configured_url
             self.settings_service.save(saved_changes)
 
             newer = is_newer_version(info["version"], APP_VERSION)
@@ -156,6 +193,7 @@ class UpdateService:
                     "update_available": bool(newer),
                     "ignored": bool(newer and ignored),
                     "status": "remote" if newer else "current",
+                    "sources_checked": [source for source, _ in sources],
                 }
             )
             if newer and self._cached_update_is_valid(info):
@@ -455,5 +493,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             "size",
             "local_path",
             "downloaded_size",
+            "source",
+            "sources_checked",
         }
         return {key: value for key, value in info.items() if key in allowed}

@@ -8,9 +8,17 @@ LEGACY_APP_SLUGS = (
 )
 APP_VERSION = "0.1.0"
 
-# Set this to the published HTTPS JSON manifest before making a public build.
-# Users can override it in Settings, which also keeps development and private
-# distribution channels possible without changing the updater implementation.
+# Built-in update manifests are checked together. Chinese users prefer Gitee
+# when both repositories publish the same version; all other languages prefer
+# GitHub. A custom manifest in Settings overrides both built-in sources.
+GITHUB_UPDATE_MANIFEST_URL = (
+    "https://raw.githubusercontent.com/scnjwyc/wyccc-warhammer-mod-manager/"
+    "main/packaging/update-manifest.json"
+)
+GITEE_UPDATE_MANIFEST_URL = (
+    "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/"
+    "raw/master/packaging/update-manifest.json"
+)
 DEFAULT_UPDATE_MANIFEST_URL = ""
 
 WH3_APP_ID = "1142710"

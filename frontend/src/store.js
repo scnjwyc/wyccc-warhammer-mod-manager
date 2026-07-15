@@ -453,6 +453,22 @@ export const useAppStore = defineStore('app', {
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
+    moveManyToPosition(modIds, oneBasedPosition) {
+      const selected = new Set(modIds || [])
+      const moving = this.activeIds.filter(id => selected.has(id))
+      if (!moving.length) return
+      const remaining = this.activeIds.filter(id => !selected.has(id))
+      const numeric = Number(oneBasedPosition)
+      if (!Number.isInteger(numeric)) return
+      const targetIndex = Math.max(0, Math.min(numeric - 1, remaining.length))
+      this.activeIds = [
+        ...remaining.slice(0, targetIndex),
+        ...moving,
+        ...remaining.slice(targetIndex),
+      ]
+      this.dirty = true
+      this.recordCurrentPlaysetChange()
+    },
     async toggleHiddenVisibility() {
       this.showHidden = !this.showHidden
       if (!this.showHidden && this.selectedMod?.hidden) {

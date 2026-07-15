@@ -39,4 +39,16 @@ describe('anchored mod selection', () => {
     expect(store.selectedIds).toEqual(['a', 'b', 'c', 'd'])
     expect(store.selectedId).toBe('d')
   })
+
+  it('moves a multi-selection as one ordered block', () => {
+    const store = useAppStore()
+    store.activeIds = ['a', 'b', 'c', 'd', 'e']
+
+    store.moveManyToPosition(['b', 'd'], 1)
+    expect(store.activeIds).toEqual(['b', 'd', 'a', 'c', 'e'])
+
+    store.moveManyToPosition(['b', 'd'], store.activeIds.length)
+    expect(store.activeIds).toEqual(['a', 'c', 'e', 'b', 'd'])
+    expect(store.dirty).toBe(true)
+  })
 })

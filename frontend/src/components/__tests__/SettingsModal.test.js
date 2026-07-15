@@ -109,6 +109,8 @@ describe('language settings', () => {
     await wrapper.get('[data-testid="update-manifest-url"]').setValue('https://cdn.example.test/latest.json')
     await wrapper.get('.update-check-button').trigger('click')
     expect(wrapper.emitted('check-update')[0][0]).toBe('https://cdn.example.test/latest.json')
+    expect(wrapper.text()).toContain('中文优先使用 Gitee，其他语言优先使用 GitHub')
+    expect(wrapper.text()).toContain('两个仓库都会检查')
 
     const changelogButton = wrapper.findAll('button').find(button => button.text() === '更新日志')
     await changelogButton.trigger('click')
@@ -119,5 +121,27 @@ describe('language settings', () => {
       check_updates_automatically: false,
       update_manifest_url: 'https://cdn.example.test/latest.json',
     })
+  })
+
+  it('allows checking both built-in repositories with an empty custom channel', async () => {
+    const wrapper = mount(SettingsModal, {
+      props: {
+        open: true,
+        settings: {
+          language: 'zh-CN',
+          check_updates_automatically: true,
+          update_manifest_url: '',
+        },
+        health: {},
+      },
+      global: { plugins: [createPinia()] },
+    })
+
+    const button = wrapper.get('.update-check-button')
+    expect(button.attributes('disabled')).toBeUndefined()
+    await button.trigger('click')
+
+    expect(wrapper.emitted('check-update')[0][0]).toBe('')
+    expect(wrapper.get('[data-testid="update-manifest-url"]').attributes('placeholder')).toContain('Gitee 与 GitHub')
   })
 })

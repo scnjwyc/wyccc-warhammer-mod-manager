@@ -22,7 +22,7 @@ const showSaveGames = ref(false)
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
-const workshopPublish = reactive({ open: false, mode: 'upload', modId: '' })
+const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
 let runtimeTimer = 0
 let updateTimer = 0
 
@@ -176,6 +176,10 @@ const selectedActionIds = modId => (
   store.selectedIds.includes(modId) ? store.selectedIds : [modId]
 )
 
+const contextSelectionCount = computed(() => (
+  contextMod.value ? selectedActionIds(contextMod.value.id).length : 1
+))
+
 const enableSelected = modId => store.enableMany(selectedActionIds(modId))
 const disableSelected = modId => store.disableMany(selectedActionIds(modId))
 
@@ -185,12 +189,24 @@ const closeModContextMenu = () => {
 
 const handleContextAction = async ({ action, value, mod }) => {
   if (!mod) return
+  const actionIds = [...selectedActionIds(mod.id)]
   try {
     if (action === 'toggle-active') {
       if (store.activeIds.includes(mod.id)) disableSelected(mod.id)
       else enableSelected(mod.id)
     } else if (action === 'toggle-type') {
-      await store.toggleModType(mod.id, value)
+      const contextTypes = new Set(mod.mod_types?.length ? mod.mod_types : [mod.mod_type || 'unknown'])
+      const shouldHaveType = value === 'unknown' || !contextTypes.has(value)
+      for (const modId of actionIds) {
+        const target = store.modMap.get(modId)
+        if (!target) continue
+        const targetTypes = new Set(
+          target.mod_types?.length ? target.mod_types : [target.mod_type || 'unknown'],
+        )
+        if (value === 'unknown' || targetTypes.has(value) !== shouldHaveType) {
+          await store.toggleModType(modId, value)
+        }
+      }
     } else if (action === 'manage-types') {
       showTypeManager.value = true
     } else if (action === 'move-specific') {
@@ -202,28 +218,63 @@ const handleContextAction = async ({ action, value, mod }) => {
         store.notify(`请输入 1 到 ${store.activeIds.length} 之间的整数`, 'warning')
         return
       }
-      store.moveToPosition(mod.id, position)
+      store.moveManyToPosition(actionIds, position)
     } else if (action === 'move-top') {
-      store.moveToPosition(mod.id, 1)
+      store.moveManyToPosition(actionIds, 1)
     } else if (action === 'move-bottom') {
-      store.moveToPosition(mod.id, store.activeIds.length)
+      store.moveManyToPosition(actionIds, store.activeIds.length)
     } else if (action === 'open-workshop') {
-      await store.openWorkshop(mod.id)
+      for (const modId of actionIds) {
+        if (store.modMap.get(modId)?.workshop_id) await store.openWorkshop(modId)
+      }
     } else if (action === 'unsubscribe') {
-      if (!window.confirm(`确定取消订阅“${mod.effective_name}”吗？Steam 会在游戏退出后移除工坊文件。`)) return
-      await store.unsubscribeWorkshop(mod.id)
+      const targets = actionIds.filter(modId => store.modMap.get(modId)?.workshop_id)
+      const subject = targets.length > 1 ? `选中的 ${targets.length} 个 MOD` : `“${mod.effective_name}”`
+      if (!window.confirm(`确定取消订阅${subject}吗？Steam 会在游戏退出后移除工坊文件。`)) return
+      for (const modId of targets) await store.unsubscribeWorkshop(modId)
     } else if (action === 'force-update') {
-      await store.forceUpdateWorkshop(mod.id)
+      for (const modId of actionIds) {
+        if (store.modMap.get(modId)?.workshop_id) await store.forceUpdateWorkshop(modId)
+      }
     } else if (action === 'publish-upload' || action === 'publish-update') {
+      const mode = action === 'publish-update' ? 'update' : 'upload'
+      const targets = actionIds.filter(modId => {
+        const target = store.modMap.get(modId)
+        const sources = new Set(target?.sources?.length ? target.sources : [target?.source])
+        if (!target || !sources.has('data')) return false
+        return mode === 'update' ? !!target.workshop_id : !target.workshop_id
+      })
+      if (!targets.length) return
       workshopPublish.open = true
-      workshopPublish.mode = action === 'publish-update' ? 'update' : 'upload'
-      workshopPublish.modId = mod.id
+      workshopPublish.mode = mode
+      workshopPublish.queue = targets
+      workshopPublish.modId = targets[0]
+    } else if (action === 'open-folder') {
+      for (const modId of actionIds) await store.openModFolder(modId)
     } else if (action === 'open-rpfm') {
+      if (actionIds.length > 1) {
+        store.notify('批量选择时不能在 RPFM 中打开，请只选择一个 MOD', 'warning')
+        return
+      }
       await store.openModInRpfm(mod.id)
     } else if (action === 'toggle-hidden') {
-      await store.setModHidden(mod.id, !mod.hidden)
+      const hidden = !mod.hidden
+      for (const modId of actionIds) {
+        if (store.modMap.get(modId)?.hidden !== hidden) await store.setModHidden(modId, hidden)
+      }
     } else if (action === 'copy-to-data') {
-      await store.copyModToData(mod.id)
+      const targets = actionIds
+        .map(modId => store.modMap.get(modId))
+        .filter(Boolean)
+        .map(target => ({ id: target.id, packName: String(target.pack_name || '') }))
+      for (const target of targets) {
+        const current = store.modMap.get(target.id)
+          || store.mods.find(
+            item => String(item.pack_name || '').toLocaleLowerCase() === target.packName.toLocaleLowerCase(),
+          )
+        const sources = new Set(current?.sources?.length ? current.sources : [current?.source])
+        if (current && !sources.has('data')) await store.copyModToData(current.id)
+      }
     }
   } catch {
     // Store actions surface failures through the shared toast.
@@ -233,13 +284,24 @@ const handleContextAction = async ({ action, value, mod }) => {
 const closeWorkshopPublish = () => {
   if (store.busy) return
   workshopPublish.open = false
+  workshopPublish.queue = []
+  workshopPublish.modId = ''
 }
 
 const submitWorkshopPublish = async publishData => {
   if (!workshopPublishMod.value) return
   try {
-    await store.publishWorkshopItem(workshopPublishMod.value.id, publishData)
-    workshopPublish.open = false
+    const completedId = workshopPublishMod.value.id
+    await store.publishWorkshopItem(completedId, publishData)
+    const remaining = workshopPublish.queue.filter(modId => modId !== completedId && store.modMap.has(modId))
+    if (remaining.length) {
+      workshopPublish.queue = remaining
+      workshopPublish.modId = remaining[0]
+    } else {
+      workshopPublish.open = false
+      workshopPublish.queue = []
+      workshopPublish.modId = ''
+    }
   } catch {
     // Store actions surface failures through the shared toast.
   }
@@ -588,6 +650,7 @@ onBeforeUnmount(() => {
       :mod="contextMod"
       :active="contextModActive"
       :types="store.modTypes"
+      :selection-count="contextSelectionCount"
       @close="closeModContextMenu"
       @action="handleContextAction"
     />
