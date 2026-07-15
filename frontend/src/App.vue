@@ -1,0 +1,601 @@
+<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useAppStore } from './store'
+import ModContextMenu from './components/ModContextMenu.vue'
+import ModDetails from './components/ModDetails.vue'
+import ModList from './components/ModList.vue'
+import SaveGamesModal from './components/SaveGamesModal.vue'
+import SettingsModal from './components/SettingsModal.vue'
+import ShareModal from './components/ShareModal.vue'
+import SortMenu from './components/SortMenu.vue'
+import TagSearchBox from './components/TagSearchBox.vue'
+import TypeManagerModal from './components/TypeManagerModal.vue'
+import UpdateModal from './components/UpdateModal.vue'
+import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
+
+const store = useAppStore()
+const showSettings = ref(false)
+const showShare = ref(false)
+const showTypeManager = ref(false)
+const showWarnings = ref(false)
+const showSaveGames = ref(false)
+const updateDialog = reactive({ open: false, mode: 'update' })
+const shareValue = ref('')
+const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
+const workshopPublish = reactive({ open: false, mode: 'upload', modId: '' })
+let runtimeTimer = 0
+let updateTimer = 0
+
+const contextMod = computed(() => store.modMap.get(contextMenu.modId) || null)
+const contextModActive = computed(() => !!contextMod.value && store.activeIds.includes(contextMod.value.id))
+const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
+const statusDisplay = computed(() => {
+  if (store.busy) return { text: store.busy, kind: 'busy', spinning: true }
+  if (store.workshopRefreshing) return { text: '正在后台刷新工坊信息', kind: 'refresh', spinning: true }
+  if (store.orderSaving) return { text: '正在写入当前顺序', kind: 'saving', spinning: true }
+  if (store.orderSaveError || store.dirty) return { text: '即时保存失败，请重试操作', kind: 'error', spinning: false }
+  if (store.runtime.running) return { text: 'Warhammer III 运行中', kind: 'running', spinning: false }
+  return { text: '就绪', kind: 'ready', spinning: false }
+})
+
+const initialize = async () => {
+  try {
+    const bootstrap = await store.bootstrap()
+    if (!store.pathHealth.game_ready) showSettings.value = true
+    if (bootstrap.show_changelog) {
+      updateDialog.mode = 'changelog'
+      updateDialog.open = true
+    } else if (bootstrap.auto_update_due) {
+      updateTimer = window.setTimeout(async () => {
+        const info = await store.checkForUpdates(false)
+        if (info?.has_update) {
+          updateDialog.mode = 'update'
+          updateDialog.open = true
+        }
+      }, 1500)
+    }
+  } catch {
+    showSettings.value = true
+  }
+}
+
+const saveSettings = async changes => {
+  await store.saveSettings(changes)
+  showSettings.value = false
+  if (store.pathHealth.game_ready) {
+    await store.scan(false)
+    if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
+  }
+}
+
+const detectPaths = async () => {
+  await store.detectPaths()
+  if (store.pathHealth.game_ready) {
+    await store.scan(false)
+    if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
+    showSettings.value = false
+  }
+}
+
+const checkForUpdates = async manifestUrl => {
+  try {
+    const info = await store.checkForUpdates(true, manifestUrl)
+    if (!info?.has_update) return
+    showSettings.value = false
+    updateDialog.mode = 'update'
+    updateDialog.open = true
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
+const openChangelog = async () => {
+  showSettings.value = false
+  try {
+    await store.loadChangelog()
+  } catch (error) {
+    store.notify(error.message || String(error), 'error')
+  }
+  updateDialog.mode = 'changelog'
+  updateDialog.open = true
+}
+
+const closeUpdateDialog = async () => {
+  if (store.busy) return
+  const acknowledge = updateDialog.mode === 'changelog'
+  updateDialog.open = false
+  if (acknowledge) {
+    try { await store.acknowledgeChangelog() } catch { /* shown again next launch */ }
+  }
+}
+
+const downloadUpdate = async () => {
+  try { await store.downloadUpdate() } catch { /* shared toast */ }
+}
+
+const installUpdate = async () => {
+  try { await store.installUpdate() } catch { /* shared toast */ }
+}
+
+const ignoreUpdate = async () => {
+  try {
+    await store.ignoreUpdate()
+    updateDialog.open = false
+  } catch (error) {
+    store.notify(error.message || String(error), 'error')
+  }
+}
+
+const createPlayset = async () => {
+  const name = window.prompt('输入新播放集名称（将复制当前播放集内容）')
+  if (!name?.trim()) return
+  try { await store.createPlayset(name) } catch { /* shared toast */ }
+}
+
+const renamePlayset = async () => {
+  if (!store.currentPlayset || store.currentPlayset.is_default) return
+  const name = window.prompt('输入播放集的新名称', store.currentPlayset.name)
+  if (!name?.trim() || name.trim() === store.currentPlayset.name) return
+  try { await store.renameCurrentPlayset(name) } catch { /* shared toast */ }
+}
+
+const deletePlayset = async () => {
+  if (!store.currentPlayset || store.currentPlayset.is_default) return
+  if (!window.confirm(`确定删除播放集“${store.currentPlayset.name}”吗？删除后将切换到“默认”。`)) return
+  try { await store.deleteCurrentPlayset() } catch { /* shared toast */ }
+}
+
+const choosePlayset = async event => {
+  try { await store.switchPlayset(event.target.value) } catch { /* shared toast */ }
+}
+
+const openShare = async () => {
+  showShare.value = true
+  shareValue.value = ''
+}
+
+const exportShare = async () => {
+  const data = await store.exportShare()
+  shareValue.value = data.share_code
+}
+
+const importShare = async value => {
+  await store.importShare(value)
+  showShare.value = false
+}
+
+const openModContextMenu = payload => {
+  contextMenu.open = true
+  contextMenu.x = payload.x
+  contextMenu.y = payload.y
+  contextMenu.modId = payload.mod.id
+  void store.selectMod({ id: payload.mod.id, preserveSelection: true })
+}
+
+const selectedActionIds = modId => (
+  store.selectedIds.includes(modId) ? store.selectedIds : [modId]
+)
+
+const enableSelected = modId => store.enableMany(selectedActionIds(modId))
+const disableSelected = modId => store.disableMany(selectedActionIds(modId))
+
+const closeModContextMenu = () => {
+  contextMenu.open = false
+}
+
+const handleContextAction = async ({ action, value, mod }) => {
+  if (!mod) return
+  try {
+    if (action === 'toggle-active') {
+      if (store.activeIds.includes(mod.id)) disableSelected(mod.id)
+      else enableSelected(mod.id)
+    } else if (action === 'toggle-type') {
+      await store.toggleModType(mod.id, value)
+    } else if (action === 'manage-types') {
+      showTypeManager.value = true
+    } else if (action === 'move-specific') {
+      const current = store.activeIds.indexOf(mod.id) + 1
+      const raw = window.prompt(`输入加载顺序（1-${store.activeIds.length}）`, String(current))
+      if (raw === null) return
+      const position = Number(raw)
+      if (!Number.isInteger(position) || position < 1 || position > store.activeIds.length) {
+        store.notify(`请输入 1 到 ${store.activeIds.length} 之间的整数`, 'warning')
+        return
+      }
+      store.moveToPosition(mod.id, position)
+    } else if (action === 'move-top') {
+      store.moveToPosition(mod.id, 1)
+    } else if (action === 'move-bottom') {
+      store.moveToPosition(mod.id, store.activeIds.length)
+    } else if (action === 'open-workshop') {
+      await store.openWorkshop(mod.id)
+    } else if (action === 'unsubscribe') {
+      if (!window.confirm(`确定取消订阅“${mod.effective_name}”吗？Steam 会在游戏退出后移除工坊文件。`)) return
+      await store.unsubscribeWorkshop(mod.id)
+    } else if (action === 'force-update') {
+      await store.forceUpdateWorkshop(mod.id)
+    } else if (action === 'publish-upload' || action === 'publish-update') {
+      workshopPublish.open = true
+      workshopPublish.mode = action === 'publish-update' ? 'update' : 'upload'
+      workshopPublish.modId = mod.id
+    } else if (action === 'open-rpfm') {
+      await store.openModInRpfm(mod.id)
+    } else if (action === 'toggle-hidden') {
+      await store.setModHidden(mod.id, !mod.hidden)
+    } else if (action === 'copy-to-data') {
+      await store.copyModToData(mod.id)
+    }
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
+const closeWorkshopPublish = () => {
+  if (store.busy) return
+  workshopPublish.open = false
+}
+
+const submitWorkshopPublish = async publishData => {
+  if (!workshopPublishMod.value) return
+  try {
+    await store.publishWorkshopItem(workshopPublishMod.value.id, publishData)
+    workshopPublish.open = false
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
+const createModType = async name => {
+  try { await store.createModType(name) } catch { /* shared toast */ }
+}
+
+const updateModType = async ({ id, name }) => {
+  try { await store.updateModType(id, name) } catch { /* shared toast */ }
+}
+
+const deleteModType = async typeId => {
+  try { await store.deleteModType(typeId) } catch { /* shared toast */ }
+}
+
+const syncWorkshopToData = async () => {
+  const confirmed = window.confirm(
+    '确定将所有 Steam Workshop MOD 文件同步到本地 Data 文件夹吗？\n\n'
+      + '不会同步 Data 下已存在的同名 MOD（包括你自己上传到工坊且 Data 下已存在的 MOD），也不会覆盖同步后被修改的文件。',
+  )
+  if (!confirmed) return
+  try { await store.syncWorkshopToData() } catch { /* shared toast */ }
+}
+
+const selectWarning = async item => {
+  if (!item.modId) return
+  await store.selectMod(item.modId)
+}
+
+const openSaveGames = async () => {
+  showSaveGames.value = true
+  try { await store.loadSaveGames() } catch { /* shared toast */ }
+}
+
+const launchSave = async saveName => {
+  try {
+    await store.launchSave(saveName)
+    showSaveGames.value = false
+  } catch { /* shared toast */ }
+}
+
+onMounted(() => {
+  initialize()
+  runtimeTimer = window.setInterval(() => store.refreshRuntime(), 4000)
+})
+
+onBeforeUnmount(() => {
+  window.clearInterval(runtimeTimer)
+  window.clearTimeout(updateTimer)
+})
+</script>
+
+<template>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-block">
+        <div class="brand-shield">W</div>
+        <div>
+          <span class="brand-kicker">WYCCC'S</span>
+          <h1>Mod Manager</h1>
+        </div>
+        <span class="version-pill">v{{ store.appVersion }}</span>
+      </div>
+
+      <div class="header-center">
+        <label class="playset-select">
+          <span>播放集</span>
+          <select
+            :value="store.currentPlaysetId"
+            :disabled="!!store.busy"
+            data-testid="playset-select"
+            @change="choosePlayset"
+          >
+            <option v-for="playset in store.playsets" :key="playset.id" :value="playset.id">
+              {{ playset.name }}
+            </option>
+          </select>
+        </label>
+        <button type="button" class="header-button" :disabled="!!store.busy" @click="createPlayset">新建播放集</button>
+        <button
+          type="button"
+          class="header-button"
+          :disabled="!!store.busy || !store.currentPlayset || store.currentPlayset.is_default"
+          @click="renamePlayset"
+        >
+          重命名
+        </button>
+        <button
+          type="button"
+          class="header-button danger-text"
+          :disabled="!!store.busy || !store.currentPlayset || store.currentPlayset.is_default"
+          @click="deletePlayset"
+        >
+          删除
+        </button>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" class="header-button" @click="openShare">导入 / 导出</button>
+        <button type="button" class="header-button" @click="showSettings = true">设置</button>
+      </div>
+    </header>
+
+    <div v-if="!store.pathHealth.game_ready" class="path-warning">
+      <strong>尚未配置 Warhammer III 路径。</strong>
+      <span>扫描与启动前需要定位 Warhammer3.exe、data 和 Workshop 目录。</span>
+      <button type="button" class="secondary-button" @click="showSettings = true">立即设置</button>
+    </div>
+
+    <div class="workspace-toolbar">
+      <div class="toolbar-search-cluster">
+        <TagSearchBox
+          :tokens="store.searchTokens"
+          :logic="store.searchLogic"
+          :mods="store.mods"
+          :type-map="store.modTypeMap"
+          @update:tokens="store.setSearchTokens"
+          @update:logic="store.setSearchLogic"
+        />
+        <SortMenu
+          :mode="store.sortMode"
+          :descending="store.sortDescending"
+          @update:mode="store.setSortMode"
+          @update:descending="store.setSortDescending"
+        />
+        <button
+          type="button"
+          class="hidden-visibility-button"
+          :class="{ active: store.showHidden }"
+          :disabled="!store.hiddenCount"
+          :title="store.hiddenCount ? (store.showHidden ? '隐藏被隐藏的 MOD' : '显示被隐藏的 MOD') : '没有被隐藏的 MOD'"
+          data-testid="hidden-visibility-button"
+          @click="store.toggleHiddenVisibility"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"></path>
+            <circle cx="12" cy="12" r="2.4"></circle>
+            <path v-if="!store.showHidden" d="m4 4 16 16"></path>
+          </svg>
+          <span v-if="store.hiddenCount">{{ store.hiddenCount }}</span>
+        </button>
+      </div>
+      <div class="toolbar-meta">
+        <span>{{ store.mods.length }} 个 Pack</span>
+        <span>{{ store.activeIds.length }} 个已启用</span>
+        <span v-if="store.selectedIds.length > 1" class="selection-indicator">已选择 {{ store.selectedIds.length }} 项</span>
+        <span v-if="store.workshopRefreshing" class="running-indicator">后台刷新工坊信息</span>
+        <span v-if="store.runtime.running" class="running-indicator">Warhammer III 运行中</span>
+      </div>
+    </div>
+
+    <main class="workspace-grid">
+      <ModDetails
+        :mod="store.selectedMod"
+        :preview="store.selectedPreview"
+        :ai-enabled="!!store.settings.ai_enabled"
+        :generate-user-data="store.generateModUserData"
+        @save-user-data="store.saveModUserData"
+        @open-folder="store.openModFolder"
+        @open-workshop-folder="store.openWorkshopFolder"
+        @open-workshop="store.openWorkshop"
+      />
+
+      <ModList
+        title="未启用 MOD"
+        :mods="store.inactiveMods"
+        :selected-id="store.selectedId"
+        :selected-ids="store.selectedIds"
+        :order-ids="store.activeIds"
+        :thumbnails="store.thumbnails"
+        :type-map="store.modTypeMap"
+        :visual-sorted="store.sortMode !== 'priority'"
+        @select="store.selectMod"
+        @enable="enableSelected"
+        @context-menu="openModContextMenu"
+      />
+
+      <ModList
+        title="已启用 MOD"
+        active
+        :mods="store.activeMods"
+        :selected-id="store.selectedId"
+        :selected-ids="store.selectedIds"
+        :order-ids="store.activeIds"
+        :thumbnails="store.thumbnails"
+        :type-map="store.modTypeMap"
+        :visual-sorted="store.sortMode !== 'priority'"
+        @select="store.selectMod"
+        @disable="disableSelected"
+        @reorder="store.reorder"
+        @move="store.move"
+        @context-menu="openModContextMenu"
+      />
+    </main>
+
+    <div v-if="store.warningCount" class="warning-area">
+      <button
+        type="button"
+        class="warning-strip"
+        :aria-expanded="showWarnings"
+        @click="showWarnings = !showWarnings"
+      >
+        <span>!</span>
+        发现 {{ store.warningCount }} 条警告
+        <small>{{ showWarnings ? '收起详情' : '查看详情' }}</small>
+      </button>
+      <div v-if="showWarnings" class="warning-panel">
+        <button
+          v-for="item in store.warningItems"
+          :key="item.id"
+          type="button"
+          :class="`severity-${item.severity}`"
+          :disabled="!item.modId"
+          @click="selectWarning(item)"
+        >
+          <strong v-if="item.modName">{{ item.modName }}</strong>
+          <span>{{ item.message }}</span>
+        </button>
+      </div>
+    </div>
+
+    <footer class="action-footer">
+      <div class="footer-left">
+        <button type="button" class="secondary-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
+          重新扫描
+        </button>
+        <button type="button" class="secondary-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(true)">
+          刷新工坊信息
+        </button>
+        <button type="button" class="secondary-button" :disabled="!!store.busy || !store.pathHealth.game_ready" @click="store.openGameFolder">
+          打开游戏目录
+        </button>
+        <button
+          type="button"
+          class="secondary-button sync-data-button"
+          :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
+          @click="syncWorkshopToData"
+        >
+          同步到 DATA
+        </button>
+      </div>
+
+      <div class="footer-status" :class="`status-${statusDisplay.kind}`">
+        <span v-if="statusDisplay.spinning" class="spinner"></span>
+        {{ statusDisplay.text }}
+      </div>
+
+      <div class="footer-actions">
+        <button
+          type="button"
+          class="secondary-button save-list-button"
+          :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
+          @click="openSaveGames"
+        >
+          存档列表
+        </button>
+        <button
+          type="button"
+          class="continue-button"
+          :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
+          @click="store.continueGame"
+        >
+          继续游戏
+        </button>
+        <button
+          type="button"
+          class="launch-button"
+          :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
+          @click="store.launch"
+        >
+          <span class="play-mark">▶</span>
+          {{ store.runtime.running ? '游戏运行中' : '启动游戏' }}
+        </button>
+      </div>
+    </footer>
+
+    <SettingsModal
+      :open="showSettings"
+      :settings="store.settings"
+      :health="store.pathHealth"
+      :busy="store.busy"
+      @close="showSettings = false"
+      @save="saveSettings"
+      @detect="detectPaths"
+      @check-update="checkForUpdates"
+      @show-changelog="openChangelog"
+    />
+
+    <UpdateModal
+      :open="updateDialog.open"
+      :mode="updateDialog.mode"
+      :info="store.updateInfo"
+      :changelog="store.changelog"
+      :busy="store.busy"
+      @close="closeUpdateDialog"
+      @download="downloadUpdate"
+      @install="installUpdate"
+      @ignore="ignoreUpdate"
+    />
+
+    <SaveGamesModal
+      :open="showSaveGames"
+      :saves="store.saveGames"
+      :directory="store.saveGamesDirectory"
+      :busy="store.busy"
+      :running="store.runtime.running"
+      @close="showSaveGames = false"
+      @refresh="store.loadSaveGames"
+      @load="launchSave"
+    />
+
+    <ShareModal
+      :open="showShare"
+      :export-value="shareValue"
+      :busy="store.busy"
+      @close="showShare = false"
+      @export="exportShare"
+      @import="importShare"
+    />
+
+    <TypeManagerModal
+      :open="showTypeManager"
+      :types="store.modTypes"
+      :busy="store.busy"
+      @close="showTypeManager = false"
+      @create="createModType"
+      @update="updateModType"
+      @delete="deleteModType"
+    />
+
+    <WorkshopPublishModal
+      :open="workshopPublish.open"
+      :mode="workshopPublish.mode"
+      :mod="workshopPublishMod"
+      :busy="store.busy"
+      @close="closeWorkshopPublish"
+      @submit="submitWorkshopPublish"
+    />
+
+    <ModContextMenu
+      :open="contextMenu.open"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :mod="contextMod"
+      :active="contextModActive"
+      :types="store.modTypes"
+      @close="closeModContextMenu"
+      @action="handleContextAction"
+    />
+
+    <transition name="toast">
+      <div v-if="store.toast" class="toast" :class="store.toast.type">
+        {{ store.toast.message }}
+      </div>
+    </transition>
+  </div>
+</template>

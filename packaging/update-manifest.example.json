@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "app": "Wyccc's Mod Manager",
+  "version": "0.1.1",
+  "published_at": "2026-07-15",
+  "download": {
+    "url": "https://downloads.example.com/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size": 123456789
+  },
+  "changelog": [
+    {
+      "title": "本次更新",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "在这里填写新增功能。"
+        },
+        {
+          "type": "fix",
+          "text": "在这里填写问题修复。"
+        }
+      ]
+    }
+  ]
+}

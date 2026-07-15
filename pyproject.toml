@@ -1,0 +1,43 @@
+[project]
+name = "wyccc-mod-manager"
+version = "0.1.0"
+description = "A focused Total War: WARHAMMER III mod manager."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Wyccc" }]
+dependencies = [
+    "lz4>=4.3,<5",
+    "pillow>=11,<13",
+    "pywebview>=6.1,<7; sys_platform == 'win32'",
+    "zstandard>=0.23,<1",
+]
+
+[project.scripts]
+wyccc-mod-manager = "main:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "ruff>=0.9",
+]
+build = [
+    "pyinstaller>=6,<7",
+    "pillow>=11,<13",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.setuptools]
+packages = ["backend"]
+py-modules = ["main"]
