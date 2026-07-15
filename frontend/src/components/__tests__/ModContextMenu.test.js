@@ -119,7 +119,7 @@ describe('ModContextMenu', () => {
     await buttonByText(wrapper, '忽略 MOD 过期').trigger('click')
     expect(wrapper.emitted('action')[0][0]).toMatchObject({
       action: 'toggle-warning-ignore',
-      value: 'mod_newer_than_game',
+      value: 'outdated_mod',
       mod: { id: mod.id },
     })
     expect(wrapper.emitted('close')).toBeUndefined()

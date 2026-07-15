@@ -6,6 +6,7 @@ from typing import Any
 from urllib import error, request
 from urllib.parse import urlparse
 
+from .app_settings import DEFAULT_LANGUAGE
 from .models import ModAsset
 from .warhammer_translation import build_mod_translation_prompts
 
@@ -75,7 +76,7 @@ def generate_mod_user_data(asset: ModAsset, settings: dict[str, Any]) -> dict[st
     system_prompt, user_prompt = build_mod_translation_prompts(
         asset,
         str(settings.get("ai_glossary_path") or ""),
-        str(settings.get("language") or "zh-CN"),
+        str(settings.get("language") or DEFAULT_LANGUAGE),
     )
     body = {
         "model": model,

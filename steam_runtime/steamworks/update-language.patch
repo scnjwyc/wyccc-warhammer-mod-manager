@@ -1,0 +1,43 @@
+diff --git a/steamworks-rs/src/ugc.rs b/steamworks-rs/src/ugc.rs
+--- a/steamworks-rs/src/ugc.rs
++++ b/steamworks-rs/src/ugc.rs
+@@
+ impl<Manager> UpdateHandle<Manager> {
++    /// Sets the language of the title and description for this item update.
++    #[must_use]
++    pub fn update_language(self, language: &str) -> Self {
++        unsafe {
++            let language = CString::new(language).unwrap();
++            assert!(sys::SteamAPI_ISteamUGC_SetItemUpdateLanguage(
++                self.ugc,
++                self.handle,
++                language.as_ptr()
++            ));
++        }
++        self
++    }
++
+     #[must_use]
+     pub fn title(self, title: &str) -> Self {
+diff --git a/steamworks.js/src/api/workshop.rs b/steamworks.js/src/api/workshop.rs
+--- a/steamworks.js/src/api/workshop.rs
++++ b/steamworks.js/src/api/workshop.rs
+@@
+     #[napi(object)]
+     pub struct UgcUpdate {
++        pub language: Option<String>,
+         pub title: Option<String>,
+@@
+         ) -> steamworks::UpdateWatchHandle<ClientManager> {
++            if let Some(language) = self.language {
++                update = update.update_language(language.as_str());
++            }
++
+             if let Some(title) = self.title {
+@@
+     }
++
++    #[napi]
++    pub fn supports_update_language() -> bool {
++        true
++    }

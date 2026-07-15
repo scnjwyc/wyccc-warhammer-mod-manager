@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { createPinia } from 'pinia'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
 
 import ModList from '../components/ModList.vue'
 import WorkshopPublishModal from '../components/WorkshopPublishModal.vue'
+import { useAppStore } from '../store'
 
 const localMod = {
   id: 'local',
@@ -32,7 +33,7 @@ describe('visual-only list sorting guardrails', () => {
       },
     })
     expect(wrapper.findAll('.mod-type-badge').map(item => item.text())).toEqual(['单位', 'UI'])
-    expect(wrapper.get('.mod-row').attributes('draggable')).toBe('false')
+    expect(wrapper.get('.mod-row').attributes('draggable')).toBe('true')
     const moveButtons = wrapper.findAll('.row-actions .icon-button').slice(0, 2)
     expect(moveButtons.every(button => button.attributes('disabled') !== undefined)).toBe(true)
   })
@@ -56,9 +57,73 @@ describe('Workshop publish confirmation', () => {
     expect(wrapper.emitted('submit')[0][0]).toMatchObject({
       mode: 'upload',
       title: 'My Workshop Mod',
+      language: 'en-US',
       preview_path: 'G:/preview.png',
       category: 'graphical',
       visibility: 0,
     })
+  })
+
+  it('defaults to English when only English description exists and reloads selected languages', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useAppStore()
+    store.settings = { language: 'zh-CN' }
+    store.loadWorkshopPublishCopy = vi.fn()
+      .mockResolvedValueOnce({
+        title: '中文标题',
+        description: 'English description',
+        suggested_language: 'en-US',
+        effective_language: 'en-US',
+      })
+      .mockResolvedValueOnce({
+        title: 'English title',
+        description: 'English description',
+        suggested_language: 'en-US',
+        effective_language: 'en-US',
+      })
+      .mockResolvedValueOnce({
+        title: 'Русский заголовок',
+        description: 'Русское описание',
+        suggested_language: 'ru-RU',
+        effective_language: 'ru-RU',
+      })
+    const wrapper = mount(WorkshopPublishModal, {
+      global: { plugins: [pinia] },
+      props: {
+        open: true,
+        mode: 'update',
+        mod: { ...localMod, workshop_id: '123', preview_path: 'G:/preview.png' },
+        busy: '',
+      },
+    })
+
+    await flushPromises()
+    await flushPromises()
+    const language = wrapper.get('[data-testid="publish-language-select"]')
+    expect(language.element.value).toBe('en-US')
+    expect(wrapper.get('input[type="text"][maxlength="128"]').element.value).toBe('English title')
+    expect(wrapper.text()).toContain('更新日志')
+    expect(wrapper.find('textarea[rows="3"]').element.value).toBe('')
+
+    await language.setValue('ru-RU')
+    await flushPromises()
+    expect(wrapper.get('input[type="text"][maxlength="128"]').element.value).toBe('Русский заголовок')
+    expect(wrapper.find('textarea[rows="6"]').element.value).toBe('Русское описание')
+
+    await wrapper.get('.publish-confirmation input').setValue(true)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('submit')[0][0]).toMatchObject({
+      mode: 'update',
+      language: 'ru-RU',
+      title: 'Русский заголовок',
+      description: 'Русское описание',
+      change_note: '',
+    })
+    expect(store.loadWorkshopPublishCopy.mock.calls).toEqual([
+      ['local', 'zh-CN'],
+      ['local', 'en-US'],
+      ['local', 'ru-RU'],
+    ])
   })
 })

@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest'
 
 import WarningModal from '../WarningModal.vue'
 
+const dependencyRefresh = {
+  id: 'scan:workshop_dependency_refresh',
+  modId: '',
+  modName: '',
+  code: 'workshop_dependency_refresh',
+  severity: 'warning',
+  message: 'Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态',
+  ignorable: true,
+}
+
 const missingDependency = {
   id: 'mod-a:missing_dependency',
   modId: 'mod-a',
@@ -25,16 +35,20 @@ describe('WarningModal', () => {
       ignorable: false,
     }
     const wrapper = mount(WarningModal, {
-      props: { open: true, items: [missingDependency, systemWarning] },
+      props: { open: true, items: [missingDependency, dependencyRefresh, systemWarning] },
     })
 
     expect(wrapper.get('[role="dialog"]').attributes('aria-modal')).toBe('true')
-    expect(wrapper.text()).toContain('共 2 条警告')
+    expect(wrapper.text()).toContain('共 3 条警告')
     expect(wrapper.text()).toContain('缺少依赖：base.pack')
-    expect(wrapper.findAll('.warning-ignore-button')).toHaveLength(1)
+    expect(wrapper.text()).toContain('缺失依赖结果可能不是最新状态')
+    expect(wrapper.findAll('.warning-ignore-button')).toHaveLength(2)
 
-    await wrapper.get('.warning-ignore-button').trigger('click')
+    const ignoreButtons = wrapper.findAll('.warning-ignore-button')
+    await ignoreButtons[0].trigger('click')
+    await ignoreButtons[1].trigger('click')
     expect(wrapper.emitted('ignore')[0][0]).toEqual(missingDependency)
+    expect(wrapper.emitted('ignore')[1][0]).toEqual(dependencyRefresh)
 
     await wrapper.get('button.warning-modal-copy').trigger('click')
     expect(wrapper.emitted('select')[0][0]).toEqual(missingDependency)

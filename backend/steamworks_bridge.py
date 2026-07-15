@@ -174,6 +174,65 @@ def query_workshop_dependencies(
     return result
 
 
+def query_workshop_subscription_status(
+    workshop_ids: list[str],
+    language: str = "english",
+    *,
+    app_id: int = 1_142_710,
+    root: Path | None = None,
+    timeout_seconds: int = 120,
+) -> list[dict[str, Any]]:
+    ids = list(dict.fromkeys(str(value) for value in workshop_ids if str(value).isdigit()))
+    if not ids:
+        return []
+    payload = _run_bridge_request(
+        {
+            "operation": "query_subscriptions",
+            "appId": int(app_id),
+            "ids": ids,
+            "language": str(language or "english").strip() or "english",
+        },
+        root=root,
+        timeout_seconds=timeout_seconds,
+    )
+    source = payload.get("subscriptions")
+    if not isinstance(source, dict):
+        raise SteamworksBridgeError("Steamworks bridge result has no subscription data")
+    return [
+        {
+            "workshop_id": workshop_id,
+            "title": str(source.get(workshop_id, {}).get("title") or ""),
+            "subscribed": bool(source.get(workshop_id, {}).get("subscribed")),
+        }
+        for workshop_id in ids
+    ]
+
+
+def subscribe_workshop_items(
+    workshop_ids: list[str],
+    *,
+    app_id: int = 1_142_710,
+    root: Path | None = None,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    ids = list(dict.fromkeys(str(value) for value in workshop_ids if str(value).isdigit()))
+    if not ids:
+        return {"operation": "subscribe_many", "subscribed": [], "already_subscribed": []}
+    payload = _run_bridge_request(
+        {
+            "operation": "subscribe_many",
+            "appId": int(app_id),
+            "ids": ids,
+        },
+        root=root,
+        timeout_seconds=timeout_seconds,
+    )
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise SteamworksBridgeError("Steamworks bridge result has no subscription operation data")
+    return dict(result)
+
+
 def perform_workshop_operation(
     operation: str,
     workshop_id: str,
@@ -183,7 +242,7 @@ def perform_workshop_operation(
     timeout_seconds: int = 45,
 ) -> dict[str, Any]:
     normalized_operation = str(operation or "").strip()
-    if normalized_operation not in {"unsubscribe", "force_update"}:
+    if normalized_operation not in {"subscribe", "unsubscribe", "force_update"}:
         raise ValueError("Unsupported Steamworks operation")
     normalized_id = str(workshop_id or "").strip()
     if not normalized_id.isdigit():
@@ -213,6 +272,7 @@ def publish_workshop_item(
     tags: list[str] | None = None,
     visibility: int = 0,
     workshop_id: str = "",
+    language: str = "english",
     app_id: int | str = 1_142_710,
     root: Path | None = None,
     timeout_seconds: int = 900,
@@ -232,6 +292,7 @@ def publish_workshop_item(
             "changeNote": str(change_note),
             "tags": list(dict.fromkeys(str(item) for item in (tags or []) if str(item))),
             "visibility": int(visibility),
+            "language": str(language or "english").strip() or "english",
         },
         root=root,
         timeout_seconds=timeout_seconds,

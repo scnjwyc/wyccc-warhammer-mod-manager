@@ -1,14 +1,26 @@
+import { currentLocale, t } from './languages'
+
 const normalize = value => String(value ?? '').trim().toLocaleLowerCase()
 
 const fieldDefinitions = [
-  { key: 'name', label: '模组名', aliases: ['名称', '模组', 'mod'], defaultSearch: true },
-  { key: 'file', label: '文件名', aliases: ['文件', '包名', 'pack'], defaultSearch: true },
-  { key: 'author', label: '作者', aliases: ['作者名'], defaultSearch: true, suggest: true },
-  { key: 'type', label: '类型', aliases: ['类型', 'mod_type'], suggest: true },
-  { key: 'source', label: '来源', aliases: ['来源', '位置'], suggest: true },
-  { key: 'workshop', label: 'Workshop ID', aliases: ['工坊', 'workshop_id'], defaultSearch: true },
-  { key: 'creator', label: '作者 ID', aliases: ['作者id', 'creator_id'], defaultSearch: true },
+  { key: 'name', labelKey: 'search.fieldName', aliases: ['名称', '模组', '이름', '모드', 'название', 'имя', '名前', 'mod'], defaultSearch: true },
+  { key: 'file', labelKey: 'search.fieldFile', aliases: ['文件', '包名', '파일', 'имя файла', 'файл', 'ファイル', 'pack'], defaultSearch: true },
+  { key: 'author', labelKey: 'search.fieldAuthor', aliases: ['作者名', '작성자', 'автор', '作者'], defaultSearch: true, suggest: true },
+  { key: 'type', labelKey: 'search.fieldType', aliases: ['类型', '유형', 'тип', '種類', 'mod_type'], suggest: true },
+  { key: 'source', labelKey: 'search.fieldSource', aliases: ['来源', '位置', '출처', 'источник', 'ソース'], suggest: true },
+  { key: 'workshop', labelKey: 'search.fieldWorkshop', aliases: ['工坊', '创意工坊', '창작마당', 'мастерская', 'ワークショップ', 'workshop_id'], defaultSearch: true },
+  { key: 'creator', labelKey: 'search.fieldCreator', aliases: ['作者id', '작성자id', 'id автора', '作者id', 'creator_id'], defaultSearch: true },
 ]
+
+const localizedSyntax = {
+  'zh-CN': { name: '名称', file: '文件', author: '作者', type: '类型', source: '来源', workshop: '创意工坊', creator: '作者ID' },
+  'en-US': { name: 'name', file: 'file', author: 'author', type: 'type', source: 'source', workshop: 'workshop', creator: 'creator' },
+  'ko-KR': { name: '이름', file: '파일', author: '작성자', type: '유형', source: '출처', workshop: '창작마당', creator: '작성자ID' },
+  'ru-RU': { name: 'название', file: 'файл', author: 'автор', type: 'тип', source: 'источник', workshop: 'мастерская', creator: 'ID автора' },
+  'ja-JP': { name: '名前', file: 'ファイル', author: '作者', type: '種類', source: 'ソース', workshop: 'ワークショップ', creator: '作者ID' },
+}
+
+const fieldSyntax = field => localizedSyntax[currentLocale()]?.[field.key] || field.key
 
 export const SEARCH_FIELDS = Object.fromEntries(fieldDefinitions.map(field => [field.key, field]))
 
@@ -18,13 +30,16 @@ for (const field of fieldDefinitions) {
 }
 
 export const SORT_OPTIONS = [
-  { id: 'priority', label: '优先级' },
-  { id: 'filename', label: '文件名' },
-  { id: 'name', label: '模组名' },
-  { id: 'author', label: '作者' },
-  { id: 'updated', label: '更新时间' },
-  { id: 'created', label: '创建时间' },
+  { id: 'priority', labelKey: 'search.sortPriority' },
+  { id: 'filename', labelKey: 'search.sortFilename' },
+  { id: 'name', labelKey: 'search.sortName' },
+  { id: 'author', labelKey: 'search.sortAuthor' },
+  { id: 'updated', labelKey: 'search.sortUpdated' },
+  { id: 'created', labelKey: 'search.sortCreated' },
 ]
+
+export const searchFieldLabel = field => t(field?.labelKey || 'search.fieldName')
+export const sortOptionLabel = option => t(option?.labelKey || 'search.sortPriority')
 
 const selectedTypeIds = mod => (
   Array.isArray(mod?.mod_types) && mod.mod_types.length
@@ -99,8 +114,8 @@ const suggestionValues = (key, mods, typeMap) => {
   if (key === 'type') return Object.entries(typeMap).map(([value, label]) => ({ value: label, label }))
   if (key === 'source') {
     return [
-      { value: 'data', label: 'Data' },
-      { value: 'workshop', label: 'Workshop' },
+      { value: 'data', label: t('details.sourceData') },
+      { value: 'workshop', label: t('details.sourceWorkshop') },
     ]
   }
   const values = new Set()
@@ -115,9 +130,9 @@ const suggestionValues = (key, mods, typeMap) => {
 
 const keySuggestion = (field, exclude = false) => ({
   type: 'key',
-  label: field.label,
-  value: `${exclude ? '-' : ''}${field.key}:`,
-  description: `${field.key}:关键词`,
+  label: searchFieldLabel(field),
+  value: `${exclude ? '-' : ''}${fieldSyntax(field)}:`,
+  description: `${fieldSyntax(field)}:${t('search.keyword')}`,
 })
 
 export const getSearchSuggestions = (rawInput = '', mods = [], typeMap = {}) => {
@@ -133,13 +148,13 @@ export const getSearchSuggestions = (rawInput = '', mods = [], typeMap = {}) => 
     const needle = normalize(rawValue)
     return suggestionValues(key, mods, typeMap)
       .filter(option => !needle || normalize(option.label).includes(needle) || normalize(option.value).includes(needle))
-      .sort((left, right) => left.label.localeCompare(right.label, 'zh-CN', { numeric: true }))
+      .sort((left, right) => left.label.localeCompare(right.label, currentLocale(), { numeric: true }))
       .slice(0, 40)
       .map(option => ({
         type: 'value',
         label: option.label,
-        value: `${excludePrefix}${field.key}:${option.value}`,
-        description: field.label,
+        value: `${excludePrefix}${fieldSyntax(field)}:${option.value}`,
+        description: searchFieldLabel(field),
       }))
   }
 
@@ -149,8 +164,6 @@ export const getSearchSuggestions = (rawInput = '', mods = [], typeMap = {}) => 
     .filter(field => [field.key, ...field.aliases].some(alias => normalize(alias).startsWith(prefix)))
     .map(field => keySuggestion(field, exclude))
 }
-
-const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 
 // Pack filenames are the manager's deterministic default load-order rule.  Keep
 // this deliberately bytewise (rather than locale-aware) so prefixes such as
@@ -191,6 +204,7 @@ export const insertByDefaultLoadOrder = (orderedIds = [], modId, modsById = {}) 
 export const sortDisplayedMods = (mods, mode = 'priority', descending = false) => {
   const result = [...(mods || [])]
   if (mode === 'priority') return result
+  const collator = new Intl.Collator(currentLocale(), { numeric: true, sensitivity: 'base' })
   const compareText = (left, right) => collator.compare(String(left || ''), String(right || ''))
   result.sort((left, right) => {
     let comparison = 0

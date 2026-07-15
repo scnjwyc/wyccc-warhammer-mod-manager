@@ -12,10 +12,16 @@ import webbrowser
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from PIL import Image, ImageOps
 
-from .app_settings import SettingsService, default_data_dir
+from .app_settings import (
+    DEFAULT_LANGUAGE,
+    SUPPORTED_LANGUAGES,
+    SettingsService,
+    default_data_dir,
+)
 from .ai_service import generate_mod_user_data
 from .changelog import get_all_changelogs
 from .constants import (
@@ -30,16 +36,29 @@ from .load_order import LoadOrderService, current_order_path, file_token
 from .models import ModAsset
 from .scanner import ModScanner
 from .save_games import SaveGameService
-from .share import export_share, parse_share, resolve_share
+from .share import (
+    export_share,
+    parse_pending_workshop_mod_id,
+    parse_share,
+    resolve_share,
+    resolve_share_with_pending,
+)
 from .storage import StateRepository
 from .start_options import RUNTIME_PACK_NAME, build_runtime_options_pack
 from .steamworks_bridge import (
     SteamworksBridgeError,
     perform_workshop_operation,
     publish_workshop_item,
+    query_workshop_subscription_status,
+    subscribe_workshop_items,
 )
 from .update_service import UpdateService
-from .workshop import WorkshopMetadataService
+from .workshop import (
+    ENGLISH_STEAM_LANGUAGE,
+    WorkshopMetadataService,
+    interface_language_for_steam,
+    steam_language_for_interface,
+)
 
 
 class API:
@@ -96,15 +115,19 @@ class API:
             "switch_playset": self._switch_playset,
             "list_backups": self._list_backups,
             "export_share": self._export_share,
+            "preview_import_share": self._preview_import_share,
             "import_share": self._import_share,
+            "subscribe_workshop_items": self._subscribe_workshop_items,
             "get_mod_preview": self._get_mod_preview,
             "get_mod_thumbnails": self._get_mod_thumbnails,
             "open_mod_folder": self._open_mod_folder,
             "open_workshop_folder": self._open_workshop_folder,
             "open_game_folder": self._open_game_folder,
             "open_workshop_page": self._open_workshop_page,
+            "open_external_url": self._open_external_url,
             "unsubscribe_workshop_mod": self._unsubscribe_workshop_mod,
             "force_update_workshop_mod": self._force_update_workshop_mod,
+            "get_workshop_publish_copy": self._get_workshop_publish_copy,
             "publish_workshop_item": self._publish_workshop_item,
             "open_mod_in_rpfm": self._open_mod_in_rpfm,
             "copy_mod_to_data": self._copy_mod_to_data,
@@ -166,7 +189,7 @@ class API:
             "mod_types": self.state_repository.list_mod_types(),
             "order_token": self._last_order_token,
             "runtime": {"running": is_game_running()},
-            "changelog": get_all_changelogs(),
+            "changelog": get_all_changelogs(str(settings.get("language") or DEFAULT_LANGUAGE)),
             "show_changelog": private_settings.get("last_seen_app_version") != APP_VERSION,
             "auto_update_due": self.update_service.should_check_automatically(private_settings),
             "update_install_error": self.update_service.consume_install_error(),
@@ -177,7 +200,19 @@ class API:
         manual: bool = True,
         manifest_url: str | None = None,
     ) -> dict[str, Any]:
-        return self.update_service.check(manual=bool(manual), manifest_url=manifest_url)
+        result = self.update_service.check(manual=bool(manual), manifest_url=manifest_url)
+        language = str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+        local_release = next(
+            (
+                release
+                for release in get_all_changelogs(language)
+                if release["version"] == result.get("version")
+            ),
+            None,
+        )
+        if local_release:
+            result["entries"] = local_release["entries"]
+        return result
 
     def _download_update(self, version: str = "") -> dict[str, Any]:
         return self.update_service.download(version)
@@ -188,9 +223,9 @@ class API:
     def _ignore_update(self, version: str) -> dict[str, Any]:
         return self.update_service.ignore(version)
 
-    @staticmethod
-    def _get_changelog() -> dict[str, Any]:
-        return {"items": get_all_changelogs(), "current_version": APP_VERSION}
+    def _get_changelog(self) -> dict[str, Any]:
+        language = str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+        return {"items": get_all_changelogs(language), "current_version": APP_VERSION}
 
     def _acknowledge_changelog(self) -> dict[str, str]:
         self.settings_service.save({"last_seen_app_version": APP_VERSION})
@@ -309,6 +344,7 @@ class API:
                 self.state_repository.update_current_playset(stored_order)
             present_order = [mod_id for mod_id in stored_order if mod_id in self._assets]
             missing_order = [mod_id for mod_id in stored_order if mod_id not in self._assets]
+            self._refresh_missing_dependency_warnings(present_order)
             target = self._active_order_path(paths.game_path)
             self._last_order_token = file_token(target)
             payload = scan_result.to_dict()
@@ -429,6 +465,7 @@ class API:
             comparison_path,
         )
         self.state_repository.update_current_playset(written_plan.ordered_mod_ids)
+        self._refresh_missing_dependency_warnings(written_plan.ordered_mod_ids)
         self.state_repository.set_active_order_filename(Path(written_plan.target_path).name)
         backup = None
         if backup_path:
@@ -530,6 +567,7 @@ class API:
             current = self.state_repository.update_current_playset(canonical_ids)
         present = [mod_id for mod_id in canonical_ids if mod_id in self._assets]
         missing = [mod_id for mod_id in canonical_ids if mod_id not in self._assets]
+        self._refresh_missing_dependency_warnings(present)
         return {
             "playsets": self.state_repository.list_playsets(),
             "current_playset": current,
@@ -557,6 +595,9 @@ class API:
             playset_id,
             self._canonicalize_mod_ids(mod_ids),
         )
+        self._refresh_missing_dependency_warnings(
+            self.state_repository.get_current_playset()["mod_ids"]
+        )
         return {
             "playset": playset,
             "playsets": self.state_repository.list_playsets(),
@@ -578,11 +619,80 @@ class API:
         mods = [self._require_asset(mod_id) for mod_id in ordered_mod_ids]
         return {"share_code": export_share(mods)}
 
-    def _import_share(self, share_code: str) -> dict[str, Any]:
+    def _preview_import_share(self, share_code: str) -> dict[str, Any]:
         references = parse_share(share_code)
         ordered_ids, missing = resolve_share(references, self._assets)
+        references_by_workshop_id: dict[str, dict[str, Any]] = {}
+        for reference in references:
+            workshop_id = str(reference.get("workshop_id") or "").strip()
+            if workshop_id.isdigit() and workshop_id not in references_by_workshop_id:
+                references_by_workshop_id[workshop_id] = reference
+
+        statuses: list[dict[str, Any]] = []
+        if references_by_workshop_id:
+            language = steam_language_for_interface(
+                str(self.settings_service.get().get("language") or "")
+            )
+            try:
+                statuses = query_workshop_subscription_status(
+                    list(references_by_workshop_id),
+                    language,
+                    app_id=WH3_APP_ID,
+                )
+            except SteamworksBridgeError as exc:
+                raise ValueError(f"无法检查分享码中的 Workshop 订阅状态：{exc}") from exc
+
+        unsubscribed = []
+        for item in statuses:
+            if item.get("subscribed"):
+                continue
+            workshop_id = str(item.get("workshop_id") or "")
+            reference = references_by_workshop_id.get(workshop_id, {})
+            unsubscribed.append(
+                {
+                    "workshop_id": workshop_id,
+                    "title": str(item.get("title") or "").strip(),
+                    "pack_name": str(reference.get("pack_name") or "").strip(),
+                }
+            )
+        return {
+            "ordered_mod_ids": ordered_ids,
+            "missing": missing,
+            "unsubscribed": unsubscribed,
+        }
+
+    def _import_share(self, share_code: str) -> dict[str, Any]:
+        references = parse_share(share_code)
+        ordered_ids, missing = resolve_share_with_pending(references, self._assets)
         self.state_repository.update_current_playset(ordered_ids)
-        return {**self._current_playset_payload(), "missing": missing}
+        pending_workshop_ids = list(
+            dict.fromkeys(
+                str(reference.get("workshop_id") or "")
+                for reference in missing
+                if str(reference.get("workshop_id") or "").isdigit()
+            )
+        )
+        return {
+            **self._current_playset_payload(),
+            "missing": missing,
+            "pending_workshop_ids": pending_workshop_ids,
+        }
+
+    @staticmethod
+    def _subscribe_workshop_items(workshop_ids: list[str]) -> dict[str, Any]:
+        if not isinstance(workshop_ids, list):
+            raise ValueError("Workshop ID 列表无效")
+        normalized = list(
+            dict.fromkeys(str(value).strip() for value in workshop_ids if str(value).strip())
+        )
+        if not normalized or any(not value.isdigit() for value in normalized):
+            raise ValueError("Workshop ID 列表无效")
+        if len(normalized) > 200:
+            raise ValueError("一次最多自动订阅 200 个 Workshop 项目")
+        try:
+            return subscribe_workshop_items(normalized, app_id=WH3_APP_ID)
+        except SteamworksBridgeError as exc:
+            raise ValueError(f"自动订阅 Workshop 项目失败：{exc}") from exc
 
     def _get_mod_preview(self, mod_id: str) -> dict[str, str]:
         asset = self._require_asset(mod_id)
@@ -685,6 +795,14 @@ class API:
         )
         return {"opened": True}
 
+    @staticmethod
+    def _open_external_url(url: str) -> dict[str, Any]:
+        normalized = str(url or "").strip()
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("只允许打开有效的 HTTP 或 HTTPS 链接")
+        return {"opened": bool(webbrowser.open(normalized)), "url": normalized}
+
     def _unsubscribe_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_workshop_asset(mod_id)
         return self._run_workshop_operation("unsubscribe", asset.workshop_id)
@@ -692,6 +810,44 @@ class API:
     def _force_update_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_workshop_asset(mod_id)
         return self._run_workshop_operation("force_update", asset.workshop_id)
+
+    def _get_workshop_publish_copy(
+        self,
+        mod_id: str,
+        language: str,
+    ) -> dict[str, Any]:
+        asset = self._require_workshop_asset(mod_id)
+        interface_language = str(language or "").strip()
+        if interface_language not in SUPPORTED_LANGUAGES:
+            raise ValueError("不支持的 Workshop 语言")
+        item = self.workshop_service.refresh_localized(
+            [asset.workshop_id],
+            interface_language,
+        ).get(asset.workshop_id)
+        if not isinstance(item, dict):
+            raise ValueError("未能读取该 Workshop 项目的标题和描述")
+        description_language = str(item.get("description_language") or "")
+        effective_language = interface_language_for_steam(
+            description_language or str(item.get("title_language") or "")
+        )
+        suggested_language = (
+            "en-US"
+            if interface_language != "en-US"
+            and description_language == ENGLISH_STEAM_LANGUAGE
+            else interface_language
+        )
+        return {
+            "workshop_id": asset.workshop_id,
+            "language": interface_language,
+            "steam_language": steam_language_for_interface(interface_language),
+            "effective_language": effective_language,
+            "suggested_language": suggested_language,
+            "title_language": str(item.get("title_language") or ""),
+            "description_language": description_language,
+            "title": str(item.get("title") or ""),
+            "description": str(item.get("description") or ""),
+            "warning": self.workshop_service.last_refresh_warning,
+        }
 
     def _publish_workshop_item(
         self,
@@ -713,12 +869,16 @@ class API:
         title = str(publish_data.get("title") or "").strip()
         description = str(publish_data.get("description") or "")
         change_note = str(publish_data.get("change_note") or "")
+        interface_language = str(publish_data.get("language") or "").strip()
+        if interface_language not in SUPPORTED_LANGUAGES:
+            raise ValueError("不支持的 Workshop 发布语言")
+        steam_language = steam_language_for_interface(interface_language)
         if not title:
             raise ValueError("Workshop 标题不能为空")
         if len(title) > 128:
             raise ValueError("Workshop 标题不能超过 128 个字符")
         if len(description) > 8_000 or len(change_note) > 8_000:
-            raise ValueError("Workshop 描述或更新说明过长")
+            raise ValueError("Workshop 描述或更新日志过长")
 
         preview_path = Path(str(publish_data.get("preview_path") or "").strip())
         if not preview_path.is_file():
@@ -762,6 +922,7 @@ class API:
                     tags=["mod", category],
                     visibility=visibility,
                     workshop_id=workshop_id,
+                    language=steam_language,
                     app_id=WH3_APP_ID,
                 )
         except SteamworksBridgeError as exc:
@@ -960,12 +1121,33 @@ class API:
         seen: set[str] = set()
         for raw_id in mod_ids:
             normalized = str(raw_id)
-            canonical = self._asset_aliases.get(normalized, normalized)
-            if canonical in seen:
-                continue
-            seen.add(canonical)
-            result.append(canonical)
+            pending = parse_pending_workshop_mod_id(normalized)
+            if pending:
+                workshop_id, pack_name = pending
+                candidates = sorted(
+                    (
+                        asset
+                        for asset in self._assets.values()
+                        if asset.workshop_id == workshop_id
+                        and (not pack_name or asset.pack_name.casefold() == pack_name)
+                    ),
+                    key=lambda asset: (asset.pack_name.casefold(), asset.id),
+                )
+                canonical_ids = [asset.id for asset in candidates] or [normalized]
+            else:
+                canonical_ids = [self._asset_aliases.get(normalized, normalized)]
+            for canonical in canonical_ids:
+                if canonical in seen:
+                    continue
+                seen.add(canonical)
+                result.append(canonical)
         return result
+
+    def _refresh_missing_dependency_warnings(self, enabled_mod_ids: list[str]) -> None:
+        self.scanner.refresh_missing_dependency_warnings(
+            self._assets.values(),
+            self._canonicalize_mod_ids(enabled_mod_ids),
+        )
 
     def _active_order_path(self, game_path: str) -> Path:
         return current_order_path(

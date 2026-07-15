@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .constants import IGNORABLE_MOD_WARNING_CODES
+from .constants import IGNORABLE_MOD_WARNING_CODES, LEGACY_MOD_WARNING_CODE_ALIASES
 from .mod_types import (
     DEFAULT_MOD_TYPE_ID,
     DEFAULT_MOD_TYPE_IDS,
@@ -348,7 +348,10 @@ class StateRepository:
             return []
         if not isinstance(decoded, list):
             return []
-        selected = {str(item) for item in decoded}
+        selected = {
+            LEGACY_MOD_WARNING_CODE_ALIASES.get(str(item), str(item))
+            for item in decoded
+        }
         return [code for code in IGNORABLE_MOD_WARNING_CODES if code in selected]
 
     def save_user_mod_data(self, mod_id: str, alias: str, notes: str) -> dict[str, str]:
@@ -542,7 +545,10 @@ class StateRepository:
         warning_code: str,
         ignored: bool,
     ) -> list[str]:
-        normalized_code = str(warning_code or "").strip()
+        normalized_code = LEGACY_MOD_WARNING_CODE_ALIASES.get(
+            str(warning_code or "").strip(),
+            str(warning_code or "").strip(),
+        )
         if normalized_code not in IGNORABLE_MOD_WARNING_CODES:
             raise ValueError("该 MOD 问题不支持忽略")
         now = int(time.time() * 1000)

@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { invoke } from './bridge'
-import { applyInterfaceLanguage } from './languages'
+import {
+  applyInterfaceLanguage,
+  localizedModTypeName,
+  localizedPlaysetName,
+  localizeBackendMessage,
+  t,
+} from './languages'
 import {
   insertByDefaultLoadOrder,
   matchesSearchTokens,
@@ -19,7 +25,7 @@ const enqueuePlaysetWrite = task => {
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.3.0',
+    appVersion: '0.5.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -27,6 +33,8 @@ export const useAppStore = defineStore('app', {
     modTypes: [],
     showHidden: false,
     activeIds: [],
+    inactiveOrderIds: [],
+    inactiveOrderCustomized: false,
     selectedId: '',
     selectedIds: [],
     selectionAnchorId: '',
@@ -47,6 +55,7 @@ export const useAppStore = defineStore('app', {
     busy: '',
     workshopRefreshing: false,
     warnings: [],
+    ignoredScanWarningCodes: [],
     gameUpdatedAt: 0,
     missingEnabledIds: [],
     runtime: { running: false },
@@ -60,29 +69,37 @@ export const useAppStore = defineStore('app', {
   }),
   getters: {
     modMap: (state) => new Map(state.mods.map(mod => [mod.id, mod])),
-    modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, item.name])),
+    modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
     warningItems(state) {
-      const items = state.warnings.map((message, index) => ({
-        id: `scan:${index}`,
-        message,
-        severity: 'warning',
-        modId: '',
-        modName: '',
-        code: '',
-        ignorable: false,
-      }))
+      const active = new Set(state.activeIds)
+      const items = state.warnings
+        .map((warning, index) => {
+          const record = warning && typeof warning === 'object' ? warning : { message: warning }
+          const code = String(record.code || '')
+          return {
+            id: `scan:${code || index}`,
+            message: localizeBackendMessage(record.message, 'warnings.genericScan'),
+            severity: record.severity || 'warning',
+            modId: '',
+            modName: '',
+            code,
+            ignorable: Boolean(record.ignorable && code),
+          }
+        })
+        .filter(item => !item.code || !state.ignoredScanWarningCodes.includes(item.code))
       for (const mod of state.mods) {
         for (const [index, warning] of (mod.warnings || []).entries()) {
           const code = warning.code || ''
+          if (code === 'missing_dependency' && !active.has(mod.id)) continue
           items.push({
             id: `${mod.id}:${code || index}`,
-            message: warning.message || String(warning),
+            message: localizeBackendMessage(warning.message || String(warning), 'warnings.genericScan'),
             severity: warning.severity || 'warning',
             modId: mod.id,
             modName: mod.effective_name || mod.display_name || mod.pack_name,
             code,
-            ignorable: ['mod_newer_than_game', 'missing_dependency'].includes(code),
+            ignorable: ['outdated_mod', 'missing_dependency'].includes(code),
           })
         }
       }
@@ -111,10 +128,41 @@ export const useAppStore = defineStore('app', {
         .filter(mod => !active.has(mod.id))
         .filter(mod => this.showHidden || !mod.hidden)
         .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
-      return sortDisplayedMods(mods, this.sortMode, this.sortDescending)
+      const sorted = sortDisplayedMods(mods, this.sortMode, this.sortDescending)
+      if (!this.inactiveOrderCustomized) return sorted
+      const rank = new Map(this.inactiveOrderIds.map((id, index) => [id, index]))
+      return [...mods].sort((left, right) => (
+        (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+        - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+      ))
     },
   },
   actions: {
+    replaceActiveIds(modIds) {
+      this.activeIds = [...new Set((modIds || []).map(id => String(id)).filter(Boolean))]
+      this.refreshMissingDependencyWarnings()
+    },
+    refreshMissingDependencyWarnings() {
+      const active = new Set(this.activeIds)
+      for (const mod of this.mods) {
+        const warnings = (mod.warnings || [])
+          .filter(warning => warning?.code !== 'missing_dependency')
+        const missing = Array.isArray(mod.missing_dependencies) ? mod.missing_dependencies : []
+        const ignored = (mod.ignored_warning_codes || []).includes('missing_dependency')
+        if (active.has(mod.id) && missing.length && !ignored) {
+          const names = missing
+            .map(item => String(item?.name || item?.id || '').trim())
+            .filter(Boolean)
+          warnings.push({
+            code: 'missing_dependency',
+            severity: 'error',
+            message: `缺少依赖：${names.join('、')}`,
+            dependencies: missing.map(item => ({ ...item })),
+          })
+        }
+        mod.warnings = warnings
+      }
+    },
     notify(message, type = 'success') {
       this.toast = { message, type, id: Date.now() }
       window.setTimeout(() => {
@@ -122,7 +170,7 @@ export const useAppStore = defineStore('app', {
       }, 3200)
     },
     async withBusy(label, task) {
-      if (this.busy) throw new Error(`正在执行：${this.busy}`)
+      if (this.busy) throw new Error(t('busy.alreadyRunning', { task: this.busy }))
       this.busy = label
       try {
         return await task()
@@ -134,14 +182,14 @@ export const useAppStore = defineStore('app', {
       }
     },
     async bootstrap() {
-      const data = await this.withBusy('初始化', () => invoke('get_bootstrap'))
+      const data = await this.withBusy(t('busy.initialize'), () => invoke('get_bootstrap'))
       this.appName = data.app_name
       this.appVersion = data.app_version
       this.settings = data.settings
       applyInterfaceLanguage(this.settings.language)
       this.paths = data.paths
       this.pathHealth = data.path_health
-      this.activeIds = [...data.enabled_order]
+      this.replaceActiveIds(data.enabled_order)
       this.playsets = data.playsets || []
       this.currentPlaysetId = data.current_playset?.id || 'default'
       this.backups = data.backups
@@ -156,13 +204,13 @@ export const useAppStore = defineStore('app', {
       }
       if (data.update_install_error) {
         const installError = String(data.update_install_error).slice(-320)
-        this.notify(`自动更新安装失败，已恢复旧版本：${installError}`, 'error')
+        this.notify(t('toast.updateRollback', { error: installError }), 'error')
       }
       return data
     },
     async scan(refreshWorkshop = false) {
       await this.flushPlaysetUpdates()
-      return this.withBusy(refreshWorkshop ? '刷新工坊信息' : '扫描 MOD', async () => {
+      return this.withBusy(refreshWorkshop ? t('busy.refreshWorkshop') : t('busy.scanMods'), async () => {
         const previousIds = [...this.activeIds]
         const preserveDirty = this.dirty
         const data = await invoke('scan_mods', refreshWorkshop)
@@ -174,9 +222,12 @@ export const useAppStore = defineStore('app', {
             .map(mod => [mod.id, currentThumbnails[mod.id]]),
         )
         const installed = new Set(this.mods.map(mod => mod.id))
-        this.activeIds = preserveDirty
-          ? previousIds.filter(id => installed.has(id))
-          : data.enabled_order
+        this.replaceActiveIds(
+          preserveDirty
+            ? previousIds.filter(id => installed.has(id))
+            : data.enabled_order,
+        )
+        this.reconcileInactiveOrder()
         this.missingEnabledIds = data.missing_enabled_ids
         this.orderToken = data.order_token
         this.warnings = data.warnings
@@ -191,7 +242,7 @@ export const useAppStore = defineStore('app', {
         if (!installed.has(this.selectionAnchorId)) this.selectionAnchorId = this.selectedId
         await this.loadPreview(this.selectedId)
         void this.loadThumbnails()
-        this.notify(`扫描完成：${this.mods.length} 个 Pack`)
+        this.notify(t('toast.scanComplete', { count: this.mods.length }))
         return data
       })
     },
@@ -204,9 +255,12 @@ export const useAppStore = defineStore('app', {
         const installed = new Set(data.mods.map(mod => mod.id))
         const currentOrder = [...this.activeIds]
         this.mods = data.mods
-        this.activeIds = this.dirty
-          ? currentOrder.filter(id => installed.has(id))
-          : data.enabled_order
+        this.replaceActiveIds(
+          this.dirty
+            ? currentOrder.filter(id => installed.has(id))
+            : data.enabled_order,
+        )
+        this.reconcileInactiveOrder()
         this.missingEnabledIds = data.missing_enabled_ids
         this.orderToken = data.order_token
         this.warnings = data.warnings
@@ -221,9 +275,9 @@ export const useAppStore = defineStore('app', {
         if (!installed.has(this.selectionAnchorId)) this.selectionAnchorId = this.selectedId
         await this.loadPreview(this.selectedId)
         void this.loadThumbnails(true)
-        this.notify('工坊信息已在后台刷新完成')
+        this.notify(t('toast.workshopComplete'))
       } catch (error) {
-        this.notify(error.message || '后台刷新工坊信息失败', 'warning')
+        this.notify(error.message || t('toast.workshopFailed'), 'warning')
       } finally {
         this.workshopRefreshing = false
       }
@@ -291,21 +345,31 @@ export const useAppStore = defineStore('app', {
       }
     },
     playsetOrderSnapshot() {
-      const active = new Set(this.activeIds)
-      return [
-        ...this.activeIds,
-        ...this.missingEnabledIds.filter(id => !active.has(id)),
-      ]
+      const pending = new Set(this.missingEnabledIds)
+      const previous = this.currentPlayset?.mod_ids || []
+      const activeQueue = [...this.activeIds]
+      const result = []
+      for (const previousId of previous) {
+        if (pending.has(previousId)) {
+          result.push(previousId)
+          pending.delete(previousId)
+        } else if (activeQueue.length) {
+          result.push(activeQueue.shift())
+        }
+      }
+      result.push(...activeQueue, ...pending)
+      return [...new Set(result.filter(Boolean))]
     },
     applyPlaysetPayload(data, replaceOrder = true) {
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
       if (replaceOrder) {
-        this.activeIds = [...(data.ordered_mod_ids || [])]
+        this.replaceActiveIds(data.ordered_mod_ids || [])
         this.missingEnabledIds = [...(data.missing_mod_ids || [])]
       }
     },
     recordCurrentPlaysetChange() {
+      this.refreshMissingDependencyWarnings()
       const playsetId = this.currentPlaysetId
       const snapshot = this.playsetOrderSnapshot()
       const activeSnapshot = [...this.activeIds]
@@ -337,7 +401,7 @@ export const useAppStore = defineStore('app', {
       void pending.catch(error => {
         this.dirty = true
         this.orderSaveError = error.message || String(error)
-        this.notify(`保存当前播放集失败：${error.message || String(error)}`, 'error')
+        this.notify(t('toast.playsetSaveFailed', { error: error.message || String(error) }), 'error')
       })
       return pending
     },
@@ -350,46 +414,46 @@ export const useAppStore = defineStore('app', {
     },
     async createPlayset(name) {
       await this.flushPlaysetUpdates()
-      return this.withBusy('新建播放集', async () => {
+      return this.withBusy(t('busy.createPlayset'), async () => {
         const data = await invoke('create_playset', name, this.playsetOrderSnapshot())
         this.applyPlaysetPayload(data)
-        this.notify(`已新建播放集“${data.current_playset.name}”`)
+        this.notify(t('toast.playsetCreated', { name: localizedPlaysetName(data.current_playset) }))
         return data.current_playset
       })
     },
     async renameCurrentPlayset(name) {
       await this.flushPlaysetUpdates()
-      return this.withBusy('重命名播放集', async () => {
+      return this.withBusy(t('busy.renamePlayset'), async () => {
         const data = await invoke('rename_playset', this.currentPlaysetId, name)
         this.playsets = data.playsets
         this.currentPlaysetId = data.current_playset.id
-        this.notify(`播放集已重命名为“${data.playset.name}”`)
+        this.notify(t('toast.playsetRenamed', { name: localizedPlaysetName(data.playset) }))
         return data.playset
       })
     },
     async deleteCurrentPlayset() {
       await this.flushPlaysetUpdates()
-      return this.withBusy('删除播放集', async () => {
+      return this.withBusy(t('busy.deletePlayset'), async () => {
         const data = await invoke('delete_playset', this.currentPlaysetId)
         this.applyPlaysetPayload(data)
         this.dirty = true
         this.recordCurrentPlaysetChange()
-        this.notify(`已切换到播放集“${data.current_playset.name}”`)
+        this.notify(t('toast.playsetSwitched', { name: localizedPlaysetName(data.current_playset) }))
         return data.current_playset
       })
     },
     async switchPlayset(playsetId) {
       if (!playsetId || playsetId === this.currentPlaysetId) return this.currentPlayset
       await this.flushPlaysetUpdates()
-      return this.withBusy('切换播放集', async () => {
+      return this.withBusy(t('busy.switchPlayset'), async () => {
         const data = await invoke('switch_playset', playsetId)
         this.applyPlaysetPayload(data)
         this.dirty = true
         this.recordCurrentPlaysetChange()
         if (data.missing_mod_ids.length) {
-          this.notify(`播放集中有 ${data.missing_mod_ids.length} 个 Pack 未安装`, 'warning')
+          this.notify(t('toast.playsetMissing', { count: data.missing_mod_ids.length }), 'warning')
         } else {
-          this.notify(`已切换到播放集“${data.current_playset.name}”`)
+          this.notify(t('toast.playsetSwitched', { name: localizedPlaysetName(data.current_playset) }))
         }
         return data.current_playset
       })
@@ -405,10 +469,40 @@ export const useAppStore = defineStore('app', {
         }
       }
       if (next.length !== this.activeIds.length) {
-        this.activeIds = next
+        this.replaceActiveIds(next)
         this.dirty = true
         this.recordCurrentPlaysetChange()
       }
+    },
+    reconcileInactiveOrder() {
+      const installed = this.mods.map(mod => mod.id)
+      const installedSet = new Set(installed)
+      this.inactiveOrderIds = [
+        ...this.inactiveOrderIds.filter(id => installedSet.has(id)),
+        ...installed.filter(id => !this.inactiveOrderIds.includes(id)),
+      ]
+    },
+    alignInactiveOrderToVisible(visibleOrder) {
+      this.reconcileInactiveOrder()
+      const visible = (visibleOrder || []).filter(id => this.inactiveOrderIds.includes(id))
+      if (!visible.length) return [...this.inactiveOrderIds]
+      const visibleSet = new Set(visible)
+      const queue = [...visible]
+      return this.inactiveOrderIds.map(id => (
+        visibleSet.has(id) ? queue.shift() : id
+      ))
+    },
+    enableManyAt(modIds, targetId = '') {
+      const moving = [...new Set(modIds || [])]
+        .filter(id => this.modMap.has(id) && !this.activeIds.includes(id))
+      if (!moving.length) return
+      const next = [...this.activeIds]
+      const targetIndex = targetId ? next.indexOf(targetId) : -1
+      const insertionIndex = targetIndex >= 0 ? targetIndex : next.length
+      next.splice(insertionIndex, 0, ...moving)
+      this.replaceActiveIds(next)
+      this.dirty = true
+      this.recordCurrentPlaysetChange()
     },
     disable(modId) {
       this.disableMany([modId])
@@ -417,22 +511,90 @@ export const useAppStore = defineStore('app', {
       const selected = new Set(modIds || [])
       const next = this.activeIds.filter(id => !selected.has(id))
       if (next.length !== this.activeIds.length) {
-        this.activeIds = next
+        this.replaceActiveIds(next)
         this.dirty = true
         this.recordCurrentPlaysetChange()
       }
     },
-    reorder(sourceId, targetId) {
-      if (sourceId === targetId) return
-      const sourceIndex = this.activeIds.indexOf(sourceId)
-      const targetIndex = this.activeIds.indexOf(targetId)
-      if (sourceIndex < 0 || targetIndex < 0) return
-      const next = [...this.activeIds]
-      next.splice(sourceIndex, 1)
-      next.splice(targetIndex, 0, sourceId)
-      this.activeIds = next
+    disableManyToInactive(modIds, targetId = '', targetOrder = []) {
+      const selected = new Set(modIds || [])
+      const moving = this.activeIds.filter(id => selected.has(id))
+      if (!moving.length) return
+      this.replaceActiveIds(this.activeIds.filter(id => !selected.has(id)))
+      const base = this.alignInactiveOrderToVisible(targetOrder)
+      const remaining = base.filter(id => !selected.has(id))
+      const targetIndex = targetId ? remaining.indexOf(targetId) : -1
+      const insertionIndex = targetIndex >= 0 ? targetIndex : remaining.length
+      remaining.splice(insertionIndex, 0, ...moving)
+      this.inactiveOrderIds = remaining
+      this.inactiveOrderCustomized = true
       this.dirty = true
       this.recordCurrentPlaysetChange()
+    },
+    reorder(sourceId, targetId) {
+      this.reorderMany([sourceId], targetId, sourceId)
+    },
+    reorderMany(modIds, targetId, draggedId = '') {
+      const selected = new Set(modIds || [])
+      const moving = this.activeIds.filter(id => selected.has(id))
+      if (!moving.length || (targetId && selected.has(targetId))) return
+      const targetIndex = this.activeIds.indexOf(targetId)
+      const anchorId = moving.includes(draggedId) ? draggedId : moving[0]
+      const anchorIndex = this.activeIds.indexOf(anchorId)
+      if (anchorIndex < 0 || (targetId && targetIndex < 0)) return
+      const remaining = this.activeIds.filter(id => !selected.has(id))
+      const remainingTargetIndex = targetId ? remaining.indexOf(targetId) : -1
+      const insertionIndex = !targetId
+        ? remaining.length
+        : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
+      const next = [
+        ...remaining.slice(0, insertionIndex),
+        ...moving,
+        ...remaining.slice(insertionIndex),
+      ]
+      if (next.every((id, index) => id === this.activeIds[index])) return
+      this.replaceActiveIds(next)
+      this.dirty = true
+      this.recordCurrentPlaysetChange()
+    },
+    reorderInactiveMany(modIds, targetId, draggedId = '', visibleOrder = []) {
+      const selected = new Set(modIds || [])
+      if (targetId && selected.has(targetId)) return
+      const base = this.alignInactiveOrderToVisible(visibleOrder)
+      const moving = base.filter(id => selected.has(id))
+      if (!moving.length) return
+      const anchorId = moving.includes(draggedId) ? draggedId : moving[0]
+      const anchorIndex = base.indexOf(anchorId)
+      const targetIndex = targetId ? base.indexOf(targetId) : -1
+      if (targetId && targetIndex < 0) return
+      const remaining = base.filter(id => !selected.has(id))
+      const remainingTargetIndex = targetId ? remaining.indexOf(targetId) : -1
+      const insertionIndex = !targetId
+        ? remaining.length
+        : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
+      const next = [
+        ...remaining.slice(0, insertionIndex),
+        ...moving,
+        ...remaining.slice(insertionIndex),
+      ]
+      if (next.every((id, index) => id === this.inactiveOrderIds[index])) return
+      this.inactiveOrderIds = next
+      this.inactiveOrderCustomized = true
+    },
+    handleModDrop(payload) {
+      const source = payload?.source
+      const target = payload?.target
+      const ids = payload?.ids || []
+      if (!ids.length || !['active', 'inactive'].includes(source) || !['active', 'inactive'].includes(target)) return
+      if (source === 'active' && target === 'active') {
+        if (this.sortMode === 'priority') this.reorderMany(ids, payload.targetId, payload.draggedId)
+      } else if (source === 'inactive' && target === 'inactive') {
+        this.reorderInactiveMany(ids, payload.targetId, payload.draggedId, payload.targetOrder)
+      } else if (source === 'inactive' && target === 'active') {
+        this.enableManyAt(ids, payload.targetId)
+      } else {
+        this.disableManyToInactive(ids, payload.targetId, payload.targetOrder)
+      }
     },
     move(modId, direction) {
       const index = this.activeIds.indexOf(modId)
@@ -440,7 +602,7 @@ export const useAppStore = defineStore('app', {
       if (index < 0 || target < 0 || target >= this.activeIds.length) return
       const next = [...this.activeIds]
       ;[next[index], next[target]] = [next[target], next[index]]
-      this.activeIds = next
+      this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
@@ -454,7 +616,7 @@ export const useAppStore = defineStore('app', {
       const next = [...this.activeIds]
       next.splice(sourceIndex, 1)
       next.splice(targetIndex, 0, modId)
-      this.activeIds = next
+      this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
@@ -466,11 +628,11 @@ export const useAppStore = defineStore('app', {
       const numeric = Number(oneBasedPosition)
       if (!Number.isInteger(numeric)) return
       const targetIndex = Math.max(0, Math.min(numeric - 1, remaining.length))
-      this.activeIds = [
+      this.replaceActiveIds([
         ...remaining.slice(0, targetIndex),
         ...moving,
         ...remaining.slice(targetIndex),
-      ]
+      ])
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
@@ -494,24 +656,24 @@ export const useAppStore = defineStore('app', {
     },
     async launch() {
       await this.flushPlaysetUpdates()
-      return this.withBusy('启动游戏', async () => {
+      return this.withBusy(t('busy.launchGame'), async () => {
         const data = await invoke('launch_game', this.activeIds, this.orderToken)
         this.applyLaunchResult(data)
-        this.notify(`Warhammer III 已启动（PID ${data.process.pid}）`)
+        this.notify(t('toast.gameLaunched', { pid: data.process.pid }))
         return data
       })
     },
     async continueGame() {
       await this.flushPlaysetUpdates()
-      return this.withBusy('继续游戏', async () => {
+      return this.withBusy(t('busy.continueGame'), async () => {
         const data = await invoke('continue_game', this.activeIds, this.orderToken)
         this.applyLaunchResult(data)
-        this.notify(`正在载入 ${data.save.name}`)
+        this.notify(t('toast.loadingSave', { name: data.save.name }))
         return data
       })
     },
     async loadSaveGames() {
-      return this.withBusy('读取存档列表', async () => {
+      return this.withBusy(t('busy.readSaves'), async () => {
         const data = await invoke('list_save_games')
         this.saveGames = data.items || []
         this.saveGamesDirectory = data.directory || ''
@@ -520,16 +682,16 @@ export const useAppStore = defineStore('app', {
     },
     async launchSave(saveName) {
       await this.flushPlaysetUpdates()
-      return this.withBusy('载入指定存档', async () => {
+      return this.withBusy(t('busy.loadSave'), async () => {
         const data = await invoke('launch_game', this.activeIds, this.orderToken, saveName)
         this.applyLaunchResult(data)
-        this.notify(`正在载入 ${data.save.name}`)
+        this.notify(t('toast.loadingSave', { name: data.save.name }))
         return data
       })
     },
     async saveSettings(changes) {
       await this.flushPlaysetUpdates()
-      return this.withBusy('保存设置', async () => {
+      return this.withBusy(t('busy.saveSettings'), async () => {
         const data = await invoke('save_settings', changes)
         this.settings = data.settings
         applyInterfaceLanguage(this.settings.language)
@@ -537,12 +699,16 @@ export const useAppStore = defineStore('app', {
         this.pathHealth = data.path_health
         this.mods = []
         this.thumbnails = {}
-        this.activeIds = []
+        this.replaceActiveIds([])
+        this.inactiveOrderIds = []
+        this.inactiveOrderCustomized = false
         this.selectedId = ''
         this.selectedIds = []
         this.selectionAnchorId = ''
         this.dirty = false
-        this.notify('设置已保存')
+        const changelog = await invoke('get_changelog')
+        this.changelog = changelog.items || []
+        this.notify(t('toast.settingsSaved'))
         return data
       })
     },
@@ -554,15 +720,18 @@ export const useAppStore = defineStore('app', {
           const data = manifestUrl === null
             ? await invoke('check_for_updates', manual)
             : await invoke('check_for_updates', manual, manifestUrl)
-          this.updateInfo = data
+          const localizedRelease = this.changelog.find(release => release.version === data.version)
+          this.updateInfo = localizedRelease
+            ? { ...data, entries: localizedRelease.entries || [] }
+            : data
           if (data.checked_at) this.settings.last_update_check_at = data.checked_at
           if (manifestUrl !== null && data.configured) this.settings.update_manifest_url = manifestUrl.trim()
           this.autoUpdateDue = false
-          if (manual && !data.has_update) this.notify(`当前已是最新版本 v${this.appVersion}`)
+          if (manual && !data.has_update) this.notify(t('toast.latestVersion', { version: this.appVersion }))
           return data
         } catch (error) {
           if (!manual) {
-            console.warn('自动检查更新失败', error)
+            console.warn('Automatic update check failed', error)
             return null
           }
           throw error
@@ -570,23 +739,23 @@ export const useAppStore = defineStore('app', {
           this.updateChecking = false
         }
       }
-      if (manual) return this.withBusy('检查软件更新', execute)
+      if (manual) return this.withBusy(t('busy.checkUpdates'), execute)
       return execute()
     },
     async downloadUpdate() {
       const version = this.updateInfo?.version || ''
-      return this.withBusy('下载并校验更新', async () => {
+      return this.withBusy(t('busy.downloadUpdate'), async () => {
         const data = await invoke('download_update', version)
         this.updateInfo = data
-        this.notify(`v${data.version} 已下载并通过校验`)
+        this.notify(t('toast.updateDownloaded', { version: data.version }))
         return data
       })
     },
     async installUpdate() {
       const version = this.updateInfo?.version || ''
-      return this.withBusy('准备安装更新', async () => {
+      return this.withBusy(t('busy.installUpdate'), async () => {
         const data = await invoke('install_update', version)
-        this.notify('正在退出并安装新版本')
+        this.notify(t('toast.installingUpdate'))
         return data
       })
     },
@@ -599,7 +768,7 @@ export const useAppStore = defineStore('app', {
         this.updateInfo.ignored = true
         this.updateInfo.has_update = false
       }
-      this.notify(`已忽略 v${version}；仍可手动检查并安装`)
+      this.notify(t('toast.updateIgnored', { version }))
       return data
     },
     async loadChangelog() {
@@ -613,14 +782,14 @@ export const useAppStore = defineStore('app', {
       return data
     },
     async detectPaths() {
-      return this.withBusy('检测 Steam 路径', async () => {
+      return this.withBusy(t('busy.detectSteam'), async () => {
         const data = await invoke('detect_paths')
         this.settings = data.settings
         applyInterfaceLanguage(this.settings.language)
         this.paths = data.paths
         const bootstrap = await invoke('get_bootstrap')
         this.pathHealth = bootstrap.path_health
-        this.notify('已定位 Warhammer III')
+        this.notify(t('toast.pathsDetected'))
         return data
       })
     },
@@ -631,14 +800,14 @@ export const useAppStore = defineStore('app', {
       const updated = await invoke('save_mod_user_data', modId, alias, notes)
       const index = this.mods.findIndex(mod => mod.id === modId)
       if (index >= 0) this.mods[index] = updated
-      this.notify('MOD 信息已保存')
+      this.notify(t('toast.modInfoSaved'))
     },
     async generateModUserData(modId) {
-      return this.withBusy('AI 生成标题和摘要备注', async () => {
+      return this.withBusy(t('busy.aiGenerate'), async () => {
         const updated = await invoke('generate_mod_user_data', modId)
         const index = this.mods.findIndex(mod => mod.id === updated.id)
         if (index >= 0) this.mods[index] = updated
-        this.notify('AI 已生成并保存当前语言标题和摘要备注')
+        this.notify(t('toast.aiSaved'))
         return updated
       })
     },
@@ -652,22 +821,23 @@ export const useAppStore = defineStore('app', {
       if (!SORT_OPTIONS.some(option => option.id === mode)) return
       this.sortMode = mode
       this.sortDescending = mode === 'updated' || mode === 'created'
+      this.inactiveOrderCustomized = false
     },
     setSortDescending(descending) {
       this.sortDescending = Boolean(descending)
     },
     async setModType(modId, typeId) {
-      return this.withBusy('修改 MOD 类型', async () => {
+      return this.withBusy(t('busy.editType'), async () => {
         const updated = await invoke('set_mod_types', modId, [typeId])
         const index = this.mods.findIndex(mod => mod.id === updated.id)
         if (index >= 0) this.mods[index] = updated
-        this.notify(`已修改类型为“${this.modTypeMap[typeId] || '未知'}”`)
+        this.notify(t('toast.typeChanged', { name: this.modTypeMap[typeId] || t('common.unknown') }))
         return updated
       })
     },
     async toggleModType(modId, typeId) {
       const mod = this.modMap.get(modId)
-      if (!mod) throw new Error('MOD 不存在或尚未扫描')
+      if (!mod) throw new Error(t('toast.modMissing'))
       const current = [...new Set(mod.mod_types?.length ? mod.mod_types : [mod.mod_type || 'unknown'])]
       let next
       if (typeId === 'unknown') {
@@ -678,17 +848,17 @@ export const useAppStore = defineStore('app', {
       } else {
         next = [...current.filter(item => item !== 'unknown'), typeId]
       }
-      return this.withBusy('修改 MOD 类型', async () => {
+      return this.withBusy(t('busy.editType'), async () => {
         const updated = await invoke('set_mod_types', modId, next)
         const index = this.mods.findIndex(item => item.id === updated.id)
         if (index >= 0) this.mods[index] = updated
-        const names = updated.mod_types.map(item => this.modTypeMap[item] || item).join('、')
-        this.notify(`已设置类型：${names}`)
+        const names = updated.mod_types.map(item => this.modTypeMap[item] || item).join(', ')
+        this.notify(t('toast.typeSet', { names }))
         return updated
       })
     },
     async setModHidden(modId, hidden) {
-      return this.withBusy(hidden ? '隐藏 MOD' : '取消隐藏 MOD', async () => {
+      return this.withBusy(hidden ? t('busy.hideMod') : t('busy.unhideMod'), async () => {
         const updated = await invoke('set_mod_hidden', modId, hidden)
         const index = this.mods.findIndex(mod => mod.id === updated.id)
         if (index >= 0) this.mods[index] = updated
@@ -699,28 +869,28 @@ export const useAppStore = defineStore('app', {
           this.selectionAnchorId = this.selectedId
           await this.loadPreview(this.selectedId)
         }
-        this.notify(hidden ? '已从列表中隐藏 MOD' : '已取消隐藏 MOD')
+        this.notify(hidden ? t('toast.hidden') : t('toast.unhidden'))
         return updated
       })
     },
     async createModType(name) {
-      return this.withBusy('新增 MOD 类型', async () => {
+      return this.withBusy(t('busy.createType'), async () => {
         const data = await invoke('create_mod_type', name)
         this.modTypes = data.items
-        this.notify(`已新增类型“${data.item.name}”`)
+        this.notify(t('toast.typeCreated', { name: data.item.name }))
         return data.item
       })
     },
     async updateModType(typeId, name) {
-      return this.withBusy('修改 MOD 类型', async () => {
+      return this.withBusy(t('busy.editType'), async () => {
         const data = await invoke('update_mod_type', typeId, name)
         this.modTypes = data.items
-        this.notify(`已修改类型为“${data.item.name}”`)
+        this.notify(t('toast.typeChanged', { name: data.item.name }))
         return data.item
       })
     },
     async deleteModType(typeId) {
-      return this.withBusy('删除 MOD 类型', async () => {
+      return this.withBusy(t('busy.deleteType'), async () => {
         const data = await invoke('delete_mod_type', typeId)
         this.modTypes = data.items
         this.mods = this.mods.map(mod => {
@@ -729,23 +899,43 @@ export const useAppStore = defineStore('app', {
           const modTypes = selected.length ? selected : ['unknown']
           return { ...mod, mod_type: modTypes[0], mod_types: modTypes }
         })
-        this.notify('自定义类型已删除，相关 MOD 的类型已同步更新')
+        this.notify(t('toast.typeDeleted'))
       })
     },
     async exportShare() {
       return invoke('export_share', this.activeIds)
     },
+    async previewShareImport(value) {
+      return this.withBusy(t('busy.previewShare'), () => invoke('preview_import_share', value))
+    },
+    async subscribeWorkshopItems(workshopIds) {
+      return this.withBusy(t('busy.subscribeWorkshop'), async () => {
+        const data = await invoke('subscribe_workshop_items', workshopIds)
+        const subscribed = data.subscribed?.length || 0
+        const existing = data.already_subscribed?.length || 0
+        this.notify(t('toast.subscriptionAccepted', {
+          subscribed,
+          existing: existing ? t('toast.subscriptionExisting', { count: existing }) : '',
+        }))
+        return data
+      })
+    },
     async importShare(value) {
       await this.flushPlaysetUpdates()
-      return this.withBusy('导入到当前播放集', async () => {
+      return this.withBusy(t('busy.importShare'), async () => {
         const data = await invoke('import_share', value)
         this.applyPlaysetPayload(data)
         this.dirty = true
         this.recordCurrentPlaysetChange()
-        if (data.missing.length) {
-          this.notify(`有 ${data.missing.length} 个项目未安装`, 'warning')
+        if ((data.pending_workshop_ids || []).length) {
+          this.notify(
+            t('toast.pendingDownloads', { count: data.pending_workshop_ids.length }),
+            'warning',
+          )
+        } else if ((data.missing || []).length) {
+          this.notify(t('toast.localMissing', { count: data.missing.length }), 'warning')
         } else {
-          this.notify(`已更新当前播放集“${data.current_playset.name}”`)
+          this.notify(t('toast.playsetUpdated', { name: localizedPlaysetName(data.current_playset) }))
         }
         return data
       })
@@ -754,12 +944,18 @@ export const useAppStore = defineStore('app', {
       await invoke('open_mod_folder', modId)
     },
     async setModWarningIgnored(modId, warningCode, ignored) {
-      return this.withBusy(ignored ? '忽略 MOD 问题' : '恢复 MOD 问题', async () => {
+      return this.withBusy(ignored ? t('busy.ignoreIssue') : t('busy.restoreIssue'), async () => {
         const updated = await invoke('set_mod_warning_ignored', modId, warningCode, ignored)
         const index = this.mods.findIndex(mod => mod.id === updated.id)
         if (index >= 0) this.mods[index] = updated
+        this.refreshMissingDependencyWarnings()
         return updated
       })
+    },
+    ignoreScanWarning(warningCode) {
+      const normalized = String(warningCode || '').trim()
+      if (!normalized || this.ignoredScanWarningCodes.includes(normalized)) return
+      this.ignoredScanWarningCodes = [...this.ignoredScanWarningCodes, normalized]
     },
     async openWorkshopFolder(modId) {
       await invoke('open_workshop_folder', modId)
@@ -767,37 +963,49 @@ export const useAppStore = defineStore('app', {
     async openWorkshop(modId) {
       await invoke('open_workshop_page', modId)
     },
+    async openExternalUrl(url) {
+      return invoke('open_external_url', url)
+    },
     async unsubscribeWorkshop(modId) {
-      return this.withBusy('取消 Steam Workshop 订阅', async () => {
+      return this.withBusy(t('busy.unsubscribeWorkshop'), async () => {
         const data = await invoke('unsubscribe_workshop_mod', modId)
-        this.notify('Steam 已接受取消订阅请求')
+        this.notify(t('toast.unsubscribeAccepted'))
         return data
       })
     },
     async forceUpdateWorkshop(modId) {
-      return this.withBusy('请求 Steam 强制更新', async () => {
+      return this.withBusy(t('busy.forceUpdateWorkshop'), async () => {
         const data = await invoke('force_update_workshop_mod', modId)
-        this.notify('Steam 已接受高优先级更新请求')
+        this.notify(t('toast.forceUpdateAccepted'))
         return data
       })
     },
+    async loadWorkshopPublishCopy(modId, language) {
+      try {
+        return await invoke('get_workshop_publish_copy', modId, language)
+      } catch (error) {
+        this.notify(error.message || t('toast.publishCopyFailed'), 'error')
+        throw error
+      }
+    },
     async publishWorkshopItem(modId, publishData) {
       const mode = publishData?.mode === 'update' ? 'update' : 'upload'
-      return this.withBusy(mode === 'upload' ? '上传到 Steam Workshop' : '更新 Steam Workshop', async () => {
+      return this.withBusy(mode === 'upload' ? t('busy.uploadWorkshop') : t('busy.updateWorkshop'), async () => {
         const data = await invoke('publish_workshop_item', modId, publishData)
         const index = this.mods.findIndex(mod => mod.id === data.mod.id)
         if (index >= 0) this.mods[index] = data.mod
-        const agreementNote = data.result.needs_to_accept_agreement
-          ? '；还需在 Steam Workshop 接受创作者协议'
-          : ''
-        this.notify(`${mode === 'upload' ? '工坊项目已创建并上传' : '工坊项目已更新'}（ID ${data.result.workshop_id}）${agreementNote}`)
+        const agreementNote = data.result.needs_to_accept_agreement ? t('toast.agreementNeeded') : ''
+        this.notify(t(mode === 'upload' ? 'toast.workshopUploaded' : 'toast.workshopUpdated', {
+          id: data.result.workshop_id,
+          agreement: agreementNote,
+        }))
         return data
       })
     },
     async openModInRpfm(modId) {
-      return this.withBusy('启动 RPFM', async () => {
+      return this.withBusy(t('busy.startRpfm'), async () => {
         const data = await invoke('open_mod_in_rpfm', modId)
-        this.notify('已在 RPFM 中打开 Pack')
+        this.notify(t('toast.rpfmOpened'))
         return data
       })
     },
@@ -806,9 +1014,9 @@ export const useAppStore = defineStore('app', {
       const packName = source?.pack_name || ''
       const activeIndex = this.activeIds.indexOf(modId)
       const wasDirty = this.dirty
-      const data = await this.withBusy('复制 MOD 到 Data', () => invoke('copy_mod_to_data', modId))
+      const data = await this.withBusy(t('busy.copyData'), () => invoke('copy_mod_to_data', modId))
       if (!data.copied) {
-        this.notify('该 MOD 已位于 Data 目录', 'warning')
+        this.notify(t('toast.alreadyData'), 'warning')
         return data
       }
       await this.scan(false)
@@ -816,12 +1024,12 @@ export const useAppStore = defineStore('app', {
       if (activeIndex >= 0 && replacement && !this.activeIds.includes(replacement.id)) {
         const next = [...this.activeIds]
         next.splice(Math.min(activeIndex, next.length), 0, replacement.id)
-        this.activeIds = next
+        this.replaceActiveIds(next)
         this.dirty = wasDirty
         this.recordCurrentPlaysetChange()
       }
       if (replacement) await this.selectMod(replacement.id)
-      this.notify(`已复制 ${packName} 到 Data 目录`)
+      this.notify(t('toast.copiedData', { name: packName }))
       return data
     },
     async syncWorkshopToData() {
@@ -831,17 +1039,17 @@ export const useAppStore = defineStore('app', {
       const selectedPackName = this.selectedMod?.pack_name || ''
       const wasDirty = this.dirty
       const data = await this.withBusy(
-        '同步工坊 MOD 到 Data',
+        t('busy.syncData'),
         () => invoke('sync_workshop_to_data'),
       )
       if (data.copied || data.updated) {
         await this.scan(false)
         const byPackName = new Map(this.mods.map(mod => [mod.pack_name.toLocaleLowerCase(), mod.id]))
-        this.activeIds = [...new Set(
+        this.replaceActiveIds([...new Set(
           activePackNames
             .map(name => byPackName.get(name.toLocaleLowerCase()))
             .filter(Boolean),
-        )]
+        )])
         this.dirty = wasDirty
         this.recordCurrentPlaysetChange()
         if (selectedPackName) {
@@ -851,8 +1059,12 @@ export const useAppStore = defineStore('app', {
       }
       const skipped = Number(data.skipped || 0)
       this.notify(
-        `同步完成：新增 ${data.copied}，更新 ${data.updated}，未变化 ${data.unchanged}`
-          + (skipped ? `，跳过 ${skipped}` : ''),
+        t('toast.syncComplete', {
+          copied: data.copied,
+          updated: data.updated,
+          unchanged: data.unchanged,
+          skipped: skipped ? t('toast.syncSkipped', { count: skipped }) : '',
+        }),
         skipped && !data.copied && !data.updated ? 'warning' : 'success',
       )
       return data

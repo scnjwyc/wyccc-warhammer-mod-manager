@@ -104,7 +104,7 @@ class LaunchPlan:
 @dataclass
 class ScanResult:
     mods: list[ModAsset] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str | dict[str, Any]] = field(default_factory=list)
     scanned_roots: list[str] = field(default_factory=list)
     game_updated_at: int = 0
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { t } from '../languages'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -14,7 +15,7 @@ const isReady = computed(() => props.info?.status === 'ready')
 
 const formatSize = value => {
   const bytes = Number(value || 0)
-  if (!bytes) return '未知大小'
+  if (!bytes) return t('update.unknownSize')
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -22,21 +23,22 @@ const formatSize = value => {
 }
 
 const typeLabel = type => ({
-  feature: '新增',
-  fix: '修复',
-  optimize: '优化',
-  breaking: '注意',
-  change: '变更',
-}[type] || '变更')
+  feature: t('update.typeFeature'),
+  fix: t('update.typeFix'),
+  optimize: t('update.typeOptimize'),
+  improvement: t('update.typeOptimize'),
+  breaking: t('update.typeBreaking'),
+  change: t('update.typeChange'),
+}[type] || t('update.typeChange'))
 </script>
 
 <template>
   <div v-if="open" class="modal-backdrop update-backdrop" @mousedown.self="emit('close')">
-    <section class="modal-card update-modal" role="dialog" aria-modal="true" :aria-label="mode === 'changelog' ? '更新日志' : '软件更新'">
+    <section class="modal-card update-modal" role="dialog" aria-modal="true" :aria-label="mode === 'changelog' ? t('update.changelog') : t('update.aria')">
       <header class="modal-header">
         <div>
-          <span class="eyebrow">{{ mode === 'changelog' ? 'CHANGELOG' : 'SOFTWARE UPDATE' }}</span>
-          <h2>{{ mode === 'changelog' ? '更新日志' : `发现新版本 v${info?.version || ''}` }}</h2>
+          <span class="eyebrow">{{ mode === 'changelog' ? t('update.changelog') : t('update.eyebrow') }}</span>
+          <h2>{{ mode === 'changelog' ? t('update.changelog') : t('update.found', { version: info?.version || '' }) }}</h2>
         </div>
         <button type="button" class="icon-button" :disabled="!!busy" @click="emit('close')">×</button>
       </header>
@@ -44,18 +46,18 @@ const typeLabel = type => ({
       <div v-if="mode === 'update'" class="modal-body update-body">
         <div class="update-summary">
           <div>
-            <span>当前版本</span>
+            <span>{{ t('update.currentVersion') }}</span>
             <strong>v{{ info?.current_version }}</strong>
           </div>
           <span class="update-arrow">→</span>
           <div>
-            <span>可用版本</span>
+            <span>{{ t('update.availableVersion') }}</span>
             <strong>v{{ info?.version }}</strong>
           </div>
           <div class="update-meta">
             <span>{{ formatSize(info?.size) }}</span>
             <span v-if="info?.published_at">{{ info.published_at }}</span>
-            <span :class="isReady ? 'verified' : ''">{{ isReady ? 'SHA-256 已校验' : '等待下载校验' }}</span>
+            <span :class="isReady ? 'verified' : ''">{{ isReady ? t('update.verified') : t('update.waiting') }}</span>
           </div>
         </div>
 
@@ -69,7 +71,7 @@ const typeLabel = type => ({
               </li>
             </ul>
           </section>
-          <p v-if="!info?.entries?.length" class="empty-changelog">此版本未提供更新说明。</p>
+          <p v-if="!info?.entries?.length" class="empty-changelog">{{ t('update.noVersionNotes') }}</p>
         </div>
       </div>
 
@@ -90,23 +92,23 @@ const typeLabel = type => ({
               </ul>
             </section>
           </article>
-          <p v-if="!changelog.length" class="empty-changelog">暂无更新日志。</p>
+          <p v-if="!changelog.length" class="empty-changelog">{{ t('update.noChangelog') }}</p>
         </div>
       </div>
 
       <footer class="modal-footer update-footer">
         <template v-if="mode === 'update'">
-          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('ignore')">忽略此版本</button>
+          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('ignore')">{{ t('update.ignoreVersion') }}</button>
           <span class="footer-spacer"></span>
-          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('close')">稍后提醒</button>
+          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('close')">{{ t('update.remindLater') }}</button>
           <button v-if="!isReady" type="button" class="primary-button" :disabled="!!busy" @click="emit('download')">
-            {{ busy || '下载更新' }}
+            {{ busy || t('update.download') }}
           </button>
           <button v-else type="button" class="primary-button" :disabled="!!busy" @click="emit('install')">
-            {{ busy || '安装并重启' }}
+            {{ busy || t('update.install') }}
           </button>
         </template>
-        <button v-else type="button" class="primary-button" :disabled="!!busy" @click="emit('close')">关闭</button>
+        <button v-else type="button" class="primary-button" :disabled="!!busy" @click="emit('close')">{{ t('common.close') }}</button>
       </footer>
     </section>
   </div>

@@ -1,28 +1,101 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "published_at": "2026-07-15",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.3.0/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "acb475663651a237d89fac2c08c751bfd42c29c4a3af66da3f78bcdb6bdd50a0",
-    "size": 60742046
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.5.0/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "599ed220d3d458487f8ea8275f7fd66618928d43fa23beae3bdf7f9e3a8c6af3",
+    "size": 60954760
   },
   "changelog": [
     {
-      "title": "问题管理与文件定位",
+      "title": "设置与关于项目",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "设置界面拆分为基础设置、功能（游戏启动增强）、AI 集成和关于项目四个分页。"
+        },
+        {
+          "type": "feature",
+          "text": "新增关于项目页，集中显示版本与更新信息；下载入口仅指向 GitHub、Gitee 发布页，反馈与交流提供 GitHub Issues 和 QQ 群 592799189。"
+        }
+      ]
+    },
+    {
+      "title": "启动恢复与列表操作",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "首次启动时自动读取 Warhammer III 上次使用的 used_mods.txt，仅按本机已安装 MOD 恢复启用状态与加载顺序，不会下载或订阅缺失 MOD。"
+        },
+        {
+          "type": "feature",
+          "text": "已启用与未启用 MOD 均支持单项或 Ctrl、Shift 批量拖拽；可在两栏之间移动，已启用顺序即时保存，未启用顺序仅在本次运行中保留。"
+        },
+        {
+          "type": "improvement",
+          "text": "统一打开目录、重新扫描、刷新工坊信息和打开游戏目录等按钮样式，并将页面入口统一命名为“创意工坊页面”。"
+        }
+      ]
+    },
+    {
+      "title": "创意工坊发布与分享码导入",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "发布 MOD 更新时可选择语言，默认使用当前界面语言；切换语言后自动载入对应的创意工坊标题与描述，只有英文简介时自动使用英文。"
+        },
+        {
+          "type": "feature",
+          "text": "将“更新说明”调整为默认为空的“更新日志”，并通过本地 Steamworks 补丁写入所选发布语言。"
+        },
+        {
+          "type": "feature",
+          "text": "分享码导入会列出未订阅的 MOD，在用户确认后自动订阅，并在下载完成、重新扫描后还原到播放集。"
+        }
+      ]
+    },
+    {
+      "title": "内置多语言",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "首次启动时根据系统语言自动选择简体中文、英语、韩语、俄语或日语；检测失败或系统语言不受支持时默认使用英语。"
+        },
+        {
+          "type": "feature",
+          "text": "界面与更新日志现已内置简体中文、英语、韩语、俄语和日语。"
+        },
+        {
+          "type": "improvement",
+          "text": "统一各语言下的按钮、标题、状态与提示文本，避免界面混用其他语言。"
+        }
+      ]
+    },
+    {
+      "title": "警告检测与提示修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复 Data 目录中的 MOD 无法在资源管理器中准确定位 Pack 文件的问题。"
+          "text": "修复过期 MOD 检查的时间比较方向错误；现在仅当 MOD 在游戏本体更新后尚未更新时提示，同步更新说明文本，并兼容旧版忽略记录。"
         },
         {
-          "type": "feature",
-          "text": "右键菜单新增“忽略问题”，支持按 MOD 忽略或恢复过期与缺失依赖警告。"
+          "type": "improvement",
+          "text": "缺失依赖警告现在只检查已启用 MOD；启用、停用、排序、跨栏拖放、切换播放集或导入后都会立即重新检测。"
         },
         {
-          "type": "feature",
-          "text": "将警告入口移到“已启用 MOD”标题栏中央，并新增可逐条忽略问题的居中窗口。"
+          "type": "improvement",
+          "text": "当 Steam 暂时无法读取部分创意工坊依赖时，明确说明正在使用缓存且缺失依赖结果可能不是最新状态，并允许在本次运行中忽略该提示。"
+        }
+      ]
+    },
+    {
+      "title": "文档与项目说明",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "重写 README 的用户功能介绍，精简不必要的实现细节，并补充 Warhammer Mod Manager 与 RimCrow 的致谢。"
         }
       ]
     }

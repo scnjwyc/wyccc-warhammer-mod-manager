@@ -5,7 +5,14 @@ import unittest
 from pathlib import Path
 
 from backend.constants import SOURCE_DATA, SOURCE_WORKSHOP
-from backend.share import PREFIX, export_share, parse_share, resolve_share
+from backend.share import (
+    PREFIX,
+    export_share,
+    parse_pending_workshop_mod_id,
+    parse_share,
+    resolve_share,
+    resolve_share_with_pending,
+)
 from tests.helpers import make_asset, write_pack
 
 
@@ -119,6 +126,25 @@ class ShareCodeTests(unittest.TestCase):
 
             self.assertEqual(ordered_ids, ["new-data-copy"])
             self.assertEqual(missing, [])
+
+    def test_missing_workshop_item_keeps_a_resolvable_pending_position(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            asset = make_asset(
+                write_pack(Path(temporary) / "123" / "Example Mod.pack"),
+                "old-id",
+                SOURCE_WORKSHOP,
+                "123",
+            )
+            references = parse_share(export_share([asset]))
+
+        ordered_ids, missing = resolve_share_with_pending(references, {})
+
+        self.assertEqual(len(ordered_ids), 1)
+        self.assertEqual(missing, references)
+        self.assertEqual(
+            parse_pending_workshop_mod_id(ordered_ids[0]),
+            ("123", "example mod.pack"),
+        )
 
 
 if __name__ == "__main__":

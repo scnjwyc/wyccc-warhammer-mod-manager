@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.steamworks_bridge import SteamworksBridgeError
-from backend.workshop import DETAILS_ENDPOINT, WorkshopMetadataService
+from backend.workshop import (
+    DEPENDENCY_CACHE_WARNING,
+    DETAILS_ENDPOINT,
+    WorkshopMetadataService,
+)
 
 
 class FakeResponse:
@@ -286,6 +290,98 @@ class WorkshopMetadataTests(unittest.TestCase):
                     self.assertEqual(item["title"], f"title-{steam_language}")
                     self.assertEqual(item["description"], f"description-{steam_language}")
                     self.assertEqual(item["requested_language"], steam_language)
+
+    def test_publish_copy_refresh_fetches_only_english_and_the_requested_language(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_path = Path(temporary) / "workshop_cache.json"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 3,
+                        "items": {
+                            "123": {
+                                "workshop_id": "123",
+                                "title": "English title",
+                                "description": "English description",
+                            }
+                        },
+                        "authors": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = WorkshopMetadataService(cache_path)
+            with (
+                patch.object(service, "_refresh_english_details") as refresh_english,
+                patch(
+                    "backend.workshop.query_workshop_languages",
+                    return_value={
+                        "russian": {
+                            "123": {
+                                "title": "Русский заголовок",
+                                "description": "Русское описание",
+                            }
+                        }
+                    },
+                ) as query_languages,
+            ):
+                item = service.refresh_localized(["123"], "ru-RU")["123"]
+
+        refresh_english.assert_called_once()
+        query_languages.assert_called_once_with(["123"], ["russian"])
+        self.assertEqual(item["title"], "Русский заголовок")
+        self.assertEqual(item["description"], "Русское описание")
+        self.assertEqual(item["description_language"], "russian")
+
+    def test_steam_english_fallback_is_not_mislabeled_as_a_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_path = Path(temporary) / "workshop_cache.json"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 3,
+                        "items": {
+                            "123": {
+                                "workshop_id": "123",
+                                "title": "English title",
+                                "description": "English description",
+                            }
+                        },
+                        "authors": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = WorkshopMetadataService(cache_path)
+            with (
+                patch.object(service, "_refresh_english_details"),
+                patch(
+                    "backend.workshop.query_workshop_languages",
+                    return_value={
+                        "schinese": {
+                            "123": {
+                                "title": "English title",
+                                "description": "English description",
+                            }
+                        }
+                    },
+                ),
+            ):
+                item = service.refresh_localized(["123"], "zh-CN")["123"]
+
+        self.assertEqual(item["title"], "English title")
+        self.assertEqual(item["description"], "English description")
+        self.assertEqual(item["title_language"], "english")
+        self.assertEqual(item["description_language"], "english")
+
+    def test_dependency_refresh_failure_explains_the_cached_fallback(self) -> None:
+        self.query_dependencies.side_effect = SteamworksBridgeError("Steam is unavailable")
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            item = service.ensure_dependencies(["123"], "zh-CN")["123"]
+
+        self.assertEqual(service.last_refresh_warning, DEPENDENCY_CACHE_WARNING)
+        self.assertEqual(item["required_workshop_items"], [])
 
     def test_dependency_refresh_caches_required_items_with_titles(self) -> None:
         self.query_dependencies.return_value = {

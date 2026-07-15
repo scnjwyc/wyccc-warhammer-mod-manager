@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 
+import { t } from '../languages'
 import {
   getSearchSuggestions,
   parseSearchToken,
   SEARCH_FIELDS,
+  searchFieldLabel,
   searchTokenIdentity,
 } from '../modSearch'
 
@@ -23,7 +25,7 @@ const inputRef = ref(null)
 let blurTimer = 0
 
 const suggestions = computed(() => getSearchSuggestions(inputValue.value, props.mods, props.typeMap))
-const placeholder = computed(() => props.tokens.length ? '添加条件…' : '输入关键词，或使用 type:类型 等条件')
+const placeholder = computed(() => props.tokens.length ? t('search.addCondition') : t('search.placeholder'))
 
 const addToken = rawValue => {
   const token = parseSearchToken(rawValue ?? inputValue.value)
@@ -88,7 +90,7 @@ const handleBlur = () => {
 
 const tokenLabel = token => {
   const field = token.key ? SEARCH_FIELDS[token.key] : null
-  return `${token.exclude ? '-' : ''}${field ? `${field.label}:` : ''}${token.displayValue ?? token.value}`
+  return `${token.exclude ? '-' : ''}${field ? `${searchFieldLabel(field)}:` : ''}${token.displayValue ?? token.value}`
 }
 
 onBeforeUnmount(() => window.clearTimeout(blurTimer))
@@ -100,10 +102,10 @@ onBeforeUnmount(() => window.clearTimeout(blurTimer))
       type="button"
       class="search-logic-button"
       :class="logic.toLocaleLowerCase()"
-      :title="logic === 'AND' ? '满足全部条件；点击切换为任一条件' : '满足任一条件；点击切换为全部条件'"
+      :title="logic === 'AND' ? t('search.logicAll') : t('search.logicAny')"
       @click="emit('update:logic', logic === 'AND' ? 'OR' : 'AND')"
     >
-      {{ logic }}
+      {{ logic === 'AND' ? t('search.logicAllShort') : t('search.logicAnyShort') }}
     </button>
     <span class="search-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" focusable="false">
@@ -120,14 +122,14 @@ onBeforeUnmount(() => window.clearTimeout(blurTimer))
         :title="tokenLabel(token)"
       >
         <span>{{ tokenLabel(token) }}</span>
-        <button type="button" :aria-label="`删除条件 ${tokenLabel(token)}`" @click="removeToken(index)">×</button>
+        <button type="button" :aria-label="t('search.removeCondition', { label: tokenLabel(token) })" @click="removeToken(index)">×</button>
       </span>
       <input
         ref="inputRef"
         v-model="inputValue"
         type="text"
         :placeholder="placeholder"
-        aria-label="MOD 多条件搜索"
+        :aria-label="t('search.aria')"
         @focus="showSuggestions = true"
         @input="highlightedIndex = 0; showSuggestions = true"
         @keydown="handleKeydown"
@@ -138,8 +140,8 @@ onBeforeUnmount(() => window.clearTimeout(blurTimer))
       v-if="tokens.length || inputValue"
       type="button"
       class="search-clear-button"
-      title="清除全部搜索条件"
-      aria-label="清除全部搜索条件"
+      :title="t('search.clear')"
+      :aria-label="t('search.clear')"
       @click="clearAll"
     >×</button>
 
@@ -152,7 +154,7 @@ onBeforeUnmount(() => window.clearTimeout(blurTimer))
         @mousedown.prevent="applySuggestion(suggestion)"
         @mouseenter="highlightedIndex = index"
       >
-        <span class="suggestion-kind">{{ suggestion.type === 'key' ? 'KEY' : 'VAL' }}</span>
+        <span class="suggestion-kind">{{ suggestion.type === 'key' ? t('search.suggestionKey') : t('search.suggestionValue') }}</span>
         <span class="suggestion-value">{{ suggestion.value }}</span>
         <span class="suggestion-description">{{ suggestion.type === 'value' ? suggestion.label : suggestion.label }}</span>
       </button>

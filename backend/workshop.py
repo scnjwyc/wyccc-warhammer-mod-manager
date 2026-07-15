@@ -35,11 +35,18 @@ STEAM_LANGUAGE_BY_INTERFACE = {
     "ru-RU": "russian",
     "ja-JP": "japanese",
 }
+INTERFACE_LANGUAGE_BY_STEAM = {
+    steam_language: interface_language
+    for interface_language, steam_language in STEAM_LANGUAGE_BY_INTERFACE.items()
+}
 
 AUTHOR_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 AUTHOR_FAILURE_RETRY_MS = 6 * 60 * 60 * 1000
 LOCALIZED_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 LOCALIZED_FAILURE_RETRY_MS = 6 * 60 * 60 * 1000
+DEPENDENCY_CACHE_WARNING = (
+    "Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态"
+)
 
 
 def _default_cache() -> dict[str, Any]:
@@ -50,6 +57,17 @@ def _steam_language(interface_language: str) -> str:
     return STEAM_LANGUAGE_BY_INTERFACE.get(
         str(interface_language or "").strip(),
         ENGLISH_STEAM_LANGUAGE,
+    )
+
+
+def steam_language_for_interface(interface_language: str) -> str:
+    return _steam_language(interface_language)
+
+
+def interface_language_for_steam(steam_language: str) -> str:
+    return INTERFACE_LANGUAGE_BY_STEAM.get(
+        str(steam_language or "").strip(),
+        "en-US",
     )
 
 
@@ -189,6 +207,41 @@ class WorkshopMetadataService:
         self.store.save(cache)
         return self.get_many(ids, interface_language)
 
+    def refresh_localized(
+        self,
+        workshop_ids: list[str],
+        interface_language: str = "en-US",
+    ) -> dict[str, dict[str, Any]]:
+        """Refresh only the localized publishing copy for the requested items."""
+        self.last_refresh_warning = ""
+        ids = list(dict.fromkeys(item for item in workshop_ids if item.isdigit()))
+        if not ids:
+            return {}
+        cache = self.store.load()
+        items = cache.setdefault("items", {})
+        if not isinstance(items, dict):
+            items = {}
+            cache["items"] = items
+
+        try:
+            self._refresh_english_details(items, ids)
+        except Exception as exc:
+            logger.warning("Steam English Workshop publishing copy refresh failed: %s", exc)
+            self.last_refresh_warning = f"英文工坊信息刷新失败，已保留缓存内容：{exc}"
+
+        requested_language = _steam_language(interface_language)
+        if requested_language != ENGLISH_STEAM_LANGUAGE:
+            self._refresh_localized_steamworks(
+                items,
+                ids,
+                requested_language,
+                force=True,
+            )
+
+        cache["schema_version"] = CACHE_SCHEMA_VERSION
+        self.store.save(cache)
+        return self.get_many(ids, interface_language)
+
     def ensure_dependencies(
         self,
         workshop_ids: list[str],
@@ -233,7 +286,7 @@ class WorkshopMetadataService:
                 continue
             pending.append(workshop_id)
         if retry_blocked:
-            self.last_refresh_warning = "部分工坊依赖暂时无法读取，当前显示的是已有缓存结果"
+            self.last_refresh_warning = DEPENDENCY_CACHE_WARNING
         if not pending:
             return
 
@@ -241,7 +294,7 @@ class WorkshopMetadataService:
             dependencies = query_workshop_dependencies(pending, steam_language)
         except SteamworksBridgeError as exc:
             logger.warning("Steamworks Workshop dependency refresh failed: %s", exc)
-            self.last_refresh_warning = f"Steamworks 工坊依赖扫描失败，已保留缓存结果：{exc}"
+            self.last_refresh_warning = DEPENDENCY_CACHE_WARNING
             for workshop_id in pending:
                 items[workshop_id]["dependencies_last_error_at"] = now
             return
@@ -367,13 +420,24 @@ class WorkshopMetadataService:
 
             title = str(detail.get("title") or "").strip()
             description = str(detail.get("description") or "").strip()
+            english_variant = record["localized"].get(ENGLISH_STEAM_LANGUAGE, {})
+            english_title = str(english_variant.get("title") or "").strip()
+            english_description = str(
+                english_variant.get("description") or ""
+            ).strip()
+            localized_title = "" if title and title == english_title else title
+            localized_description = (
+                ""
+                if description and description == english_description
+                else description
+            )
             updated_at = int(detail.get("updated_at") or record.get("updated_at") or 0)
             record["localized"][steam_language] = {
-                "title": title,
-                "description": description,
+                "title": localized_title,
+                "description": localized_description,
                 "fetched_at": now,
                 "source_updated_at": updated_at,
-                "failed": not bool(title or description),
+                "failed": not bool(localized_title or localized_description),
                 "last_error_at": 0,
                 "source": "steamworks",
             }

@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
-import { SORT_OPTIONS } from '../modSearch'
+import { t } from '../languages'
+import { SORT_OPTIONS, sortOptionLabel } from '../modSearch'
 
 const props = defineProps({
   mode: { type: String, default: 'priority' },
@@ -11,7 +12,7 @@ const props = defineProps({
 const emit = defineEmits(['update:mode', 'update:descending'])
 const root = ref(null)
 const open = ref(false)
-const currentLabel = computed(() => SORT_OPTIONS.find(option => option.id === props.mode)?.label || '优先级')
+const currentLabel = computed(() => sortOptionLabel(SORT_OPTIONS.find(option => option.id === props.mode)))
 
 const choose = option => {
   emit('update:mode', option.id)
@@ -33,7 +34,7 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', closeOutside))
       class="sort-button"
       :class="{ active: mode !== 'priority' }"
       :aria-expanded="open"
-      :title="`列表显示排序：${currentLabel}`"
+      :title="t('search.displaySortTitle', { label: currentLabel })"
       data-testid="sort-button"
       @click="open = !open"
     >
@@ -42,7 +43,7 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', closeOutside))
       </svg>
     </button>
     <div v-if="open" class="sort-menu" role="menu" data-testid="sort-menu">
-      <strong>列表显示排序</strong>
+      <strong>{{ t('search.displaySort') }}</strong>
       <button
         v-for="option in SORT_OPTIONS"
         :key="option.id"
@@ -51,7 +52,7 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', closeOutside))
         @click="choose(option)"
       >
         <span>{{ mode === option.id ? '✓' : '' }}</span>
-        {{ option.label }}
+        {{ sortOptionLabel(option) }}
       </button>
       <div class="sort-menu-divider"></div>
       <button
@@ -60,9 +61,9 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', closeOutside))
         @click="emit('update:descending', !descending)"
       >
         <span>↕</span>
-        {{ descending ? '降序' : '升序' }}
+        {{ descending ? t('search.descending') : t('search.ascending') }}
       </button>
-      <p>仅改变列表显示，不修改实际加载顺序。</p>
+      <p>{{ t('search.displayOnly') }}</p>
     </div>
   </div>
 </template>

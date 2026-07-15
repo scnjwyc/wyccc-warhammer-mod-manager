@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { localizedModTypeName, t } from '../languages'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -36,7 +37,9 @@ const canPublish = computed(() => sources.value.has('data'))
 const hasSteamActions = computed(() => hasWorkshop.value || canPublish.value)
 const isBatchSelection = computed(() => Number(props.selectionCount) > 1)
 const batchLabel = label => (
-  isBatchSelection.value ? `${label}（${Number(props.selectionCount)}项）` : label
+  isBatchSelection.value
+    ? t('context.batchLabel', { label, count: Number(props.selectionCount) })
+    : label
 )
 const selectedTypes = computed(() => new Set(
   props.mod?.mod_types?.length ? props.mod.mod_types : [props.mod?.mod_type || 'unknown'],
@@ -57,15 +60,15 @@ const run = (action, value = null, close = true) => {
     @mousedown.self="emit('close')"
     @contextmenu.prevent
   >
-    <nav class="context-menu" :class="{ 'submenus-left': submenuToLeft }" :style="menuStyle" role="menu" aria-label="MOD 操作">
+    <nav class="context-menu" :class="{ 'submenus-left': submenuToLeft }" :style="menuStyle" role="menu" :aria-label="t('context.aria')">
       <button type="button" class="context-menu-item" role="menuitem" @click="run('toggle-active')">
         <span class="context-menu-icon">{{ active ? '⊘' : '✓' }}</span>
-        <span>{{ batchLabel(active ? '停用' : '启用') }}</span>
+        <span>{{ batchLabel(active ? t('list.disable') : t('list.enable')) }}</span>
       </button>
 
       <div class="context-menu-parent" data-testid="context-type-menu">
         <span class="context-menu-icon">◆</span>
-        <span>{{ batchLabel('修改类型') }}</span>
+        <span>{{ batchLabel(t('context.editType')) }}</span>
         <span class="context-menu-arrow">›</span>
         <div class="context-submenu type-submenu" role="menu">
           <button
@@ -79,12 +82,12 @@ const run = (action, value = null, close = true) => {
             @click.stop="run('toggle-type', type.id, false)"
           >
             <span class="context-menu-check">{{ selectedTypes.has(type.id) ? '✓' : '' }}</span>
-            <span>{{ batchLabel(type.name) }}</span>
+            <span>{{ batchLabel(localizedModTypeName(type)) }}</span>
           </button>
           <div class="context-menu-divider"></div>
           <button type="button" class="context-menu-item" role="menuitem" @click.stop="run('manage-types')">
             <span class="context-menu-icon">⚙</span>
-            <span>类型管理</span>
+            <span>{{ t('context.manageTypes') }}</span>
           </button>
         </div>
       </div>
@@ -96,18 +99,18 @@ const run = (action, value = null, close = true) => {
         data-testid="context-move-menu"
       >
         <span class="context-menu-icon">↕</span>
-        <span>{{ batchLabel('移动到') }}</span>
+        <span>{{ batchLabel(t('context.moveTo')) }}</span>
         <span v-if="active" class="context-menu-arrow">›</span>
-        <span v-else class="context-menu-unavailable">不可用</span>
+        <span v-else class="context-menu-unavailable">{{ t('common.unavailable') }}</span>
         <div v-if="active" class="context-submenu" role="menu">
           <button type="button" class="context-menu-item" @click.stop="run('move-specific')">
-            <span class="context-menu-icon">#</span><span>{{ batchLabel('指定加载顺序') }}</span>
+            <span class="context-menu-icon">#</span><span>{{ batchLabel(t('context.specificOrder')) }}</span>
           </button>
           <button type="button" class="context-menu-item" @click.stop="run('move-top')">
-            <span class="context-menu-icon">⇈</span><span>{{ batchLabel('列表顶部') }}</span>
+            <span class="context-menu-icon">⇈</span><span>{{ batchLabel(t('context.listTop')) }}</span>
           </button>
           <button type="button" class="context-menu-item" @click.stop="run('move-bottom')">
-            <span class="context-menu-icon">⇊</span><span>{{ batchLabel('列表底部') }}</span>
+            <span class="context-menu-icon">⇊</span><span>{{ batchLabel(t('context.listBottom')) }}</span>
           </button>
         </div>
       </div>
@@ -119,44 +122,44 @@ const run = (action, value = null, close = true) => {
         data-testid="context-steam-menu"
       >
         <span class="context-menu-icon steam-icon">S</span>
-        <span>{{ batchLabel('Steam 操作') }}</span>
+        <span>{{ batchLabel(t('context.steamActions')) }}</span>
         <span v-if="hasSteamActions" class="context-menu-arrow">›</span>
-        <span v-else class="context-menu-unavailable">不可用</span>
+        <span v-else class="context-menu-unavailable">{{ t('common.unavailable') }}</span>
         <div v-if="hasSteamActions" class="context-submenu" role="menu">
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('open-workshop')">
-            <span class="context-menu-icon">↗</span><span>{{ batchLabel('访问创意工坊') }}</span>
+            <span class="context-menu-icon">↗</span><span>{{ batchLabel(t('context.visitWorkshop')) }}</span>
           </button>
           <button v-if="hasWorkshop" type="button" class="context-menu-item danger-item" @click.stop="run('unsubscribe')">
-            <span class="context-menu-icon">⊘</span><span>{{ batchLabel('取消订阅') }}</span>
+            <span class="context-menu-icon">⊘</span><span>{{ batchLabel(t('context.unsubscribe')) }}</span>
           </button>
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('force-update')">
-            <span class="context-menu-icon">↻</span><span>{{ batchLabel('强制更新') }}</span>
+            <span class="context-menu-icon">↻</span><span>{{ batchLabel(t('context.forceUpdate')) }}</span>
           </button>
           <div v-if="hasWorkshop && canPublish" class="context-menu-divider"></div>
           <button v-if="canPublish && !hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-upload')">
-            <span class="context-menu-icon">↑</span><span>{{ batchLabel('上传到工坊') }}</span>
+            <span class="context-menu-icon">↑</span><span>{{ batchLabel(t('context.uploadWorkshop')) }}</span>
           </button>
           <button v-if="canPublish && hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-update')">
-            <span class="context-menu-icon">⇧</span><span>{{ batchLabel('更新到工坊') }}</span>
+            <span class="context-menu-icon">⇧</span><span>{{ batchLabel(t('context.updateWorkshop')) }}</span>
           </button>
         </div>
       </div>
 
       <div class="context-menu-parent" data-testid="context-ignore-warning-menu">
         <span class="context-menu-icon">!</span>
-        <span>{{ batchLabel('忽略问题') }}</span>
+        <span>{{ batchLabel(t('context.ignoreIssue')) }}</span>
         <span class="context-menu-arrow">›</span>
         <div class="context-submenu" role="menu">
           <button
             type="button"
             class="context-menu-item"
             role="menuitemcheckbox"
-            :aria-checked="ignoredWarningCodes.has('mod_newer_than_game')"
-            :class="{ checked: ignoredWarningCodes.has('mod_newer_than_game') }"
-            @click.stop="run('toggle-warning-ignore', 'mod_newer_than_game', false)"
+            :aria-checked="ignoredWarningCodes.has('outdated_mod')"
+            :class="{ checked: ignoredWarningCodes.has('outdated_mod') }"
+            @click.stop="run('toggle-warning-ignore', 'outdated_mod', false)"
           >
-            <span class="context-menu-check">{{ ignoredWarningCodes.has('mod_newer_than_game') ? '✓' : '' }}</span>
-            <span>{{ batchLabel('忽略 MOD 过期') }}</span>
+            <span class="context-menu-check">{{ ignoredWarningCodes.has('outdated_mod') ? '✓' : '' }}</span>
+            <span>{{ batchLabel(t('context.ignoreOutdated')) }}</span>
           </button>
           <button
             type="button"
@@ -167,7 +170,7 @@ const run = (action, value = null, close = true) => {
             @click.stop="run('toggle-warning-ignore', 'missing_dependency', false)"
           >
             <span class="context-menu-check">{{ ignoredWarningCodes.has('missing_dependency') ? '✓' : '' }}</span>
-            <span>{{ batchLabel('忽略缺失依赖') }}</span>
+            <span>{{ batchLabel(t('context.ignoreDependency')) }}</span>
           </button>
         </div>
       </div>
@@ -176,34 +179,34 @@ const run = (action, value = null, close = true) => {
 
       <button type="button" class="context-menu-item" @click="run('open-folder')">
         <span class="context-menu-icon">▣</span>
-        <span>{{ batchLabel('打开文件目录') }}</span>
+        <span>{{ batchLabel(t('context.openFileFolder')) }}</span>
       </button>
       <button
         type="button"
         class="context-menu-item"
         :disabled="isBatchSelection"
-        :title="isBatchSelection ? '批量选择时不能在 RPFM 中打开' : ''"
+        :title="isBatchSelection ? t('context.rpfmBatchTitle') : ''"
         data-testid="context-open-rpfm"
         @click="run('open-rpfm')"
       >
         <span class="context-menu-icon">R</span>
-        <span>在 RPFM 打开</span>
-        <span v-if="isBatchSelection" class="context-menu-unavailable">仅限单项</span>
+        <span>{{ t('context.openRpfm') }}</span>
+        <span v-if="isBatchSelection" class="context-menu-unavailable">{{ t('common.singleOnly') }}</span>
       </button>
       <button type="button" class="context-menu-item" @click="run('toggle-hidden')">
         <span class="context-menu-icon">{{ mod.hidden ? '◉' : '◌' }}</span>
-        <span>{{ batchLabel(mod.hidden ? '取消隐藏' : '从列表中隐藏') }}</span>
+        <span>{{ batchLabel(mod.hidden ? t('context.unhide') : t('context.hide')) }}</span>
       </button>
       <button
         type="button"
         class="context-menu-item"
         :disabled="!canCopyToData"
-        :title="canCopyToData ? '' : '该 Pack 已存在于 Data 目录'"
+        :title="canCopyToData ? '' : t('context.existsData')"
         @click="run('copy-to-data')"
       >
         <span class="context-menu-icon">⇩</span>
-        <span>{{ batchLabel('复制模组到 Data 文件夹') }}</span>
-        <span v-if="!canCopyToData" class="context-menu-unavailable">已在 Data</span>
+        <span>{{ batchLabel(t('context.copyToData')) }}</span>
+        <span v-if="!canCopyToData" class="context-menu-unavailable">{{ t('context.inData') }}</span>
       </button>
     </nav>
   </div>

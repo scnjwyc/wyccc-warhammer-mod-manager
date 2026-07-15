@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { localizeBackendMessage, t } from '../languages'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -18,23 +19,26 @@ const emit = defineEmits([
   'select',
   'enable',
   'disable',
-  'reorder',
+  'drop-mods',
   'move',
   'context-menu',
   'show-warnings',
 ])
-const draggingId = ref('')
-
-const sourceLabel = {
-  workshop: 'WORKSHOP',
-  data: 'DATA',
-}
+const draggingIds = ref([])
+const draggingOriginId = ref('')
 
 const positionOf = modId => props.orderIds.indexOf(modId) + 1
 const sourcesOf = mod => [...new Set(mod.sources?.length ? mod.sources : [mod.source])]
-const authorOf = mod => mod.author?.trim() || (mod.workshop_id ? '作者昵称暂不可用' : '本地文件')
+const sourceLabel = source => ({
+  workshop: t('list.workshopSource'),
+  data: t('list.dataSource'),
+}[source] || String(source).toUpperCase())
+const authorOf = mod => mod.author?.trim() || (mod.workshop_id ? t('list.authorUnavailable') : t('list.localFile'))
 const typesOf = mod => [...new Set(mod.mod_types?.length ? mod.mod_types : [mod.mod_type || 'unknown'])]
 const isSelected = modId => props.selectedIds.includes(modId) || props.selectedId === modId
+const warningsOf = mod => (mod.warnings || []).filter(
+  warning => props.active || warning?.code !== 'missing_dependency',
+)
 
 const selectMod = (event, mod) => {
   emit('select', {
@@ -50,9 +54,57 @@ const onContextMenu = (event, mod) => {
   emit('context-menu', { x: event.clientX, y: event.clientY, mod, active: props.active })
 }
 
-const onDrop = (targetId) => {
-  if (props.active && !props.visualSorted && draggingId.value) emit('reorder', draggingId.value, targetId)
-  draggingId.value = ''
+const clearDragging = () => {
+  draggingIds.value = []
+  draggingOriginId.value = ''
+}
+
+const onDragStart = (event, sourceId) => {
+  const visibleOrder = props.mods.map(mod => mod.id)
+  const visibleIds = new Set(visibleOrder)
+  const selected = new Set([...props.selectedIds, props.selectedId].filter(Boolean))
+  draggingIds.value = selected.has(sourceId)
+    ? visibleOrder.filter(id => selected.has(id) && visibleIds.has(id))
+    : [sourceId]
+  if (!draggingIds.value.length) draggingIds.value = [sourceId]
+  draggingOriginId.value = sourceId
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-wyccc-mods', JSON.stringify({
+      source: props.active ? 'active' : 'inactive',
+      ids: draggingIds.value,
+      draggedId: sourceId,
+      sourceOrder: visibleOrder,
+    }))
+    event.dataTransfer.setData('text/plain', draggingIds.value.join('\n'))
+  }
+}
+
+const onDrop = (event, targetId = '') => {
+  let payload = null
+  try {
+    const encoded = event.dataTransfer?.getData('application/x-wyccc-mods')
+    if (encoded) payload = JSON.parse(encoded)
+  } catch {
+    payload = null
+  }
+  if (!payload && draggingIds.value.length) {
+    payload = {
+      source: props.active ? 'active' : 'inactive',
+      ids: [...draggingIds.value],
+      draggedId: draggingOriginId.value,
+      sourceOrder: props.mods.map(mod => mod.id),
+    }
+  }
+  if (payload?.ids?.length) {
+    emit('drop-mods', {
+      ...payload,
+      target: props.active ? 'active' : 'inactive',
+      targetId,
+      targetOrder: props.mods.map(mod => mod.id),
+    })
+  }
+  clearDragging()
 }
 </script>
 
@@ -60,7 +112,7 @@ const onDrop = (targetId) => {
   <section class="list-panel" :class="{ 'active-panel': active }">
     <header class="panel-heading">
       <div>
-        <span class="eyebrow">{{ active ? 'LOAD ORDER' : 'LIBRARY' }}</span>
+        <span v-if="active" class="eyebrow">{{ t('list.loadOrder') }}</span>
         <h2>{{ title }}</h2>
       </div>
       <button
@@ -71,19 +123,19 @@ const onDrop = (targetId) => {
         @click="emit('show-warnings')"
       >
         <span aria-hidden="true">!</span>
-        {{ warningCount }} 条警告
+        {{ t('common.warningCount', { count: warningCount }) }}
       </button>
       <span class="count-badge">{{ mods.length }}</span>
     </header>
 
-    <div class="mod-list" data-testid="mod-list">
+    <div class="mod-list" data-testid="mod-list" @dragover.prevent @drop.prevent="onDrop($event)">
       <div
         v-for="mod in mods"
         :key="mod.id"
         class="mod-row"
         :class="{
           selected: isSelected(mod.id),
-          dragging: draggingId === mod.id,
+          dragging: draggingIds.includes(mod.id),
           'source-duplicate': mod.cross_source_duplicate,
           'hidden-mod': mod.hidden,
           'visual-sorted': visualSorted,
@@ -91,21 +143,21 @@ const onDrop = (targetId) => {
         role="button"
         tabindex="0"
         :aria-selected="isSelected(mod.id)"
-        :draggable="active && !visualSorted"
+        draggable="true"
         @click="selectMod($event, mod)"
         @keydown.enter="selectMod($event, mod)"
         @keydown.space.prevent="selectMod($event, mod)"
         @contextmenu.prevent.stop="onContextMenu($event, mod)"
-        @dragstart="draggingId = mod.id"
-        @dragend="draggingId = ''"
+        @dragstart="onDragStart($event, mod.id)"
+        @dragend="clearDragging"
         @dragover.prevent
-        @drop.prevent="onDrop(mod.id)"
+        @drop.prevent.stop="onDrop($event, mod.id)"
       >
         <span class="mod-thumbnail">
           <img
             v-if="thumbnails[mod.id]"
             :src="thumbnails[mod.id]"
-            :alt="`${mod.effective_name} 预览图`"
+            :alt="t('list.previewAlt', { name: mod.effective_name })"
             loading="lazy"
           />
           <span v-else class="mod-thumbnail-placeholder" aria-hidden="true">
@@ -126,22 +178,22 @@ const onDrop = (targetId) => {
               class="source-badge"
               :class="`source-${source}`"
             >
-              {{ sourceLabel[source] || source.toUpperCase() }}
+              {{ sourceLabel(source) }}
             </span>
-            <span v-if="mod.pack_type === 'movie'" class="movie-badge">MOVIE</span>
+            <span v-if="mod.pack_type === 'movie'" class="movie-badge">{{ t('list.movie') }}</span>
             <span v-for="typeId in typesOf(mod)" :key="typeId" class="mod-type-badge">
               {{ typeMap[typeId] || typeId }}
             </span>
             <span
-              v-if="mod.warnings?.length"
+              v-if="warningsOf(mod).length"
               class="mod-warning-badge"
-              :class="{ error: mod.warnings.some(item => item.code === 'missing_dependency' || item.severity === 'error') }"
-              :title="mod.warnings.map(item => item.message || item).join('\n')"
+              :class="{ error: warningsOf(mod).some(item => item.code === 'missing_dependency' || item.severity === 'error') }"
+              :title="warningsOf(mod).map(item => localizeBackendMessage(item.message || item, 'warnings.genericScan')).join('\n')"
               data-testid="mod-warning-badge"
             >
-              {{ mod.warnings.some(item => item.code === 'missing_dependency') ? '! 缺少依赖' : '! 警告' }}
+              {{ warningsOf(mod).some(item => item.code === 'missing_dependency') ? t('list.missingDependency') : t('list.warning') }}
             </span>
-            <span v-if="mod.hidden" class="hidden-badge">已隐藏</span>
+            <span v-if="mod.hidden" class="hidden-badge">{{ t('list.hidden') }}</span>
             <span class="mod-author" :class="{ muted: !mod.author }" :title="authorOf(mod)">
               {{ authorOf(mod) }}
             </span>
@@ -152,21 +204,21 @@ const onDrop = (targetId) => {
           <button
             type="button"
             class="icon-button"
-            :title="visualSorted ? '切换回“优先级”排序后可调整实际加载顺序' : '上移'"
+            :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveUp')"
             :disabled="visualSorted || positionOf(mod.id) <= 1"
             @click.stop="emit('move', mod.id, -1)"
           >↑</button>
           <button
             type="button"
             class="icon-button"
-            :title="visualSorted ? '切换回“优先级”排序后可调整实际加载顺序' : '下移'"
+            :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveDown')"
             :disabled="visualSorted || positionOf(mod.id) >= orderIds.length"
             @click.stop="emit('move', mod.id, 1)"
           >↓</button>
           <button
             type="button"
             class="icon-button danger"
-            title="停用"
+            :title="t('list.disable')"
             @click.stop="emit('disable', mod.id)"
           >−</button>
         </span>
@@ -174,14 +226,14 @@ const onDrop = (targetId) => {
           v-else
           type="button"
           class="enable-button"
-          title="启用"
+          :title="t('list.enable')"
           @click.stop="emit('enable', mod.id)"
         >＋</button>
       </div>
 
       <div v-if="mods.length === 0" class="empty-state">
         <span class="empty-mark">W</span>
-        <p>{{ active ? '尚未启用任何 Pack' : '没有符合筛选条件的 Pack' }}</p>
+        <p>{{ active ? t('list.emptyActive') : t('list.emptyFiltered') }}</p>
       </div>
     </div>
   </section>

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Iterable
 
+from .app_settings import DEFAULT_LANGUAGE
 from .constants import (
     CORE_VANILLA_PACKS,
     PACK_TYPE_MOD,
@@ -133,7 +134,7 @@ class ModScanner:
 
         metadata: dict[str, dict] = {}
         if workshop_ids:
-            interface_language = str(settings.get("language") or "zh-CN")
+            interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
             metadata = self.workshop_metadata.get_many(workshop_ids, interface_language)
             ensure_dependencies = getattr(
                 self.workshop_metadata,
@@ -149,7 +150,14 @@ class ModScanner:
                         getattr(self.workshop_metadata, "last_refresh_warning", "") or ""
                     )
                     if dependency_warning:
-                        result.warnings.append(dependency_warning)
+                        result.warnings.append(
+                            {
+                                "code": "workshop_dependency_refresh",
+                                "severity": "warning",
+                                "message": dependency_warning,
+                                "ignorable": True,
+                            }
+                        )
                 except Exception as exc:
                     result.warnings.append(f"工坊依赖扫描失败：{exc}")
             if refresh_workshop:
@@ -202,12 +210,12 @@ class ModScanner:
                 result.warnings.append("无法确定游戏本体最后更新时间，已跳过过期 MOD 检查")
             else:
                 for asset in assets.values():
-                    if asset.updated_at > result.game_updated_at:
+                    if 0 < asset.updated_at < result.game_updated_at:
                         asset.warnings.append(
                             {
-                                "code": "mod_newer_than_game",
+                                "code": "outdated_mod",
                                 "severity": "warning",
-                                "message": "MOD 最后更新时间晚于游戏本体，请确认与当前游戏版本兼容",
+                                "message": "该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用",
                                 "game_updated_at": result.game_updated_at,
                                 "mod_updated_at": asset.updated_at,
                             }
@@ -346,7 +354,20 @@ class ModScanner:
                 for item in missing
             }
             asset.missing_dependencies = list(unique_missing.values())
-            if not asset.missing_dependencies:
+
+    @staticmethod
+    def refresh_missing_dependency_warnings(
+        assets: Iterable[ModAsset],
+        enabled_mod_ids: Iterable[str],
+    ) -> None:
+        enabled = {str(mod_id) for mod_id in enabled_mod_ids}
+        for asset in assets:
+            asset.warnings = [
+                warning
+                for warning in asset.warnings
+                if str(warning.get("code") or "") != "missing_dependency"
+            ]
+            if asset.id not in enabled or not asset.missing_dependencies:
                 continue
             dependency_names = "、".join(
                 item["name"] for item in asset.missing_dependencies

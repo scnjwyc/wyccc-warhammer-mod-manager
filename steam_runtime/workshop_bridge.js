@@ -71,6 +71,57 @@ const main = async () => {
   if (!Number.isInteger(appId) || appId <= 0) throw new Error("Invalid Steam App ID");
 
   const client = steamworks.init(appId);
+  if (operation === "query_subscriptions") {
+    const ids = [...new Set((request?.ids || []).map(String))]
+      .filter(value => /^\d+$/.test(value));
+    const language = String(request?.language || "english");
+    if (!ids.length) throw new Error("No valid Workshop IDs were supplied");
+    const subscribedIds = new Set(
+      (client.workshop.getSubscribedItems() || []).map(value => value.toString()),
+    );
+    const warnings = [];
+    const titles = await queryLanguage(
+      client,
+      ids.map(value => BigInt(value)),
+      language,
+      warnings,
+    );
+    const subscriptions = Object.fromEntries(ids.map(id => [id, {
+      workshop_id: id,
+      title: String(titles[id]?.title || ""),
+      subscribed: subscribedIds.has(id),
+    }]));
+    writeResultAndExit({ ok: true, subscriptions, warnings }, 0);
+    return;
+  }
+  if (operation === "subscribe_many") {
+    const ids = [...new Set((request?.ids || []).map(String))]
+      .filter(value => /^\d+$/.test(value));
+    if (!ids.length) throw new Error("No valid Workshop IDs were supplied");
+    const existing = new Set(
+      (client.workshop.getSubscribedItems() || []).map(value => value.toString()),
+    );
+    const subscribed = [];
+    const alreadySubscribed = [];
+    for (const id of ids) {
+      if (existing.has(id)) {
+        alreadySubscribed.push(id);
+        continue;
+      }
+      await client.workshop.subscribe(BigInt(id));
+      subscribed.push(id);
+    }
+    writeResultAndExit({
+      ok: true,
+      result: {
+        operation,
+        subscribed,
+        already_subscribed: alreadySubscribed,
+        accepted: true,
+      },
+    }, 0);
+    return;
+  }
   if (operation === "publish_item") {
     const requestedId = String(request?.id || "");
     if (requestedId && !/^\d+$/.test(requestedId)) throw new Error("Invalid Workshop ID");
@@ -80,11 +131,19 @@ const main = async () => {
     const description = String(request?.description || "");
     const changeNote = String(request?.changeNote || "");
     const visibility = Number(request?.visibility ?? 0);
+    const language = String(request?.language || "english").trim();
     const tags = [...new Set((request?.tags || []).map(String).filter(Boolean))];
     if (!contentPath || !fs.statSync(contentPath).isDirectory()) throw new Error("Upload content folder is missing");
     if (!previewPath || !fs.statSync(previewPath).isFile()) throw new Error("Workshop preview image is missing");
     if (!title) throw new Error("Workshop title is required");
     if (!Number.isInteger(visibility) || visibility < 0 || visibility > 3) throw new Error("Invalid visibility");
+    if (!/^[a-z]+$/.test(language)) throw new Error("Invalid Workshop language");
+    if (
+      typeof client.workshop.supportsUpdateLanguage !== "function"
+      || !client.workshop.supportsUpdateLanguage()
+    ) {
+      throw new Error("The bundled Steamworks bridge does not support localized Workshop updates");
+    }
 
     const localPlayer = client.localplayer.getSteamId();
     const ownerId = localPlayer.steamId64.toString();
@@ -114,6 +173,7 @@ const main = async () => {
         contentPath,
         tags: tags.length ? tags : ["mod"],
         visibility,
+        language,
       }, appId);
       needsToAcceptAgreement = needsToAcceptAgreement || Boolean(updatedItem.needsToAcceptAgreement);
     } catch (error) {
@@ -131,16 +191,17 @@ const main = async () => {
         owner_id: ownerId,
         owner_name: ownerName,
         needs_to_accept_agreement: needsToAcceptAgreement,
+        language,
       },
     }, 0);
     return;
   }
-  if (operation === "unsubscribe" || operation === "force_update") {
+  if (operation === "subscribe" || operation === "unsubscribe" || operation === "force_update") {
     const workshopId = String(request?.id || "");
     if (!/^\d+$/.test(workshopId)) throw new Error("Invalid Workshop ID");
     const itemId = BigInt(workshopId);
-    if (operation === "unsubscribe") {
-      await client.workshop.unsubscribe(itemId);
+    if (operation === "subscribe" || operation === "unsubscribe") {
+      await client.workshop[operation](itemId);
       writeResultAndExit({
         ok: true,
         result: { operation, workshop_id: workshopId, accepted: true },

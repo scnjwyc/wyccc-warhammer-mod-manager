@@ -114,6 +114,7 @@ class AiServiceTests(unittest.TestCase):
                         "ai_base_url": "https://example.invalid/v1",
                         "ai_model": "example-model",
                         "ai_glossary_path": str(glossary_path),
+                        "language": "zh-CN",
                     },
                 )
 

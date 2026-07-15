@@ -9,9 +9,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.api import API
+from backend.constants import SOURCE_WORKSHOP
 from backend.models import ModAsset
+from backend.share import export_share, parse_pending_workshop_mod_id
 from backend.storage import StateRepository
-from tests.helpers import write_pack
+from tests.helpers import make_asset, write_pack
 
 
 class StorageContractTests(unittest.TestCase):
@@ -144,15 +146,15 @@ class StorageContractTests(unittest.TestCase):
             )
             self.assertEqual(
                 repository.set_mod_warning_ignored("a", "mod_newer_than_game", True),
-                ["mod_newer_than_game", "missing_dependency"],
+                ["outdated_mod", "missing_dependency"],
             )
             self.assertEqual(
                 repository.list_user_mod_data()["a"]["ignored_warning_codes"],
-                ["mod_newer_than_game", "missing_dependency"],
+                ["outdated_mod", "missing_dependency"],
             )
             self.assertEqual(
                 repository.set_mod_warning_ignored("a", "missing_dependency", False),
-                ["mod_newer_than_game"],
+                ["outdated_mod"],
             )
             with self.assertRaisesRegex(ValueError, "不支持忽略"):
                 repository.set_mod_warning_ignored("a", "unknown_warning", True)
@@ -230,6 +232,161 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_first_scan_restores_installed_used_mods_without_subscribing_missing_mods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            write_pack(data / "first.pack")
+            write_pack(data / "second.pack")
+            (game / "used_mods.txt").write_text(
+                'mod "second.pack";\nmod "not-installed.pack";\nmod "first.pack";\n',
+                encoding="utf-8",
+            )
+
+            api = API(root / "state")
+            saved = api.call(
+                "save_settings",
+                [{
+                    "game_path": str(game),
+                    "workshop_path": "",
+                    "fetch_workshop_metadata": False,
+                }],
+            )
+            self.assertTrue(saved["ok"])
+
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=AssertionError("first-start restore must not query subscriptions"),
+                ) as query_status,
+                patch(
+                    "backend.api.subscribe_workshop_items",
+                    side_effect=AssertionError("first-start restore must not subscribe to missing mods"),
+                ) as subscribe,
+            ):
+                first_scan = api.call("scan_mods", [False])
+                self.assertTrue(first_scan["ok"])
+                pack_to_id = {
+                    item["pack_name"]: item["id"]
+                    for item in first_scan["data"]["mods"]
+                }
+                expected = [pack_to_id["second.pack"], pack_to_id["first.pack"]]
+                self.assertEqual(first_scan["data"]["enabled_order"], expected)
+                self.assertEqual(first_scan["data"]["missing_enabled_ids"], [])
+                self.assertEqual(
+                    first_scan["data"]["current_playset"]["mod_ids"],
+                    expected,
+                )
+
+                (game / "used_mods.txt").write_text(
+                    'mod "first.pack";\nmod "second.pack";\n',
+                    encoding="utf-8",
+                )
+                second_scan = api.call("scan_mods", [False])
+                self.assertEqual(second_scan["data"]["enabled_order"], expected)
+                query_status.assert_not_called()
+                subscribe.assert_not_called()
+
+    def test_workshop_publish_copy_suggests_english_when_description_has_no_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            asset = make_asset(
+                write_pack(root / "123" / "localized.pack"),
+                "localized-id",
+                SOURCE_WORKSHOP,
+                "123",
+            )
+            api = API(root / "state")
+            api._assets = {asset.id: asset}
+            with patch.object(
+                api.workshop_service,
+                "refresh_localized",
+                return_value={
+                    "123": {
+                        "title": "中文标题",
+                        "description": "English description",
+                        "title_language": "schinese",
+                        "description_language": "english",
+                    }
+                },
+            ) as refresh:
+                result = api.call("get_workshop_publish_copy", [asset.id, "zh-CN"])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["suggested_language"], "en-US")
+        self.assertEqual(result["data"]["effective_language"], "en-US")
+        self.assertEqual(result["data"]["steam_language"], "schinese")
+        refresh.assert_called_once_with(["123"], "zh-CN")
+
+    def test_share_import_warns_subscribes_and_resolves_downloaded_workshop_mods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exported_asset = make_asset(
+                write_pack(root / "exported" / "123" / "shared.pack"),
+                "exported-id",
+                SOURCE_WORKSHOP,
+                "123",
+            )
+            share_code = export_share([exported_asset])
+            api = API(root / "state")
+
+            with patch(
+                "backend.api.query_workshop_subscription_status",
+                return_value=[
+                    {
+                        "workshop_id": "123",
+                        "title": "Shared Workshop Mod",
+                        "subscribed": False,
+                    }
+                ],
+            ) as query_status:
+                preview = api.call("preview_import_share", [share_code])
+
+            self.assertTrue(preview["ok"])
+            self.assertEqual(preview["data"]["unsubscribed"][0]["workshop_id"], "123")
+            query_status.assert_called_once_with(["123"], "schinese", app_id="1142710")
+
+            with patch(
+                "backend.api.subscribe_workshop_items",
+                return_value={
+                    "operation": "subscribe_many",
+                    "subscribed": ["123"],
+                    "already_subscribed": [],
+                },
+            ) as subscribe:
+                accepted = api.call("subscribe_workshop_items", [["123"]])
+            self.assertTrue(accepted["ok"])
+            subscribe.assert_called_once_with(["123"], app_id="1142710")
+
+            imported = api.call("import_share", [share_code])
+            self.assertTrue(imported["ok"])
+            pending_id = imported["data"]["missing_mod_ids"][0]
+            self.assertEqual(parse_pending_workshop_mod_id(pending_id), ("123", "shared.pack"))
+            self.assertEqual(
+                api.state_repository.get_current_playset()["mod_ids"],
+                [pending_id],
+            )
+
+            downloaded_asset = make_asset(
+                write_pack(root / "installed" / "123" / "shared.pack"),
+                "installed-id",
+                SOURCE_WORKSHOP,
+                "123",
+            )
+            api._assets = {downloaded_asset.id: downloaded_asset}
+            resolved = api._current_playset_payload()
+            self.assertEqual(resolved["ordered_mod_ids"], ["installed-id"])
+            self.assertEqual(resolved["missing_mod_ids"], [])
+            self.assertEqual(
+                api.state_repository.get_current_playset()["mod_ids"],
+                ["installed-id"],
+            )
+
     def test_switching_playset_persists_its_order_through_the_next_scan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -472,6 +629,7 @@ class ApiContractTests(unittest.TestCase):
                 "title": "My Own Mod",
                 "description": "Description",
                 "change_note": "",
+                "language": "zh-CN",
                 "preview_path": str(preview),
                 "category": "units",
                 "visibility": 0,
@@ -490,6 +648,8 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(bridge_calls[0]["workshop_id"], "")
             self.assertEqual(bridge_calls[1]["workshop_id"], "456789")
             self.assertEqual(bridge_calls[0]["tags"], ["mod", "units"])
+            self.assertEqual(bridge_calls[0]["language"], "schinese")
+            self.assertEqual(bridge_calls[1]["language"], "schinese")
             self.assertEqual(
                 api.state_repository.list_user_mod_data()[mod["id"]]["published_workshop_id"],
                 "456789",
@@ -593,7 +753,7 @@ class ApiContractTests(unittest.TestCase):
                 source="data",
                 warnings=[
                     {
-                        "code": "mod_newer_than_game",
+                        "code": "outdated_mod",
                         "severity": "warning",
                         "message": "MOD 过期",
                     },
@@ -614,7 +774,7 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(ignored["data"]["ignored_warning_codes"], ["missing_dependency"])
             self.assertEqual(
                 [warning["code"] for warning in ignored["data"]["warnings"]],
-                ["mod_newer_than_game"],
+                ["outdated_mod"],
             )
             self.assertEqual(len(asset.warnings), 2)
 
@@ -624,7 +784,7 @@ class ApiContractTests(unittest.TestCase):
             )
             self.assertEqual(
                 [warning["code"] for warning in restored["data"]["warnings"]],
-                ["mod_newer_than_game", "missing_dependency"],
+                ["outdated_mod", "missing_dependency"],
             )
             self.assertEqual(
                 api.state_repository.list_user_mod_data()[asset.id]["ignored_warning_codes"],
@@ -637,6 +797,48 @@ class ApiContractTests(unittest.TestCase):
             )
             self.assertFalse(unsupported["ok"])
             self.assertIn("不支持忽略", unsupported["error"]["message"])
+
+    def test_missing_dependency_warnings_follow_the_current_enabled_list(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            first = ModAsset(
+                id="local:data:first",
+                pack_name="first.pack",
+                display_name="First",
+                path=str(Path(temporary) / "first.pack"),
+                directory=temporary,
+                source="data",
+                missing_dependencies=[
+                    {"kind": "pack", "id": "first-base.pack", "name": "first-base.pack"}
+                ],
+            )
+            second = ModAsset(
+                id="local:data:second",
+                pack_name="second.pack",
+                display_name="Second",
+                path=str(Path(temporary) / "second.pack"),
+                directory=temporary,
+                source="data",
+                missing_dependencies=[
+                    {"kind": "pack", "id": "second-base.pack", "name": "second-base.pack"}
+                ],
+            )
+            api._assets = {first.id: first, second.id: second}
+
+            enabled_first = api.call("update_playset", ["default", [first.id]])
+            self.assertTrue(enabled_first["ok"])
+            self.assertEqual([warning["code"] for warning in first.warnings], ["missing_dependency"])
+            self.assertEqual(second.warnings, [])
+
+            enabled_second = api.call("update_playset", ["default", [second.id]])
+            self.assertTrue(enabled_second["ok"])
+            self.assertEqual(first.warnings, [])
+            self.assertEqual([warning["code"] for warning in second.warnings], ["missing_dependency"])
+
+            disabled_all = api.call("update_playset", ["default", []])
+            self.assertTrue(disabled_all["ok"])
+            self.assertEqual(first.warnings, [])
+            self.assertEqual(second.warnings, [])
 
     def test_windows_file_reveal_uses_explorer_select_with_the_path_quoted_after_comma(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

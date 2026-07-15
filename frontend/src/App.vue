@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { localizedPlaysetName, t } from './languages'
 import { useAppStore } from './store'
 import ModContextMenu from './components/ModContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
@@ -32,11 +33,11 @@ const contextModActive = computed(() => !!contextMod.value && store.activeIds.in
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
 const statusDisplay = computed(() => {
   if (store.busy) return { text: store.busy, kind: 'busy', spinning: true }
-  if (store.workshopRefreshing) return { text: '正在后台刷新工坊信息', kind: 'refresh', spinning: true }
-  if (store.orderSaving) return { text: '正在写入当前顺序', kind: 'saving', spinning: true }
-  if (store.orderSaveError || store.dirty) return { text: '即时保存失败，请重试操作', kind: 'error', spinning: false }
-  if (store.runtime.running) return { text: 'Warhammer III 运行中', kind: 'running', spinning: false }
-  return { text: '就绪', kind: 'ready', spinning: false }
+  if (store.workshopRefreshing) return { text: t('status.refreshingWorkshop'), kind: 'refresh', spinning: true }
+  if (store.orderSaving) return { text: t('status.savingOrder'), kind: 'saving', spinning: true }
+  if (store.orderSaveError || store.dirty) return { text: t('status.saveFailed'), kind: 'error', spinning: false }
+  if (store.runtime.running) return { text: t('status.gameRunning'), kind: 'running', spinning: false }
+  return { text: t('status.ready'), kind: 'ready', spinning: false }
 })
 
 const initialize = async () => {
@@ -128,21 +129,24 @@ const ignoreUpdate = async () => {
 }
 
 const createPlayset = async () => {
-  const name = window.prompt('输入新播放集名称（将复制当前播放集内容）')
+  const name = window.prompt(t('app.promptNewPlayset'))
   if (!name?.trim()) return
   try { await store.createPlayset(name) } catch { /* shared toast */ }
 }
 
 const renamePlayset = async () => {
   if (!store.currentPlayset || store.currentPlayset.is_default) return
-  const name = window.prompt('输入播放集的新名称', store.currentPlayset.name)
+  const name = window.prompt(t('app.promptRenamePlayset'), store.currentPlayset.name)
   if (!name?.trim() || name.trim() === store.currentPlayset.name) return
   try { await store.renameCurrentPlayset(name) } catch { /* shared toast */ }
 }
 
 const deletePlayset = async () => {
   if (!store.currentPlayset || store.currentPlayset.is_default) return
-  if (!window.confirm(`确定删除播放集“${store.currentPlayset.name}”吗？删除后将切换到“默认”。`)) return
+  if (!window.confirm(t('app.confirmDeletePlayset', {
+    name: store.currentPlayset.name,
+    defaultName: t('common.default'),
+  }))) return
   try { await store.deleteCurrentPlayset() } catch { /* shared toast */ }
 }
 
@@ -161,8 +165,33 @@ const exportShare = async () => {
 }
 
 const importShare = async value => {
-  await store.importShare(value)
-  showShare.value = false
+  try {
+    const preview = await store.previewShareImport(value)
+    const unsubscribed = preview.unsubscribed || []
+    if (unsubscribed.length) {
+      const visibleItems = unsubscribed.slice(0, 20).map(item => {
+        const name = item.title || item.pack_name || t('app.workshopItem', { id: item.workshop_id })
+        return t('app.subscriptionItem', { name, id: item.workshop_id })
+      })
+      if (unsubscribed.length > visibleItems.length) {
+        visibleItems.push(t('app.moreUnsubscribed', { count: unsubscribed.length - visibleItems.length }))
+      }
+      const confirmed = window.confirm(
+        t('app.confirmSubscribe', { items: visibleItems.join('\n') }),
+      )
+      if (!confirmed) return
+      await store.subscribeWorkshopItems(unsubscribed.map(item => item.workshop_id))
+    }
+    await store.importShare(value)
+    if (unsubscribed.length) {
+      store.notify(
+        t('app.subscribedRescan', { count: unsubscribed.length }),
+      )
+    }
+    showShare.value = false
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
 }
 
 const openModContextMenu = payload => {
@@ -183,6 +212,7 @@ const contextSelectionCount = computed(() => (
 
 const enableSelected = modId => store.enableMany(selectedActionIds(modId))
 const disableSelected = modId => store.disableMany(selectedActionIds(modId))
+const handleListDrop = payload => store.handleModDrop(payload)
 
 const closeModContextMenu = () => {
   contextMenu.open = false
@@ -212,11 +242,11 @@ const handleContextAction = async ({ action, value, mod }) => {
       showTypeManager.value = true
     } else if (action === 'move-specific') {
       const current = store.activeIds.indexOf(mod.id) + 1
-      const raw = window.prompt(`输入加载顺序（1-${store.activeIds.length}）`, String(current))
+      const raw = window.prompt(t('app.promptLoadOrder', { count: store.activeIds.length }), String(current))
       if (raw === null) return
       const position = Number(raw)
       if (!Number.isInteger(position) || position < 1 || position > store.activeIds.length) {
-        store.notify(`请输入 1 到 ${store.activeIds.length} 之间的整数`, 'warning')
+        store.notify(t('app.invalidLoadOrder', { count: store.activeIds.length }), 'warning')
         return
       }
       store.moveManyToPosition(actionIds, position)
@@ -230,8 +260,10 @@ const handleContextAction = async ({ action, value, mod }) => {
       }
     } else if (action === 'unsubscribe') {
       const targets = actionIds.filter(modId => store.modMap.get(modId)?.workshop_id)
-      const subject = targets.length > 1 ? `选中的 ${targets.length} 个 MOD` : `“${mod.effective_name}”`
-      if (!window.confirm(`确定取消订阅${subject}吗？Steam 会在游戏退出后移除工坊文件。`)) return
+      const subject = targets.length > 1
+        ? t('app.selectedModsSubject', { count: targets.length })
+        : t('app.singleModSubject', { name: mod.effective_name })
+      if (!window.confirm(t('app.confirmUnsubscribe', { subject }))) return
       for (const modId of targets) await store.unsubscribeWorkshop(modId)
     } else if (action === 'force-update') {
       for (const modId of actionIds) {
@@ -254,7 +286,7 @@ const handleContextAction = async ({ action, value, mod }) => {
       for (const modId of actionIds) await store.openModFolder(modId)
     } else if (action === 'open-rpfm') {
       if (actionIds.length > 1) {
-        store.notify('批量选择时不能在 RPFM 中打开，请只选择一个 MOD', 'warning')
+        store.notify(t('app.rpfmBatchBlocked'), 'warning')
         return
       }
       await store.openModInRpfm(mod.id)
@@ -272,9 +304,15 @@ const handleContextAction = async ({ action, value, mod }) => {
           await store.setModWarningIgnored(modId, value, shouldIgnore)
         }
       }
-      const warningLabel = value === 'missing_dependency' ? '缺失依赖' : 'MOD 过期'
+      const warningLabel = value === 'missing_dependency'
+        ? t('app.warningMissingDependency')
+        : t('app.warningOutdated')
       store.notify(
-        `${shouldIgnore ? '已忽略' : '已恢复'} ${actionIds.length} 个 MOD 的${warningLabel}提示`,
+        t('app.warningBatchChanged', {
+          action: shouldIgnore ? t('app.actionIgnored') : t('app.actionRestored'),
+          count: actionIds.length,
+          warning: warningLabel,
+        }),
       )
     } else if (action === 'copy-to-data') {
       const targets = actionIds
@@ -334,10 +372,7 @@ const deleteModType = async typeId => {
 }
 
 const syncWorkshopToData = async () => {
-  const confirmed = window.confirm(
-    '确定将所有 Steam Workshop MOD 文件同步到本地 Data 文件夹吗？\n\n'
-      + '不会同步 Data 下已存在的同名 MOD（包括你自己上传到工坊且 Data 下已存在的 MOD），也不会覆盖同步后被修改的文件。',
-  )
+  const confirmed = window.confirm(t('app.confirmSyncData'))
   if (!confirmed) return
   try { await store.syncWorkshopToData() } catch { /* shared toast */ }
 }
@@ -349,10 +384,20 @@ const selectWarning = async item => {
 }
 
 const ignoreWarning = async item => {
-  if (!item.ignorable || !item.modId || !item.code) return
+  if (!item.ignorable || !item.code) return
   try {
-    await store.setModWarningIgnored(item.modId, item.code, true)
-    store.notify(`已忽略“${item.modName}”的${item.code === 'missing_dependency' ? '缺失依赖' : 'MOD 过期'}提示`)
+    if (item.modId) {
+      await store.setModWarningIgnored(item.modId, item.code, true)
+      store.notify(t('app.warningIgnored', {
+        name: item.modName,
+        warning: item.code === 'missing_dependency'
+          ? t('app.warningMissingDependency')
+          : t('app.warningOutdated'),
+      }))
+    } else {
+      store.ignoreScanWarning(item.code)
+      store.notify(t('app.scanWarningIgnored'))
+    }
   } catch {
     // Store actions surface failures through the shared toast.
   }
@@ -395,7 +440,7 @@ onBeforeUnmount(() => {
 
       <div class="header-center">
         <label class="playset-select">
-          <span>播放集</span>
+          <span>{{ t('app.playset') }}</span>
           <select
             :value="store.currentPlaysetId"
             :disabled="!!store.busy"
@@ -403,18 +448,18 @@ onBeforeUnmount(() => {
             @change="choosePlayset"
           >
             <option v-for="playset in store.playsets" :key="playset.id" :value="playset.id">
-              {{ playset.name }}
+              {{ localizedPlaysetName(playset) }}
             </option>
           </select>
         </label>
-        <button type="button" class="header-button" :disabled="!!store.busy" @click="createPlayset">新建播放集</button>
+        <button type="button" class="header-button" :disabled="!!store.busy" @click="createPlayset">{{ t('app.newPlayset') }}</button>
         <button
           type="button"
           class="header-button"
           :disabled="!!store.busy || !store.currentPlayset || store.currentPlayset.is_default"
           @click="renamePlayset"
         >
-          重命名
+          {{ t('common.rename') }}
         </button>
         <button
           type="button"
@@ -422,20 +467,20 @@ onBeforeUnmount(() => {
           :disabled="!!store.busy || !store.currentPlayset || store.currentPlayset.is_default"
           @click="deletePlayset"
         >
-          删除
+          {{ t('common.delete') }}
         </button>
       </div>
 
       <div class="header-actions">
-        <button type="button" class="header-button" @click="openShare">导入 / 导出</button>
-        <button type="button" class="header-button" @click="showSettings = true">设置</button>
+        <button type="button" class="header-button" @click="openShare">{{ t('app.importExport') }}</button>
+        <button type="button" class="header-button" @click="showSettings = true">{{ t('app.settings') }}</button>
       </div>
     </header>
 
     <div v-if="!store.pathHealth.game_ready" class="path-warning">
-      <strong>尚未配置 Warhammer III 路径。</strong>
-      <span>扫描与启动前需要定位 Warhammer3.exe、data 和 Workshop 目录。</span>
-      <button type="button" class="secondary-button" @click="showSettings = true">立即设置</button>
+      <strong>{{ t('app.pathMissingTitle') }}</strong>
+      <span>{{ t('app.pathMissingDetail') }}</span>
+      <button type="button" class="secondary-button" @click="showSettings = true">{{ t('app.configureNow') }}</button>
     </div>
 
     <div class="workspace-toolbar">
@@ -459,7 +504,7 @@ onBeforeUnmount(() => {
           class="hidden-visibility-button"
           :class="{ active: store.showHidden }"
           :disabled="!store.hiddenCount"
-          :title="store.hiddenCount ? (store.showHidden ? '隐藏被隐藏的 MOD' : '显示被隐藏的 MOD') : '没有被隐藏的 MOD'"
+          :title="store.hiddenCount ? (store.showHidden ? t('app.hideHidden') : t('app.showHidden')) : t('app.noHidden')"
           data-testid="hidden-visibility-button"
           @click="store.toggleHiddenVisibility"
         >
@@ -472,11 +517,11 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <div class="toolbar-meta">
-        <span>{{ store.mods.length }} 个 Pack</span>
-        <span>{{ store.activeIds.length }} 个已启用</span>
-        <span v-if="store.selectedIds.length > 1" class="selection-indicator">已选择 {{ store.selectedIds.length }} 项</span>
-        <span v-if="store.workshopRefreshing" class="running-indicator">后台刷新工坊信息</span>
-        <span v-if="store.runtime.running" class="running-indicator">Warhammer III 运行中</span>
+        <span>{{ t('app.packCount', { count: store.mods.length }) }}</span>
+        <span>{{ t('app.enabledCount', { count: store.activeIds.length }) }}</span>
+        <span v-if="store.selectedIds.length > 1" class="selection-indicator">{{ t('app.selectedCount', { count: store.selectedIds.length }) }}</span>
+        <span v-if="store.workshopRefreshing" class="running-indicator">{{ t('app.backgroundWorkshop') }}</span>
+        <span v-if="store.runtime.running" class="running-indicator">{{ t('status.gameRunning') }}</span>
       </div>
     </div>
 
@@ -493,21 +538,22 @@ onBeforeUnmount(() => {
       />
 
       <ModList
-        title="未启用 MOD"
+        :title="t('app.inactiveMods')"
         :mods="store.inactiveMods"
         :selected-id="store.selectedId"
         :selected-ids="store.selectedIds"
-        :order-ids="store.activeIds"
+        :order-ids="store.inactiveOrderIds"
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
         :visual-sorted="store.sortMode !== 'priority'"
         @select="store.selectMod"
         @enable="enableSelected"
+        @drop-mods="handleListDrop"
         @context-menu="openModContextMenu"
       />
 
       <ModList
-        title="已启用 MOD"
+        :title="t('app.activeMods')"
         active
         :mods="store.activeMods"
         :selected-id="store.selectedId"
@@ -519,7 +565,7 @@ onBeforeUnmount(() => {
         :warning-count="store.warningCount"
         @select="store.selectMod"
         @disable="disableSelected"
-        @reorder="store.reorder"
+        @drop-mods="handleListDrop"
         @move="store.move"
         @context-menu="openModContextMenu"
         @show-warnings="showWarnings = true"
@@ -528,14 +574,14 @@ onBeforeUnmount(() => {
 
     <footer class="action-footer">
       <div class="footer-left">
-        <button type="button" class="secondary-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
-          重新扫描
+        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
+          {{ t('app.rescan') }}
         </button>
-        <button type="button" class="secondary-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(true)">
-          刷新工坊信息
+        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(true)">
+          {{ t('app.refreshWorkshop') }}
         </button>
-        <button type="button" class="secondary-button" :disabled="!!store.busy || !store.pathHealth.game_ready" @click="store.openGameFolder">
-          打开游戏目录
+        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || !store.pathHealth.game_ready" @click="store.openGameFolder">
+          {{ t('app.openGameFolder') }}
         </button>
         <button
           type="button"
@@ -543,7 +589,7 @@ onBeforeUnmount(() => {
           :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
           @click="syncWorkshopToData"
         >
-          同步到 DATA
+          {{ t('app.syncData') }}
         </button>
       </div>
 
@@ -559,7 +605,7 @@ onBeforeUnmount(() => {
           :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
           @click="openSaveGames"
         >
-          存档列表
+          {{ t('app.saveList') }}
         </button>
         <button
           type="button"
@@ -567,7 +613,7 @@ onBeforeUnmount(() => {
           :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
           @click="store.continueGame"
         >
-          继续游戏
+          {{ t('app.continueGame') }}
         </button>
         <button
           type="button"
@@ -576,7 +622,7 @@ onBeforeUnmount(() => {
           @click="store.launch"
         >
           <span class="play-mark">▶</span>
-          {{ store.runtime.running ? '游戏运行中' : '启动游戏' }}
+          {{ store.runtime.running ? t('app.gameRunningShort') : t('app.launchGame') }}
         </button>
       </div>
     </footer>

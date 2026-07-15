@@ -86,6 +86,21 @@ class DependencyWorkshopMetadata(OfflineWorkshopMetadata):
         }
 
 
+class DependencyWarningWorkshopMetadata(DependencyWorkshopMetadata):
+    last_refresh_warning = ""
+
+    def ensure_dependencies(
+        self,
+        workshop_ids: list[str],
+        interface_language: str = "en-US",
+    ) -> dict[str, dict]:
+        self.last_refresh_warning = (
+            "Steam 暂时无法读取部分工坊依赖，已使用已有缓存；"
+            "缺失依赖结果可能不是最新状态"
+        )
+        return self.get_many(workshop_ids, interface_language)
+
+
 class ScannerTests(unittest.TestCase):
     def test_reads_pfh5_mod_and_movie_pack_types(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -171,7 +186,7 @@ class ScannerTests(unittest.TestCase):
                 self.assertNotIn("file_stats", asset)
                 self.assertNotIn("dependencies", asset)
 
-    def test_reads_pack_and_workshop_dependencies_and_marks_only_missing_items(self) -> None:
+    def test_records_missing_dependencies_and_warns_only_for_enabled_mods(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             data = root / "game" / "data"
@@ -197,16 +212,48 @@ class ScannerTests(unittest.TestCase):
             ["data.pack", "base.pack", "missing.pack"],
         )
         by_name = {mod.pack_name: mod for mod in result.mods}
+        dependent_asset = by_name["dependent.pack"]
+        first_asset = by_name["first.pack"]
         self.assertEqual(
-            by_name["dependent.pack"].missing_dependencies,
+            dependent_asset.missing_dependencies,
             [{"kind": "pack", "id": "missing.pack", "name": "missing.pack"}],
         )
         self.assertEqual(
-            by_name["first.pack"].missing_dependencies,
+            first_asset.missing_dependencies,
             [{"kind": "workshop", "id": "999", "name": "Missing requirement"}],
         )
         self.assertEqual(by_name["requirement.pack"].missing_dependencies, [])
-        self.assertEqual(by_name["dependent.pack"].warnings[0]["severity"], "error")
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in dependent_asset.warnings))
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in first_asset.warnings))
+
+        ModScanner.refresh_missing_dependency_warnings(result.mods, [dependent_asset.id])
+        self.assertEqual(dependent_asset.warnings[0]["severity"], "error")
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in first_asset.warnings))
+
+        ModScanner.refresh_missing_dependency_warnings(result.mods, [first_asset.id])
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in dependent_asset.warnings))
+        self.assertEqual(first_asset.warnings[0]["code"], "missing_dependency")
+
+    def test_dependency_refresh_notice_is_structured_and_ignorable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "1142710"
+            write_pack(workshop / "101" / "first.pack")
+            write_pack(workshop / "102" / "requirement.pack")
+
+            result = ModScanner(DependencyWarningWorkshopMetadata()).scan(
+                GamePaths(workshop_path=str(workshop)),
+                {"language": "zh-CN", "check_outdated_mods": False},
+            )
+
+        notice = next(
+            warning
+            for warning in result.warnings
+            if isinstance(warning, dict)
+            and warning.get("code") == "workshop_dependency_refresh"
+        )
+        self.assertTrue(notice["ignorable"])
+        self.assertIn("已有缓存", notice["message"])
 
     def test_workshop_metadata_overrides_created_time_and_exposes_author_id(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -295,15 +342,16 @@ class ScannerTests(unittest.TestCase):
             self.assertIn("steam:123:same_name.pack", merged.alternate_ids)
             self.assertIn(str(workshop_pack.resolve()), merged.alternate_paths)
 
-    def test_outdated_check_uses_the_requested_game_older_than_mod_comparison(self) -> None:
+    def test_outdated_check_only_warns_when_mod_is_older_than_game(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             data = root / "game" / "data"
-            mod_path = write_pack(data / "newer_mod.pack")
+            mod_path = write_pack(data / "example_mod.pack")
             (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
             mod_time = mod_path.stat().st_mtime_ns // 1_000_000
+            game_time = mod_time + 1
 
-            with patch("backend.scanner.game_last_updated_at", return_value=mod_time - 1):
+            with patch("backend.scanner.game_last_updated_at", return_value=game_time):
                 checked = ModScanner(OfflineWorkshopMetadata()).scan(
                     GamePaths(game_path=str(data.parent), data_path=str(data)),
                     {
@@ -314,8 +362,21 @@ class ScannerTests(unittest.TestCase):
                         "check_outdated_mods": True,
                     },
                 )
-            self.assertEqual(checked.game_updated_at, mod_time - 1)
-            self.assertEqual(checked.mods[0].warnings[0]["code"], "mod_newer_than_game")
+            self.assertEqual(checked.game_updated_at, game_time)
+            self.assertEqual(checked.mods[0].warnings[0]["code"], "outdated_mod")
+            self.assertLess(
+                checked.mods[0].warnings[0]["mod_updated_at"],
+                checked.mods[0].warnings[0]["game_updated_at"],
+            )
+
+            with patch("backend.scanner.game_last_updated_at", return_value=mod_time - 1):
+                newer_than_game = ModScanner(OfflineWorkshopMetadata()).scan(
+                    GamePaths(game_path=str(data.parent), data_path=str(data)),
+                    {
+                        "check_outdated_mods": True,
+                    },
+                )
+            self.assertEqual(newer_than_game.mods[0].warnings, [])
 
             unchecked = ModScanner(OfflineWorkshopMetadata()).scan(
                 GamePaths(game_path=str(data.parent), data_path=str(data)),

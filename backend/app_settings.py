@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import locale
 import os
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,47 @@ from .models import GamePaths
 from .steam_paths import discover_wh3_paths
 
 
-DEFAULT_LANGUAGE = "zh-CN"
+DEFAULT_LANGUAGE = "en-US"
+LEGACY_DEFAULT_LANGUAGE = "zh-CN"
 SUPPORTED_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP"})
+SYSTEM_LANGUAGE_MAP = {
+    "zh": "zh-CN",
+    "en": "en-US",
+    "ko": "ko-KR",
+    "ru": "ru-RU",
+    "ja": "ja-JP",
+}
+
+
+def _system_locale_name() -> str:
+    """Return the Windows display locale, with a portable development fallback."""
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        language_id = int(kernel32.GetUserDefaultUILanguage())
+        if language_id:
+            buffer = ctypes.create_unicode_buffer(85)
+            if int(kernel32.LCIDToLocaleName(language_id, buffer, len(buffer), 0)) > 0:
+                return buffer.value
+
+        buffer = ctypes.create_unicode_buffer(85)
+        if int(kernel32.GetUserDefaultLocaleName(buffer, len(buffer))) > 0:
+            return buffer.value
+
+    language, _encoding = locale.getlocale()
+    return str(language or "")
+
+
+def detect_system_language() -> str:
+    """Map the current system locale to a built-in interface language."""
+    try:
+        locale_name = _system_locale_name()
+    except Exception:
+        return DEFAULT_LANGUAGE
+    normalized = str(locale_name or "").strip().replace("_", "-").split(".", 1)[0]
+    language_family = normalized.split("-", 1)[0].split("@", 1)[0].casefold()
+    return SYSTEM_LANGUAGE_MAP.get(language_family, DEFAULT_LANGUAGE)
 
 
 def default_data_dir() -> Path:
@@ -49,10 +89,10 @@ def default_data_dir() -> Path:
     return preferred
 
 
-def default_settings() -> dict[str, Any]:
+def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     return {
         "schema_version": 7,
-        "language": DEFAULT_LANGUAGE,
+        "language": language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE,
         "game_path": "",
         "workshop_path": "",
         "fetch_workshop_metadata": True,
@@ -79,21 +119,32 @@ class SettingsService:
 
     def __init__(self, data_dir: Path | None = None):
         self.data_dir = Path(data_dir or default_data_dir())
-        self.store = AtomicJsonStore(self.data_dir / "settings.json", default_settings)
+        settings_path = self.data_dir / "settings.json"
+        initial_language = (
+            detect_system_language() if not settings_path.exists() else DEFAULT_LANGUAGE
+        )
+        self.store = AtomicJsonStore(
+            settings_path,
+            lambda: default_settings(initial_language),
+        )
 
     def get(self) -> dict[str, Any]:
+        is_first_launch = not self.store.path.exists()
         stored = self.store.load()
+        language_was_missing = "language" not in stored
         try:
             stored_version = int(stored.get("schema_version") or 0)
         except (TypeError, ValueError):
             stored_version = 0
         payload = default_settings()
         payload.update(stored)
+        if not is_first_launch and language_was_missing:
+            payload["language"] = LEGACY_DEFAULT_LANGUAGE
         if stored_version < 2:
             payload["fetch_workshop_metadata"] = True
         payload["schema_version"] = 7
         normalized = self._normalize(payload)
-        if stored_version < 7:
+        if is_first_launch or stored_version < 7 or language_was_missing:
             self.store.save(normalized)
         return normalized
 

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 
+import { currentLocale, t } from '../languages'
 import { renderWorkshopBbcode } from '../workshopBbcode'
 
 const props = defineProps({
@@ -25,14 +26,14 @@ watch(
   { immediate: true },
 )
 
-const sourceLabels = {
-  workshop: 'Steam Workshop',
-  data: '游戏 Data',
-}
+const sourceLabel = source => ({
+  workshop: t('details.sourceWorkshop'),
+  data: t('details.sourceData'),
+}[source] || source)
 
 const formatDate = value => {
   if (!value) return '—'
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(currentLocale(), {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -43,13 +44,13 @@ const formatDate = value => {
 
 const formatAuthor = mod => {
   if (mod.author) return mod.author
-  if (mod.creator_id) return '作者昵称暂不可用'
-  if (mod.workshop_id) return '未获取（后台刷新工坊信息）'
-  return '未知'
+  if (mod.creator_id) return t('details.authorUnavailable')
+  if (mod.workshop_id) return t('details.authorRefreshing')
+  return t('common.unknown')
 }
 
 const formatSources = mod => (mod.sources?.length ? mod.sources : [mod.source])
-  .map(source => sourceLabels[source] || source)
+  .map(sourceLabel)
   .join(' + ')
 
 const generateWithAi = async () => {
@@ -86,32 +87,32 @@ const generateWithAi = async () => {
             class="details-source-name"
             :class="{ 'has-original-name': mod.alias && mod.display_name }"
             :title="mod.alias && mod.display_name
-              ? `${mod.pack_name} · 原名：${mod.display_name}`
+              ? `${mod.pack_name} · ${t('common.originalName', { name: mod.display_name })}`
               : mod.pack_name"
             data-testid="mod-source-name"
           >
             <span>{{ mod.pack_name }}</span>
             <span v-if="mod.alias && mod.display_name" class="original-mod-name">
-              · 原名：{{ mod.display_name }}
+              · {{ t('common.originalName', { name: mod.display_name }) }}
             </span>
           </p>
-          <dl class="details-meta" aria-label="基本信息">
+          <dl class="details-meta" :aria-label="t('details.basicInfo')">
             <div v-if="mod.workshop_id">
-              <dt>Workshop ID</dt>
+              <dt>{{ t('details.workshopId') }}</dt>
               <dd :title="mod.workshop_id">{{ mod.workshop_id }}</dd>
             </div>
             <div>
-              <dt>作者</dt>
+              <dt>{{ t('details.author') }}</dt>
               <dd :title="mod.creator_id ? `${formatAuthor(mod)} · Steam ID ${mod.creator_id}` : formatAuthor(mod)">
                 {{ formatAuthor(mod) }}
               </dd>
             </div>
             <div>
-              <dt>创建时间</dt>
+              <dt>{{ t('details.createdAt') }}</dt>
               <dd>{{ formatDate(mod.created_at) }}</dd>
             </div>
             <div>
-              <dt>更新时间</dt>
+              <dt>{{ t('details.updatedAt') }}</dt>
               <dd>{{ formatDate(mod.updated_at) }}</dd>
             </div>
           </dl>
@@ -120,33 +121,33 @@ const generateWithAi = async () => {
 
       <div class="details-scroll">
         <section class="detail-section">
-          <h3>本地位置</h3>
+          <h3>{{ t('details.localLocation') }}</h3>
           <p class="path-value" :title="mod.path">{{ mod.path }}</p>
           <div class="button-row">
-            <button type="button" class="secondary-button" @click="emit('open-folder', mod.id)">
-              打开目录
+            <button type="button" class="secondary-button sync-data-button" @click="emit('open-folder', mod.id)">
+              {{ t('details.openFolder') }}
             </button>
             <button
               v-if="mod.cross_source_duplicate && mod.workshop_id"
               type="button"
-              class="secondary-button"
+              class="secondary-button sync-data-button"
               @click="emit('open-workshop-folder', mod.id)"
             >
-              打开工坊目录
+              {{ t('details.openWorkshopFolder') }}
             </button>
             <button
               v-if="mod.workshop_id"
               type="button"
-              class="secondary-button"
+              class="secondary-button sync-data-button"
               @click="emit('open-workshop', mod.id)"
             >
-              Workshop 页面
+              {{ t('details.workshopPage') }}
             </button>
           </div>
         </section>
 
         <section v-if="mod.description" class="detail-section">
-          <h3>简介</h3>
+          <h3>{{ t('details.description') }}</h3>
           <div
             class="description-text workshop-bbcode"
             data-testid="workshop-description"
@@ -155,34 +156,34 @@ const generateWithAi = async () => {
         </section>
 
         <section class="detail-section">
-          <h3>我的标记</h3>
+          <h3>{{ t('details.myMarks') }}</h3>
           <label class="field-label">
             <span class="field-label-heading">
-              <span>显示别名</span>
+              <span>{{ t('details.alias') }}</span>
               <button
                 type="button"
                 class="ai-generate-button"
                 :disabled="!aiEnabled || aiGenerating"
-                :title="aiEnabled ? '按战锤术语库生成当前语言标题并总结原简介' : '请先在设置中启用并配置 AI'"
+                :title="aiEnabled ? t('details.aiEnabledTitle') : t('details.aiDisabledTitle')"
                 data-testid="ai-generate-user-data"
                 @click.prevent="generateWithAi"
               >
                 <span v-if="aiGenerating" class="spinner"></span>
-                {{ aiGenerating ? '生成中' : 'AI 生成' }}
+                {{ aiGenerating ? t('details.generating') : t('details.aiGenerate') }}
               </button>
             </span>
-            <input v-model="alias" type="text" maxlength="120" placeholder="留空时使用原名称" />
+            <input v-model="alias" type="text" maxlength="120" :placeholder="t('details.aliasPlaceholder')" />
           </label>
           <label class="field-label">
-            <span>备注</span>
-            <textarea v-model="notes" rows="4" maxlength="2000" placeholder="记录用途、版本或个人说明"></textarea>
+            <span>{{ t('details.notes') }}</span>
+            <textarea v-model="notes" rows="4" maxlength="2000" :placeholder="t('details.notesPlaceholder')"></textarea>
           </label>
           <button
             type="button"
             class="primary-button compact"
             @click="emit('save-user-data', mod.id, alias, notes)"
           >
-            保存标记
+            {{ t('details.saveMarks') }}
           </button>
         </section>
       </div>
@@ -190,8 +191,8 @@ const generateWithAi = async () => {
 
     <div v-else class="details-empty">
       <span class="crest">W</span>
-      <h2>选择一个 MOD</h2>
-      <p>这里会显示 Pack 名称、来源、路径和 Workshop 信息。</p>
+      <h2>{{ t('details.selectMod') }}</h2>
+      <p>{{ t('details.emptyHelp') }}</p>
     </div>
   </aside>
 </template>

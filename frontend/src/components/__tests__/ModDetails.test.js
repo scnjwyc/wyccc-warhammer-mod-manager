@@ -44,6 +44,11 @@ describe('ModDetails', () => {
     expect(text).not.toContain('文件统计')
     expect(text).not.toContain('LANGUAGE_FIELD_MUST_NOT_RENDER')
     expect(text).not.toContain('FILE_STATS_FIELD_MUST_NOT_RENDER')
+    expect(text).toContain('创意工坊页面')
+    expect(text).not.toContain('Workshop 页面')
+    expect(wrapper.findAll('.button-row .secondary-button').every(button => (
+      button.classes().includes('sync-data-button')
+    ))).toBe(true)
   })
 
   it('emits only editable alias and notes as user data', async () => {

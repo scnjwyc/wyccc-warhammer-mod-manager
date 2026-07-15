@@ -75,11 +75,11 @@ describe('deliberately small product scope', () => {
     const storeSource = read(resolve(frontendRoot, 'src/store.js'))
     const apiSource = read(resolve(repositoryRoot, 'backend/api.py'))
 
-    expect(appSource).toContain('<span>播放集</span>')
-    expect(appSource).toContain('新建播放集')
+    expect(appSource).toContain("t('app.playset')")
+    expect(appSource).toContain("t('app.newPlayset')")
     expect(appSource).not.toContain('当前加载顺序')
     expect(appSource).not.toContain('另存预设')
-    expect(shareSource).toContain('导入到当前播放集')
+    expect(shareSource).toContain("t('share.importCurrent')")
     expect(shareSource).not.toContain('导入到当前列表')
     expect(storeSource).toContain("invoke('update_playset'")
     expect(storeSource).toContain("invoke('save_load_order'")
@@ -98,8 +98,8 @@ describe('deliberately small product scope', () => {
       expect(backendSettings).not.toContain(`"${removed}"`)
       expect(scannerSource).not.toContain(`settings.get("${removed}")`)
     }
-    expect(settingsSource).not.toContain('扫描范围')
-    expect(settingsSource).toContain('扫描固定覆盖游戏 Data 与 Steam Workshop')
+    expect(settingsSource).not.toContain('scan_modding')
+    expect(settingsSource).toContain("t('settings.scanScope')")
   })
 
   it('keeps the playset label clear of the native select border', () => {

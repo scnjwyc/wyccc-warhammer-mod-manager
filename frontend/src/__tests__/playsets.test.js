@@ -152,4 +152,54 @@ describe('playset state', () => {
       'save_load_order',
     ])
   })
+
+  it('keeps pending Workshop entries in their imported position while active mods move', () => {
+    const store = useAppStore()
+    const pending = 'pending:steam:123:shared.pack'
+    store.playsets = [{ ...defaultPlayset, mod_ids: ['a', pending, 'b'] }]
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['b', 'a']
+    store.missingEnabledIds = [pending]
+
+    expect(store.playsetOrderSnapshot()).toEqual(['b', pending, 'a'])
+  })
+
+  it('reorders a batch as one group while preserving the selected order', () => {
+    const store = useAppStore()
+    store.activeIds = ['a', 'b', 'c', 'd', 'e']
+    store.recordCurrentPlaysetChange = vi.fn()
+
+    store.reorderMany(['b', 'c'], 'e', 'b')
+    expect(store.activeIds).toEqual(['a', 'd', 'e', 'b', 'c'])
+
+    store.reorderMany(['b', 'c'], 'a', 'c')
+    expect(store.activeIds).toEqual(['b', 'c', 'a', 'd', 'e'])
+
+    store.reorderMany(['b', 'c'], 'b', 'b')
+    expect(store.activeIds).toEqual(['b', 'c', 'a', 'd', 'e'])
+    expect(store.recordCurrentPlaysetChange).toHaveBeenCalledTimes(2)
+  })
+
+  it('previews share subscriptions and forwards accepted bulk subscriptions', async () => {
+    invokeMock.mockImplementation(async (method, value) => {
+      if (method === 'preview_import_share') {
+        return { unsubscribed: [{ workshop_id: '123', title: 'Missing Mod' }] }
+      }
+      if (method === 'subscribe_workshop_items') {
+        return { subscribed: value, already_subscribed: [] }
+      }
+      throw new Error(`unexpected method: ${method}`)
+    })
+    const store = useAppStore()
+
+    const preview = await store.previewShareImport('share-code')
+    const subscribed = await store.subscribeWorkshopItems(['123'])
+
+    expect(preview.unsubscribed[0].workshop_id).toBe('123')
+    expect(subscribed.subscribed).toEqual(['123'])
+    expect(invokeMock.mock.calls).toEqual([
+      ['preview_import_share', 'share-code'],
+      ['subscribe_workshop_items', ['123']],
+    ])
+  })
 })

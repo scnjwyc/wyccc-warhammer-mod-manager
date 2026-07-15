@@ -1,33 +1,539 @@
-export const DEFAULT_LANGUAGE = 'zh-CN'
+import { ref } from 'vue'
+
+export const DEFAULT_LANGUAGE = 'en-US'
 
 export const LANGUAGE_OPTIONS = Object.freeze([
-  { code: 'zh-CN', label: '中文' },
-  { code: 'en-US', label: 'English' },
-  { code: 'ko-KR', label: '한국어' },
-  { code: 'ru-RU', label: 'Русский' },
-  { code: 'ja-JP', label: '日本語' },
+  { code: 'zh-CN', labelKey: 'language.zhCN' },
+  { code: 'en-US', labelKey: 'language.enUS' },
+  { code: 'ko-KR', labelKey: 'language.koKR' },
+  { code: 'ru-RU', labelKey: 'language.ruRU' },
+  { code: 'ja-JP', labelKey: 'language.jaJP' },
 ])
 
-const supportedLanguages = new Set(LANGUAGE_OPTIONS.map(language => language.code))
+const languageCodes = LANGUAGE_OPTIONS.map(language => language.code)
+const supportedLanguages = new Set(languageCodes)
 
-// All selectable languages intentionally use the Chinese catalog until the UI is final.
-const contentLanguageBySelection = Object.freeze(
-  Object.fromEntries(LANGUAGE_OPTIONS.map(language => [language.code, DEFAULT_LANGUAGE])),
-)
+// Every entry is [zh-CN, en-US, ko-KR, ru-RU, ja-JP]. Keeping the five
+// variants together makes missing built-in translations visible in review.
+const entries = {
+  'language.zhCN': ['简体中文', 'Simplified Chinese', '중국어 간체', 'Упрощённый китайский', '簡体字中国語'],
+  'language.enUS': ['英语', 'English', '영어', 'Английский', '英語'],
+  'language.koKR': ['韩语', 'Korean', '한국어', 'Корейский', '韓国語'],
+  'language.ruRU': ['俄语', 'Russian', '러시아어', 'Русский', 'ロシア語'],
+  'language.jaJP': ['日语', 'Japanese', '일본어', 'Японский', '日本語'],
+  'common.cancel': ['取消', 'Cancel', '취소', 'Отмена', 'キャンセル'],
+  'common.close': ['关闭', 'Close', '닫기', 'Закрыть', '閉じる'],
+  'common.save': ['保存', 'Save', '저장', 'Сохранить', '保存'],
+  'common.delete': ['删除', 'Delete', '삭제', 'Удалить', '削除'],
+  'common.rename': ['重命名', 'Rename', '이름 변경', 'Переименовать', '名前を変更'],
+  'common.browse': ['浏览', 'Browse', '찾아보기', 'Обзор', '参照'],
+  'common.refresh': ['刷新', 'Refresh', '새로 고침', 'Обновить', '更新'],
+  'common.copy': ['复制', 'Copy', '복사', 'Копировать', 'コピー'],
+  'common.ignore': ['忽略', 'Ignore', '무시', 'Игнорировать', '無視'],
+  'common.system': ['系统', 'System', '시스템', 'Система', 'システム'],
+  'common.done': ['完成', 'Done', '완료', 'Готово', '完了'],
+  'common.default': ['默认', 'Default', '기본', 'По умолчанию', 'デフォルト'],
+  'common.unknown': ['未知', 'Unknown', '알 수 없음', 'Неизвестно', '不明'],
+  'common.unavailable': ['不可用', 'Unavailable', '사용할 수 없음', 'Недоступно', '利用不可'],
+  'common.singleOnly': ['仅限单项', 'Single item only', '단일 항목만', 'Только один элемент', '単一項目のみ'],
+  'common.openLink': ['打开链接', 'Open link', '링크 열기', 'Открыть ссылку', 'リンクを開く'],
+  'common.copyLink': ['复制链接', 'Copy link', '링크 복사', 'Копировать ссылку', 'リンクをコピー'],
+  'common.copyGroup': ['复制群号', 'Copy group number', '그룹 번호 복사', 'Копировать номер группы', 'グループ番号をコピー'],
+  'common.itemCount': ['{count} 项', '{count} items', '{count}개 항목', '{count} эл.', '{count}件'],
+  'common.warningCount': ['{count} 条警告', '{count} warnings', '경고 {count}개', 'Предупреждений: {count}', '警告 {count}件'],
+  'common.originalName': ['原名：{name}', 'Original name: {name}', '원래 이름: {name}', 'Исходное название: {name}', '元の名前：{name}'],
+  'common.backendFailure': ['后端操作失败', 'The backend operation failed', '백엔드 작업에 실패했습니다', 'Ошибка операции сервера', 'バックエンド操作に失敗しました'],
+  'common.operationFailed': ['操作失败', 'Operation failed', '작업 실패', 'Операция не выполнена', '操作に失敗しました'],
+
+  'status.refreshingWorkshop': ['正在后台刷新工坊信息', 'Refreshing Workshop information in the background', '창작마당 정보를 백그라운드에서 새로 고치는 중', 'Фоновое обновление данных Мастерской', 'バックグラウンドでワークショップ情報を更新中'],
+  'status.savingOrder': ['正在写入当前顺序', 'Saving the current order', '현재 순서를 저장하는 중', 'Сохранение текущего порядка', '現在の順序を保存中'],
+  'status.saveFailed': ['即时保存失败，请重试操作', 'Instant save failed. Please try again', '즉시 저장에 실패했습니다. 다시 시도하세요', 'Не удалось сохранить. Повторите действие', '即時保存に失敗しました。もう一度お試しください'],
+  'status.gameRunning': ['Warhammer III 运行中', 'Warhammer III is running', 'Warhammer III 실행 중', 'Warhammer III запущена', 'Warhammer III 実行中'],
+  'status.ready': ['就绪', 'Ready', '준비됨', 'Готово', '準備完了'],
+
+  'app.playset': ['播放集', 'Playset', '플레이 세트', 'Набор', 'プレイセット'],
+  'app.newPlayset': ['新建播放集', 'New playset', '새 플레이 세트', 'Новый набор', '新しいプレイセット'],
+  'app.importExport': ['导入 / 导出', 'Import / Export', '가져오기 / 내보내기', 'Импорт / Экспорт', 'インポート / エクスポート'],
+  'app.settings': ['设置', 'Settings', '설정', 'Настройки', '設定'],
+  'app.pathMissingTitle': ['尚未配置 Warhammer III 路径。', 'The Warhammer III path is not configured.', 'Warhammer III 경로가 설정되지 않았습니다.', 'Путь к Warhammer III не настроен.', 'Warhammer III のパスが設定されていません。'],
+  'app.pathMissingDetail': ['扫描与启动前需要定位 Warhammer3.exe、data 和创意工坊目录。', 'Locate Warhammer3.exe, the data folder, and the Workshop folder before scanning or launching.', '검색 또는 실행 전에 Warhammer3.exe, data 폴더, 창작마당 폴더를 지정하세요.', 'Перед сканированием или запуском укажите Warhammer3.exe, папку data и папку Мастерской.', 'スキャンまたは起動の前に Warhammer3.exe、data フォルダー、ワークショップフォルダーを指定してください。'],
+  'app.configureNow': ['立即设置', 'Configure now', '지금 설정', 'Настроить', '今すぐ設定'],
+  'app.hideHidden': ['隐藏被隐藏的 MOD', 'Hide hidden MODs', '숨긴 MOD 감추기', 'Не показывать скрытые MOD', '非表示の MOD を隠す'],
+  'app.showHidden': ['显示被隐藏的 MOD', 'Show hidden MODs', '숨긴 MOD 표시', 'Показать скрытые MOD', '非表示の MOD を表示'],
+  'app.noHidden': ['没有被隐藏的 MOD', 'No hidden MODs', '숨긴 MOD 없음', 'Нет скрытых MOD', '非表示の MOD はありません'],
+  'app.packCount': ['{count} 个 Pack', '{count} Packs', 'Pack {count}개', 'Pack: {count}', 'Pack {count}件'],
+  'app.enabledCount': ['{count} 个已启用', '{count} enabled', '{count}개 활성화', 'Включено: {count}', '有効：{count}'],
+  'app.selectedCount': ['已选择 {count} 项', '{count} selected', '{count}개 선택됨', 'Выбрано: {count}', '選択中：{count}'],
+  'app.backgroundWorkshop': ['后台刷新工坊信息', 'Refreshing Workshop information', '창작마당 정보 새로 고침', 'Обновление данных Мастерской', 'ワークショップ情報を更新中'],
+  'app.inactiveMods': ['未启用 MOD', 'Inactive MODs', '비활성 MOD', 'Отключённые MOD', '無効な MOD'],
+  'app.activeMods': ['已启用 MOD', 'Enabled MODs', '활성 MOD', 'Включённые MOD', '有効な MOD'],
+  'app.rescan': ['重新扫描', 'Rescan', '다시 검색', 'Сканировать снова', '再スキャン'],
+  'app.refreshWorkshop': ['刷新工坊信息', 'Refresh Workshop information', '창작마당 정보 새로 고침', 'Обновить данные Мастерской', 'ワークショップ情報を更新'],
+  'app.openGameFolder': ['打开游戏目录', 'Open game folder', '게임 폴더 열기', 'Открыть папку игры', 'ゲームフォルダーを開く'],
+  'app.syncData': ['同步到 DATA', 'Sync to DATA', 'DATA로 동기화', 'Синхронизировать с DATA', 'DATA に同期'],
+  'app.saveList': ['存档列表', 'Save list', '저장 목록', 'Список сохранений', 'セーブ一覧'],
+  'app.continueGame': ['继续游戏', 'Continue game', '게임 계속', 'Продолжить игру', 'ゲームを続ける'],
+  'app.launchGame': ['启动游戏', 'Launch game', '게임 실행', 'Запустить игру', 'ゲームを起動'],
+  'app.gameRunningShort': ['游戏运行中', 'Game running', '게임 실행 중', 'Игра запущена', 'ゲーム実行中'],
+  'app.promptNewPlayset': ['输入新播放集名称（将复制当前播放集内容）', 'Enter a name for the new playset (the current playset will be copied)', '새 플레이 세트 이름을 입력하세요(현재 플레이 세트가 복사됩니다)', 'Введите имя нового набора (текущий набор будет скопирован)', '新しいプレイセット名を入力してください（現在の内容をコピーします）'],
+  'app.promptRenamePlayset': ['输入播放集的新名称', 'Enter a new name for the playset', '플레이 세트의 새 이름을 입력하세요', 'Введите новое имя набора', 'プレイセットの新しい名前を入力してください'],
+  'app.confirmDeletePlayset': ['确定删除播放集“{name}”吗？删除后将切换到“{defaultName}”。', 'Delete the playset “{name}”? The default playset will become active.', '플레이 세트 “{name}”을(를) 삭제할까요? 삭제 후 기본 플레이 세트로 전환됩니다.', 'Удалить набор «{name}»? После удаления будет выбран набор по умолчанию.', 'プレイセット「{name}」を削除しますか？削除後はデフォルトのプレイセットに切り替わります。'],
+  'app.moreUnsubscribed': ['• 另有 {count} 个 MOD', '• {count} more MODs', '• MOD {count}개 더 있음', '• Ещё MOD: {count}', '• ほか {count}件の MOD'],
+  'app.workshopItem': ['创意工坊 #{id}', 'Workshop #{id}', '창작마당 #{id}', 'Мастерская #{id}', 'ワークショップ #{id}'],
+  'app.subscriptionItem': ['• {name}（{id}）', '• {name} ({id})', '• {name}({id})', '• {name} ({id})', '• {name}（{id}）'],
+  'app.confirmSubscribe': ['存在以下 MOD 未订阅：\n\n{items}\n\n是否自动订阅？', 'The following MODs are not subscribed:\n\n{items}\n\nSubscribe automatically?', '다음 MOD를 구독하지 않았습니다:\n\n{items}\n\n자동으로 구독할까요?', 'На следующие MOD нет подписки:\n\n{items}\n\nПодписаться автоматически?', '次の MOD は未購読です：\n\n{items}\n\n自動で購読しますか？'],
+  'app.subscribedRescan': ['已自动订阅 {count} 个 MOD；Steam 下载完成后重新扫描即可按分享顺序加入当前播放集', 'Subscribed to {count} MODs automatically. Rescan after Steam finishes downloading to add them to the current playset in the shared order.', 'MOD {count}개를 자동 구독했습니다. Steam 다운로드가 끝난 뒤 다시 검색하면 공유된 순서로 현재 플레이 세트에 추가됩니다.', 'Оформлена автоматическая подписка на {count} MOD. После загрузки в Steam выполните повторное сканирование, чтобы добавить их в текущий набор в указанном порядке.', '{count}件の MOD を自動購読しました。Steam のダウンロード完了後に再スキャンすると、共有された順序で現在のプレイセットに追加されます。'],
+  'app.promptLoadOrder': ['输入加载顺序（1-{count}）', 'Enter load order (1-{count})', '로드 순서를 입력하세요(1-{count})', 'Введите позицию загрузки (1–{count})', '読み込み順を入力してください（1～{count}）'],
+  'app.invalidLoadOrder': ['请输入 1 到 {count} 之间的整数', 'Enter an integer from 1 to {count}', '1에서 {count} 사이의 정수를 입력하세요', 'Введите целое число от 1 до {count}', '1～{count} の整数を入力してください'],
+  'app.selectedModsSubject': ['选中的 {count} 个 MOD', 'the {count} selected MODs', '선택한 MOD {count}개', '{count} выбранных MOD', '選択した {count}件の MOD'],
+  'app.singleModSubject': ['“{name}”', '“{name}”', '“{name}”', '«{name}»', '「{name}」'],
+  'app.confirmUnsubscribe': ['确定取消订阅{subject}吗？Steam 会在游戏退出后移除工坊文件。', 'Unsubscribe from {subject}? Steam will remove the Workshop files after the game exits.', '{subject} 구독을 취소할까요? 게임이 종료되면 Steam에서 창작마당 파일을 제거합니다.', 'Отписаться от {subject}? Steam удалит файлы Мастерской после выхода из игры.', '{subject}の購読を解除しますか？ゲーム終了後、Steam がワークショップファイルを削除します。'],
+  'app.rpfmBatchBlocked': ['批量选择时不能在 RPFM 中打开，请只选择一个 MOD', 'RPFM can only open one MOD at a time', 'RPFM에서는 한 번에 하나의 MOD만 열 수 있습니다', 'RPFM может открыть только один MOD', 'RPFM では一度に 1件の MOD のみ開けます'],
+  'app.warningMissingDependency': ['缺失依赖', 'Missing dependency', '누락된 종속성', 'Отсутствует зависимость', '依存関係不足'],
+  'app.warningOutdated': ['MOD 过期', 'Outdated MOD', '오래된 MOD', 'Устаревший MOD', '古い MOD'],
+  'app.warningBatchChanged': ['已{action} {count} 个 MOD 的{warning}提示', '{action} the {warning} warning for {count} MODs', 'MOD {count}개의 {warning} 경고를 {action}', '{action} предупреждение «{warning}» для {count} MOD', '{count}件の MOD の「{warning}」警告を{action}'],
+  'app.actionIgnored': ['忽略', 'Ignored', '무시했습니다', 'Игнорировано', '無視しました'],
+  'app.actionRestored': ['恢复', 'Restored', '복원했습니다', 'Восстановлено', '復元しました'],
+  'app.confirmSyncData': ['确定将所有 Steam 创意工坊 MOD 文件同步到本地 Data 文件夹吗？\n\n不会同步 Data 下已存在的同名 MOD，也不会覆盖同步后被修改的文件。', 'Sync all Steam Workshop MOD files to the local Data folder?\n\nMODs with the same name already in Data will be skipped, and files modified after syncing will not be overwritten.', '모든 Steam 창작마당 MOD 파일을 로컬 Data 폴더로 동기화할까요?\n\nData에 같은 이름의 MOD가 있으면 건너뛰며, 동기화 후 수정된 파일은 덮어쓰지 않습니다.', 'Синхронизировать все MOD из Мастерской Steam с локальной папкой Data?\n\nMOD с тем же именем в Data будут пропущены, а изменённые после синхронизации файлы не будут перезаписаны.', 'すべての Steam ワークショップ MOD ファイルをローカルの Data フォルダーへ同期しますか？\n\nData に同名の MOD がある場合はスキップし、同期後に変更されたファイルは上書きしません。'],
+  'app.warningIgnored': ['已忽略“{name}”的{warning}提示', 'Ignored the {warning} warning for “{name}”', '“{name}”의 {warning} 경고를 무시했습니다', 'Предупреждение «{warning}» для «{name}» игнорируется', '「{name}」の「{warning}」警告を無視しました'],
+  'app.scanWarningIgnored': ['已在本次运行中忽略该扫描提示', 'Ignored this scan notice for the current session', '이번 실행에서 이 검색 알림을 무시했습니다', 'Это сообщение сканирования скрыто до конца текущего сеанса', '今回の実行中はこのスキャン通知を無視します'],
+
+  'list.loadOrder': ['加载顺序', 'Load order', '로드 순서', 'Порядок загрузки', '読み込み順'],
+  'list.authorUnavailable': ['作者昵称暂不可用', 'Author name unavailable', '작성자 이름을 사용할 수 없음', 'Имя автора недоступно', '作者名を取得できません'],
+  'list.localFile': ['本地文件', 'Local file', '로컬 파일', 'Локальный файл', 'ローカルファイル'],
+  'list.previewAlt': ['{name} 预览图', '{name} preview', '{name} 미리보기', 'Предпросмотр {name}', '{name} のプレビュー'],
+  'list.missingDependency': ['! 缺少依赖', '! Missing dependency', '! 종속성 누락', '! Нет зависимости', '! 依存関係不足'],
+  'list.warning': ['! 警告', '! Warning', '! 경고', '! Предупреждение', '! 警告'],
+  'list.hidden': ['已隐藏', 'Hidden', '숨김', 'Скрыто', '非表示'],
+  'list.prioritySortRequired': ['切换回“优先级”排序后可调整实际加载顺序', 'Switch back to Priority sorting to change the actual load order', '실제 로드 순서를 바꾸려면 우선순위 정렬로 전환하세요', 'Чтобы изменить порядок загрузки, выберите сортировку «Приоритет»', '実際の読み込み順を変更するには「優先度」順に戻してください'],
+  'list.moveUp': ['上移', 'Move up', '위로 이동', 'Переместить вверх', '上へ移動'],
+  'list.moveDown': ['下移', 'Move down', '아래로 이동', 'Переместить вниз', '下へ移動'],
+  'list.enable': ['启用', 'Enable', '활성화', 'Включить', '有効化'],
+  'list.disable': ['停用', 'Disable', '비활성화', 'Отключить', '無効化'],
+  'list.emptyActive': ['尚未启用任何 Pack', 'No Packs are enabled', '활성화된 Pack이 없습니다', 'Нет включённых Pack', '有効な Pack はありません'],
+  'list.emptyFiltered': ['没有符合筛选条件的 Pack', 'No Packs match the filters', '필터와 일치하는 Pack이 없습니다', 'Нет Pack, соответствующих фильтрам', 'フィルターに一致する Pack はありません'],
+  'list.workshopSource': ['STEAM 创意工坊', 'STEAM WORKSHOP', 'STEAM 창작마당', 'МАСТЕРСКАЯ STEAM', 'STEAM ワークショップ'],
+  'list.dataSource': ['游戏 DATA', 'GAME DATA', '게임 DATA', 'DATA ИГРЫ', 'ゲーム DATA'],
+  'list.movie': ['电影', 'MOVIE', '무비', 'ВИДЕО', 'ムービー'],
+
+  'search.fieldName': ['模组名', 'MOD name', 'MOD 이름', 'Название MOD', 'MOD 名'],
+  'search.fieldFile': ['文件名', 'File name', '파일 이름', 'Имя файла', 'ファイル名'],
+  'search.fieldAuthor': ['作者', 'Author', '작성자', 'Автор', '作者'],
+  'search.fieldType': ['类型', 'Type', '유형', 'Тип', '種類'],
+  'search.fieldSource': ['来源', 'Source', '출처', 'Источник', 'ソース'],
+  'search.fieldWorkshop': ['创意工坊 ID', 'Workshop ID', '창작마당 ID', 'ID Мастерской', 'ワークショップ ID'],
+  'search.fieldCreator': ['作者 ID', 'Author ID', '작성자 ID', 'ID автора', '作者 ID'],
+  'search.keyword': ['关键词', 'keyword', '키워드', 'ключевое слово', 'キーワード'],
+  'search.sortPriority': ['优先级', 'Priority', '우선순위', 'Приоритет', '優先度'],
+  'search.sortFilename': ['文件名', 'File name', '파일 이름', 'Имя файла', 'ファイル名'],
+  'search.sortName': ['模组名', 'MOD name', 'MOD 이름', 'Название MOD', 'MOD 名'],
+  'search.sortAuthor': ['作者', 'Author', '작성자', 'Автор', '作者'],
+  'search.sortUpdated': ['更新时间', 'Updated', '업데이트 시간', 'Время обновления', '更新日時'],
+  'search.sortCreated': ['创建时间', 'Created', '생성 시간', 'Время создания', '作成日時'],
+  'search.addCondition': ['添加条件…', 'Add a condition…', '조건 추가…', 'Добавить условие…', '条件を追加…'],
+  'search.placeholder': ['输入关键词，或使用 类型:语言包 等条件', 'Enter keywords or a condition such as type:Type', '키워드 또는 유형:언어 팩 같은 조건 입력', 'Введите ключевые слова или условие, например тип:Языковой пакет', 'キーワードまたは 種類:言語パック などの条件を入力'],
+  'search.logicAll': ['满足全部条件；点击切换为任一条件', 'Match all conditions; click to match any', '모든 조건 일치; 클릭하여 일부 조건 일치로 전환', 'Все условия; нажмите, чтобы выбрать любое', 'すべての条件に一致；クリックでいずれかに切替'],
+  'search.logicAny': ['满足任一条件；点击切换为全部条件', 'Match any condition; click to match all', '일부 조건 일치; 클릭하여 모든 조건 일치로 전환', 'Любое условие; нажмите, чтобы выбрать все', 'いずれかの条件に一致；クリックですべてに切替'],
+  'search.logicAllShort': ['全部', 'All', '모두', 'Все', 'すべて'],
+  'search.logicAnyShort': ['任一', 'Any', '일부', 'Любое', 'いずれか'],
+  'search.removeCondition': ['删除条件 {label}', 'Remove condition {label}', '조건 {label} 삭제', 'Удалить условие {label}', '条件 {label} を削除'],
+  'search.aria': ['MOD 多条件搜索', 'Multi-condition MOD search', 'MOD 다중 조건 검색', 'Поиск MOD по нескольким условиям', 'MOD 複数条件検索'],
+  'search.clear': ['清除全部搜索条件', 'Clear all search conditions', '모든 검색 조건 지우기', 'Очистить все условия поиска', 'すべての検索条件をクリア'],
+  'search.suggestionKey': ['字段', 'Field', '필드', 'Поле', '項目'],
+  'search.suggestionValue': ['值', 'Value', '값', 'Значение', '値'],
+  'search.displaySort': ['列表显示排序', 'List display sorting', '목록 표시 정렬', 'Сортировка списка', '一覧表示の並び順'],
+  'search.displaySortTitle': ['列表显示排序：{label}', 'List display sorting: {label}', '목록 표시 정렬: {label}', 'Сортировка списка: {label}', '一覧表示の並び順：{label}'],
+  'search.ascending': ['升序', 'Ascending', '오름차순', 'По возрастанию', '昇順'],
+  'search.descending': ['降序', 'Descending', '내림차순', 'По убыванию', '降順'],
+  'search.displayOnly': ['仅改变列表显示，不修改实际加载顺序。', 'Only changes the display; the actual load order is unchanged.', '목록 표시만 바뀌며 실제 로드 순서는 변경되지 않습니다.', 'Меняется только отображение; фактический порядок загрузки не изменяется.', '一覧表示のみ変更し、実際の読み込み順は変更しません。'],
+
+  'details.sourceWorkshop': ['STEAM 创意工坊', 'Steam Workshop', 'Steam 창작마당', 'Мастерская Steam', 'Steam ワークショップ'],
+  'details.sourceData': ['游戏 Data', 'Game Data', '게임 Data', 'Data игры', 'ゲーム Data'],
+  'details.authorUnavailable': ['作者昵称暂不可用', 'Author name unavailable', '작성자 이름을 사용할 수 없음', 'Имя автора недоступно', '作者名を取得できません'],
+  'details.authorRefreshing': ['未获取（后台刷新工坊信息）', 'Not available yet (Workshop refresh pending)', '아직 가져오지 못함(창작마당 새로 고침 대기 중)', 'Не получено (ожидается обновление Мастерской)', '未取得（ワークショップ更新待ち）'],
+  'details.basicInfo': ['基本信息', 'Basic information', '기본 정보', 'Основные сведения', '基本情報'],
+  'details.workshopId': ['创意工坊 ID', 'Workshop ID', '창작마당 ID', 'ID Мастерской', 'ワークショップ ID'],
+  'details.author': ['作者', 'Author', '작성자', 'Автор', '作者'],
+  'details.createdAt': ['创建时间', 'Created', '생성 시간', 'Создано', '作成日時'],
+  'details.updatedAt': ['更新时间', 'Updated', '업데이트 시간', 'Обновлено', '更新日時'],
+  'details.localLocation': ['本地位置', 'Local location', '로컬 위치', 'Локальное расположение', 'ローカルの場所'],
+  'details.openFolder': ['打开目录', 'Open folder', '폴더 열기', 'Открыть папку', 'フォルダーを開く'],
+  'details.openWorkshopFolder': ['打开工坊目录', 'Open Workshop folder', '창작마당 폴더 열기', 'Открыть папку Мастерской', 'ワークショップフォルダーを開く'],
+  'details.workshopPage': ['创意工坊页面', 'Workshop page', '창작마당 페이지', 'Страница Мастерской', 'ワークショップページ'],
+  'details.description': ['简介', 'Description', '설명', 'Описание', '説明'],
+  'details.myMarks': ['我的标记', 'My labels', '내 표시', 'Мои пометки', '自分のメモ'],
+  'details.alias': ['显示别名', 'Display alias', '표시 별칭', 'Отображаемый псевдоним', '表示用の別名'],
+  'details.aiEnabledTitle': ['按战锤术语库生成当前语言标题并总结原简介', 'Generate a title in the current language and summarize the original description using the Warhammer glossary', '워해머 용어집을 사용해 현재 언어 제목을 만들고 원문 설명을 요약', 'Создать название на текущем языке и сводку исходного описания с учётом словаря Warhammer', 'Warhammer 用語集を使って現在の言語のタイトルと元説明の要約を生成'],
+  'details.aiDisabledTitle': ['请先在设置中启用并配置 AI', 'Enable and configure AI in Settings first', '설정에서 AI를 먼저 활성화하고 구성하세요', 'Сначала включите и настройте ИИ', '設定で AI を有効化して構成してください'],
+  'details.generating': ['生成中', 'Generating', '생성 중', 'Создание', '生成中'],
+  'details.aiGenerate': ['AI 生成', 'Generate with AI', 'AI 생성', 'Создать с ИИ', 'AI 生成'],
+  'details.aliasPlaceholder': ['留空时使用原名称', 'Leave blank to use the original name', '비워 두면 원래 이름 사용', 'Оставьте пустым для исходного названия', '空欄の場合は元の名前を使用'],
+  'details.notes': ['备注', 'Notes', '메모', 'Заметки', 'メモ'],
+  'details.notesPlaceholder': ['记录用途、版本或个人说明', 'Record usage, version, or personal notes', '용도, 버전 또는 개인 메모 기록', 'Укажите назначение, версию или личные заметки', '用途、バージョン、個人メモを記録'],
+  'details.saveMarks': ['保存标记', 'Save labels', '표시 저장', 'Сохранить пометки', 'メモを保存'],
+  'details.selectMod': ['选择一个 MOD', 'Select a MOD', 'MOD 선택', 'Выберите MOD', 'MOD を選択'],
+  'details.emptyHelp': ['这里会显示 Pack 名称、来源、路径和创意工坊信息。', 'Pack name, source, path, and Workshop information will appear here.', '여기에 Pack 이름, 출처, 경로 및 창작마당 정보가 표시됩니다.', 'Здесь отображаются имя Pack, источник, путь и сведения Мастерской.', 'ここに Pack 名、ソース、パス、ワークショップ情報が表示されます。'],
+  'details.youtubePreview': ['YouTube 预览', 'YouTube preview', 'YouTube 미리보기', 'Предпросмотр YouTube', 'YouTube プレビュー'],
+  'details.showSpoiler': ['显示隐藏内容', 'Show hidden content', '숨겨진 내용 표시', 'Показать скрытое содержимое', '隠し内容を表示'],
+
+  'context.aria': ['MOD 操作', 'MOD actions', 'MOD 작업', 'Действия с MOD', 'MOD 操作'],
+  'context.batchLabel': ['{label}（{count}项）', '{label} ({count} items)', '{label}({count}개)', '{label} ({count} эл.)', '{label}（{count}件）'],
+  'context.editType': ['修改类型', 'Change type', '유형 변경', 'Изменить тип', '種類を変更'],
+  'context.manageTypes': ['类型管理', 'Manage types', '유형 관리', 'Управление типами', '種類を管理'],
+  'context.moveTo': ['移动到', 'Move to', '이동', 'Переместить', '移動先'],
+  'context.specificOrder': ['指定加载顺序', 'Set load position', '로드 순서 지정', 'Задать позицию загрузки', '読み込み位置を指定'],
+  'context.listTop': ['列表顶部', 'Top of list', '목록 맨 위', 'В начало списка', '一覧の先頭'],
+  'context.listBottom': ['列表底部', 'Bottom of list', '목록 맨 아래', 'В конец списка', '一覧の末尾'],
+  'context.steamActions': ['Steam 操作', 'Steam actions', 'Steam 작업', 'Действия Steam', 'Steam 操作'],
+  'context.visitWorkshop': ['访问创意工坊', 'Visit Workshop', '창작마당 방문', 'Открыть Мастерскую', 'ワークショップを開く'],
+  'context.unsubscribe': ['取消订阅', 'Unsubscribe', '구독 취소', 'Отписаться', '購読解除'],
+  'context.forceUpdate': ['强制更新', 'Force update', '강제 업데이트', 'Принудительно обновить', '強制更新'],
+  'context.uploadWorkshop': ['上传到工坊', 'Upload to Workshop', '창작마당에 업로드', 'Загрузить в Мастерскую', 'ワークショップへアップロード'],
+  'context.updateWorkshop': ['更新到工坊', 'Update on Workshop', '창작마당 업데이트', 'Обновить в Мастерской', 'ワークショップを更新'],
+  'context.ignoreIssue': ['忽略问题', 'Ignore issue', '문제 무시', 'Игнорировать проблему', '問題を無視'],
+  'context.ignoreOutdated': ['忽略 MOD 过期', 'Ignore outdated MOD', '오래된 MOD 경고 무시', 'Игнорировать устаревший MOD', '古い MOD を無視'],
+  'context.ignoreDependency': ['忽略缺失依赖', 'Ignore missing dependency', '누락된 종속성 무시', 'Игнорировать отсутствие зависимости', '依存関係不足を無視'],
+  'context.openFileFolder': ['打开文件目录', 'Open file location', '파일 위치 열기', 'Открыть расположение файла', 'ファイルの場所を開く'],
+  'context.rpfmBatchTitle': ['批量选择时不能在 RPFM 中打开', 'RPFM cannot open a batch selection', 'RPFM에서는 여러 항목을 열 수 없습니다', 'RPFM не может открыть несколько элементов', 'RPFM では複数選択を開けません'],
+  'context.openRpfm': ['在 RPFM 打开', 'Open in RPFM', 'RPFM에서 열기', 'Открыть в RPFM', 'RPFM で開く'],
+  'context.unhide': ['取消隐藏', 'Unhide', '숨김 해제', 'Показать', '再表示'],
+  'context.hide': ['从列表中隐藏', 'Hide from list', '목록에서 숨기기', 'Скрыть из списка', '一覧から非表示'],
+  'context.existsData': ['该 Pack 已存在于 Data 目录', 'This Pack already exists in Data', '이 Pack은 이미 Data에 있습니다', 'Этот Pack уже находится в Data', 'この Pack はすでに Data にあります'],
+  'context.copyToData': ['复制模组到 Data 文件夹', 'Copy MOD to Data folder', 'MOD를 Data 폴더에 복사', 'Копировать MOD в папку Data', 'MOD を Data フォルダーへコピー'],
+  'context.inData': ['已在 Data', 'Already in Data', '이미 Data에 있음', 'Уже в Data', 'Data にあります'],
+
+  'share.aria': ['导入导出', 'Import and export', '가져오기 및 내보내기', 'Импорт и экспорт', 'インポートとエクスポート'],
+  'share.eyebrow': ['加载顺序传输', 'LOAD ORDER TRANSFER', '로드 순서 전송', 'ПЕРЕНОС ПОРЯДКА ЗАГРУЗКИ', '読み込み順の転送'],
+  'share.title': ['分享加载顺序', 'Share load order', '로드 순서 공유', 'Поделиться порядком загрузки', '読み込み順を共有'],
+  'share.help': ['分享码保存启用 Pack 的顺序和创意工坊身份。导入前会检查未订阅项目；确认后可由 Steam 自动订阅，下载完成并重新扫描后会按原顺序加入当前播放集。', 'The share code stores enabled Pack order and Workshop identities. Unsubscribed items are checked before import; after confirmation Steam can subscribe automatically, and a rescan after download restores the shared order in the current playset.', '공유 코드는 활성화된 Pack 순서와 창작마당 ID를 저장합니다. 가져오기 전에 미구독 항목을 확인하고, 동의하면 Steam이 자동으로 구독합니다. 다운로드 후 다시 검색하면 현재 플레이 세트에 원래 순서로 추가됩니다.', 'Код хранит порядок включённых Pack и идентификаторы Мастерской. Перед импортом проверяются отсутствующие подписки; после подтверждения Steam оформит их автоматически, а повторное сканирование после загрузки восстановит порядок в текущем наборе.', '共有コードには有効な Pack の順序とワークショップ識別情報が保存されます。インポート前に未購読項目を確認し、同意すると Steam が自動購読します。ダウンロード後に再スキャンすると現在のプレイセットへ元の順序で追加されます。'],
+  'share.placeholder': ['点击“生成分享码”，或粘贴收到的 WMM1 分享码', 'Click “Generate share code” or paste a received WMM1 share code', '“공유 코드 생성”을 클릭하거나 받은 WMM1 공유 코드를 붙여넣으세요', 'Нажмите «Создать код» или вставьте полученный код WMM1', '「共有コードを生成」をクリックするか、受け取った WMM1 共有コードを貼り付けてください'],
+  'share.generate': ['生成分享码', 'Generate share code', '공유 코드 생성', 'Создать код', '共有コードを生成'],
+  'share.importCurrent': ['导入到当前播放集', 'Import into current playset', '현재 플레이 세트로 가져오기', 'Импортировать в текущий набор', '現在のプレイセットへインポート'],
+
+  'saves.aria': ['战役存档', 'Campaign saves', '캠페인 저장', 'Сохранения кампании', 'キャンペーンセーブ'],
+  'saves.eyebrow': ['战役存档', 'CAMPAIGN SAVES', '캠페인 저장', 'СОХРАНЕНИЯ КАМПАНИИ', 'キャンペーンセーブ'],
+  'saves.title': ['从指定存档载入', 'Load a specific save', '지정한 저장 불러오기', 'Загрузить выбранное сохранение', '指定セーブを読み込む'],
+  'saves.search': ['搜索存档名称', 'Search save names', '저장 이름 검색', 'Поиск по имени сохранения', 'セーブ名を検索'],
+  'saves.noDirectory': ['未找到存档目录', 'Save folder not found', '저장 폴더를 찾을 수 없음', 'Папка сохранений не найдена', 'セーブフォルダーが見つかりません'],
+  'saves.load': ['载入', 'Load', '불러오기', 'Загрузить', '読み込む'],
+  'saves.noMatches': ['没有符合搜索条件的存档', 'No saves match the search', '검색과 일치하는 저장이 없습니다', 'Нет сохранений по запросу', '検索条件に一致するセーブはありません'],
+  'saves.none': ['没有找到战役存档', 'No campaign saves found', '캠페인 저장을 찾을 수 없음', 'Сохранения кампании не найдены', 'キャンペーンセーブが見つかりません'],
+
+  'warnings.aria': ['MOD 警告', 'MOD warnings', 'MOD 경고', 'Предупреждения MOD', 'MOD 警告'],
+  'warnings.eyebrow': ['MOD 警告', 'MOD WARNINGS', 'MOD 경고', 'ПРЕДУПРЕЖДЕНИЯ MOD', 'MOD 警告'],
+  'warnings.title': ['问题与警告', 'Issues and warnings', '문제 및 경고', 'Проблемы и предупреждения', '問題と警告'],
+  'warnings.scanNotice': ['扫描提示', 'Scan notice', '검색 알림', 'Сообщение сканирования', 'スキャン通知'],
+  'warnings.total': ['共 {count} 条警告', '{count} warnings in total', '총 경고 {count}개', 'Всего предупреждений: {count}', '警告は合計 {count}件'],
+  'warnings.ignorable': ['其中 {count} 条问题可逐条忽略。', '{count} issues can be ignored individually.', '문제 {count}개를 개별적으로 무시할 수 있습니다.', 'Проблем, которые можно игнорировать отдельно: {count}.', '{count}件の問題を個別に無視できます。'],
+  'warnings.selectMod': ['在列表中选择 {name}', 'Select {name} in the list', '목록에서 {name} 선택', 'Выбрать {name} в списке', '一覧で {name} を選択'],
+  'warnings.none': ['当前没有未忽略的问题', 'There are no unignored issues', '무시되지 않은 문제가 없습니다', 'Нет проблем, не добавленных в игнорирование', '未無視の問題はありません'],
+  'warnings.genericScan': ['扫描过程中出现提示', 'A notice occurred while scanning', '검색 중 알림이 발생했습니다', 'Во время сканирования появилось сообщение', 'スキャン中に通知が発生しました'],
+  'warnings.workshopDependencyTitle': ['工坊依赖状态', 'Workshop dependency status', '창작마당 종속성 상태', 'Состояние зависимостей Мастерской', 'ワークショップ依存関係の状態'],
+  'warnings.workshopDependencyMessage': ['Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态', 'Steam cannot currently read some Workshop dependencies, so cached data is being used; missing-dependency results may not be current.', 'Steam에서 일부 창작마당 종속성을 현재 읽을 수 없어 기존 캐시를 사용합니다. 누락 종속성 결과가 최신이 아닐 수 있습니다.', 'Steam временно не может прочитать часть зависимостей Мастерской, поэтому используются данные из кеша; результаты проверки могут быть неактуальны.', 'Steam が一部のワークショップ依存関係を一時的に取得できないため、既存のキャッシュを使用しています。依存関係不足の結果は最新でない可能性があります。'],
+  'warnings.outdatedMessage': ['该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用', 'This MOD has not been updated since the game was updated; this does not mean the MOD is unusable.', '이 MOD는 게임 본체 업데이트 후 갱신되지 않았지만, 사용할 수 없다는 뜻은 아닙니다.', 'Этот MOD не обновлялся после обновления игры, но это не означает, что его нельзя использовать.', 'この MOD はゲーム本体の更新後に更新されていませんが、使用できないという意味ではありません。'],
+  'warnings.missingMessage': ['缺少依赖：{names}', 'Missing dependencies: {names}', '누락된 종속성: {names}', 'Отсутствуют зависимости: {names}', '不足している依存関係：{names}'],
+
+  'update.unknownSize': ['未知大小', 'Unknown size', '알 수 없는 크기', 'Неизвестный размер', 'サイズ不明'],
+  'update.typeFeature': ['新增', 'New', '신규', 'Новое', '追加'],
+  'update.typeFix': ['修复', 'Fix', '수정', 'Исправление', '修正'],
+  'update.typeOptimize': ['优化', 'Improvement', '개선', 'Улучшение', '改善'],
+  'update.typeBreaking': ['注意', 'Important', '주의', 'Важно', '注意'],
+  'update.typeChange': ['变更', 'Change', '변경', 'Изменение', '変更'],
+  'update.aria': ['软件更新', 'Software update', '소프트웨어 업데이트', 'Обновление программы', 'ソフトウェア更新'],
+  'update.changelog': ['更新日志', 'Changelog', '변경 내역', 'Журнал изменений', '更新履歴'],
+  'update.eyebrow': ['软件更新', 'SOFTWARE UPDATE', '소프트웨어 업데이트', 'ОБНОВЛЕНИЕ ПРОГРАММЫ', 'ソフトウェア更新'],
+  'update.found': ['发现新版本 v{version}', 'New version v{version} available', '새 버전 v{version} 사용 가능', 'Доступна новая версия v{version}', '新しいバージョン v{version} があります'],
+  'update.currentVersion': ['当前版本', 'Current version', '현재 버전', 'Текущая версия', '現在のバージョン'],
+  'update.availableVersion': ['可用版本', 'Available version', '사용 가능한 버전', 'Доступная версия', '利用可能なバージョン'],
+  'update.verified': ['SHA-256 已校验', 'SHA-256 verified', 'SHA-256 확인됨', 'SHA-256 проверен', 'SHA-256 検証済み'],
+  'update.waiting': ['等待下载校验', 'Waiting for download verification', '다운로드 확인 대기 중', 'Ожидание загрузки и проверки', 'ダウンロード検証待ち'],
+  'update.noVersionNotes': ['此版本未提供更新说明。', 'No release notes were provided for this version.', '이 버전에는 변경 내용이 없습니다.', 'Для этой версии нет описания изменений.', 'このバージョンの更新内容はありません。'],
+  'update.noChangelog': ['暂无更新日志。', 'No changelog is available.', '변경 내역이 없습니다.', 'Журнал изменений недоступен.', '更新履歴はありません。'],
+  'update.ignoreVersion': ['忽略此版本', 'Ignore this version', '이 버전 무시', 'Игнорировать эту версию', 'このバージョンを無視'],
+  'update.remindLater': ['稍后提醒', 'Remind me later', '나중에 알림', 'Напомнить позже', '後で通知'],
+  'update.download': ['下载更新', 'Download update', '업데이트 다운로드', 'Скачать обновление', '更新をダウンロード'],
+  'update.install': ['安装并重启', 'Install and restart', '설치 후 다시 시작', 'Установить и перезапустить', 'インストールして再起動'],
+
+  'types.deleteConfirm': ['确定删除自定义类型“{name}”吗？相关 MOD 将改为“{unknown}”。', 'Delete the custom type “{name}”? Related MODs will be changed to “{unknown}”.', '사용자 정의 유형 “{name}”을(를) 삭제할까요? 관련 MOD는 “{unknown}”(으)로 변경됩니다.', 'Удалить пользовательский тип «{name}»? Связанные MOD получат тип «{unknown}».', 'カスタム種類「{name}」を削除しますか？関連する MOD は「{unknown}」に変更されます。'],
+  'types.aria': ['类型管理', 'Type management', '유형 관리', 'Управление типами', '種類の管理'],
+  'types.eyebrow': ['MOD 分类', 'MOD CATEGORIES', 'MOD 분류', 'КАТЕГОРИИ MOD', 'MOD 分類'],
+  'types.help': ['默认类型不可修改或删除；自定义类型可自由维护。', 'Built-in types cannot be edited or deleted; custom types can be managed freely.', '기본 유형은 수정하거나 삭제할 수 없으며 사용자 정의 유형은 자유롭게 관리할 수 있습니다.', 'Встроенные типы нельзя изменить или удалить; пользовательские типы можно настраивать.', '標準の種類は編集・削除できません。カスタム種類は自由に管理できます。'],
+  'types.editAria': ['修改类型 {name}', 'Edit type {name}', '유형 {name} 수정', 'Изменить тип {name}', '種類 {name} を編集'],
+  'types.newPlaceholder': ['输入新的自定义类型名称', 'Enter a new custom type name', '새 사용자 정의 유형 이름 입력', 'Введите имя нового пользовательского типа', '新しいカスタム種類名を入力'],
+  'types.add': ['新增类型', 'Add type', '유형 추가', 'Добавить тип', '種類を追加'],
+  'modType.language': ['语言包', 'Language pack', '언어 팩', 'Языковой пакет', '言語パック'],
+  'modType.ui': ['UI', 'UI', 'UI', 'Интерфейс', 'UI'],
+  'modType.unit': ['单位', 'Units', '유닛', 'Отряды', 'ユニット'],
+  'modType.feature': ['功能', 'Features', '기능', 'Функции', '機能'],
+  'modType.overhaul': ['大修', 'Overhaul', '대규모 개편', 'Глобальная переработка', 'オーバーホール'],
+  'modType.visual': ['美化', 'Visuals', '시각 효과', 'Визуальные изменения', 'ビジュアル'],
+  'modType.unknown': ['未知', 'Unknown', '알 수 없음', 'Неизвестно', '不明'],
+
+  'publish.aria': ['创意工坊发布', 'Workshop publishing', '창작마당 게시', 'Публикация в Мастерской', 'ワークショップ公開'],
+  'publish.eyebrow': ['STEAM 创意工坊', 'STEAM WORKSHOP', 'STEAM 창작마당', 'МАСТЕРСКАЯ STEAM', 'STEAM ワークショップ'],
+  'publish.upload': ['上传到工坊', 'Upload to Workshop', '창작마당에 업로드', 'Загрузить в Мастерскую', 'ワークショップへアップロード'],
+  'publish.update': ['更新到工坊', 'Update on Workshop', '창작마당 업데이트', 'Обновить в Мастерской', 'ワークショップを更新'],
+  'publish.language': ['发布语言', 'Publishing language', '게시 언어', 'Язык публикации', '公開言語'],
+  'publish.workshopId': ['创意工坊 ID', 'Workshop ID', '창작마당 ID', 'ID Мастерской', 'ワークショップ ID'],
+  'publish.languageHelp': ['默认使用当前界面语言；切换后会自动读取工坊中该语言的标题和描述。', 'The current interface language is used by default. Changing it loads that language’s Workshop title and description.', '현재 인터페이스 언어가 기본값입니다. 변경하면 해당 언어의 창작마당 제목과 설명을 불러옵니다.', 'По умолчанию используется язык интерфейса. При смене будут загружены название и описание Мастерской на выбранном языке.', '現在の表示言語が既定です。切り替えると、その言語のワークショップタイトルと説明を読み込みます。'],
+  'publish.loadingLanguage': ['正在读取该语言的创意工坊标题和描述…', 'Loading the Workshop title and description for this language…', '이 언어의 창작마당 제목과 설명을 불러오는 중…', 'Загрузка названия и описания Мастерской на выбранном языке…', 'この言語のワークショップタイトルと説明を読み込み中…'],
+  'publish.fallbackEnglish': ['当前语言没有创意工坊简介，已自动使用英语。', 'No Workshop description is available in the current language, so English was selected automatically.', '현재 언어의 창작마당 설명이 없어 영어를 자동으로 선택했습니다.', 'Описание Мастерской на текущем языке отсутствует, поэтому автоматически выбран английский.', '現在の言語のワークショップ説明がないため、自動的に英語を選択しました。'],
+  'publish.partialEnglish': ['该语言内容不完整，当前显示英文备用标题或描述。', 'This language is incomplete; an English fallback title or description is shown.', '이 언어의 내용이 불완전하여 영어 대체 제목 또는 설명을 표시합니다.', 'Материалы на этом языке неполные; показано резервное название или описание на английском.', 'この言語の内容が不完全なため、英語の代替タイトルまたは説明を表示しています。'],
+  'publish.loadedLanguage': ['已载入该语言的创意工坊标题和描述。', 'The Workshop title and description for this language have been loaded.', '이 언어의 창작마당 제목과 설명을 불러왔습니다.', 'Название и описание Мастерской на выбранном языке загружены.', 'この言語のワークショップタイトルと説明を読み込みました。'],
+  'publish.loadFailed': ['读取失败，已保留当前编辑内容。', 'Loading failed; the current edits were kept.', '불러오기에 실패하여 현재 편집 내용을 유지했습니다.', 'Не удалось загрузить; текущие правки сохранены.', '読み込みに失敗したため、現在の編集内容を保持しました。'],
+  'publish.title': ['标题', 'Title', '제목', 'Название', 'タイトル'],
+  'publish.description': ['描述', 'Description', '설명', 'Описание', '説明'],
+  'publish.changelog': ['更新日志', 'Change note', '변경 내역', 'Список изменений', '更新内容'],
+  'publish.preview': ['预览图（PNG/JPEG，最大 1 MB）', 'Preview image (PNG/JPEG, max 1 MB)', '미리보기 이미지(PNG/JPEG, 최대 1MB)', 'Изображение предпросмотра (PNG/JPEG, до 1 МБ)', 'プレビュー画像（PNG/JPEG、最大 1 MB）'],
+  'publish.category': ['分类标签', 'Category tag', '분류 태그', 'Категория', 'カテゴリタグ'],
+  'publish.visibility': ['可见性', 'Visibility', '공개 범위', 'Видимость', '公開範囲'],
+  'publish.public': ['公开', 'Public', '공개', 'Открытый доступ', '公開'],
+  'publish.friendsOnly': ['仅好友', 'Friends only', '친구만', 'Только друзья', 'フレンドのみ'],
+  'publish.private': ['私密', 'Private', '비공개', 'Закрытый доступ', '非公開'],
+  'publish.unlisted': ['不公开列出', 'Unlisted', '목록에 표시 안 함', 'Доступ по ссылке', '限定公開'],
+  'publish.confirmUpload': ['我确认要使用当前 Steam 账号创建新的创意工坊项目。', 'I confirm that I want to create a new Workshop item with the current Steam account.', '현재 Steam 계정으로 새 창작마당 항목을 만들겠습니다.', 'Я подтверждаю создание нового объекта Мастерской с текущей учётной записью Steam.', '現在の Steam アカウントで新しいワークショップ項目を作成することを確認します。'],
+  'publish.confirmUpdate': ['我确认当前 Steam 账号拥有该创意工坊项目；程序会在提交前再次验证所有权。', 'I confirm that the current Steam account owns this Workshop item; ownership will be verified again before submission.', '현재 Steam 계정이 이 창작마당 항목을 소유하고 있으며 제출 전에 소유권을 다시 확인합니다.', 'Я подтверждаю, что объект Мастерской принадлежит текущей учётной записи Steam; перед отправкой право владения будет проверено ещё раз.', '現在の Steam アカウントがこのワークショップ項目を所有していることを確認します。送信前に所有権を再確認します。'],
+  'publish.keepSteamOnline': ['提交期间请保持 Steam 在线并关闭 Warhammer III。', 'Keep Steam online and close Warhammer III while submitting.', '제출하는 동안 Steam을 온라인 상태로 유지하고 Warhammer III를 종료하세요.', 'Во время отправки оставьте Steam в сети и закройте Warhammer III.', '送信中は Steam をオンラインにし、Warhammer III を終了してください。'],
+  'publish.createUpload': ['创建并上传', 'Create and upload', '생성 및 업로드', 'Создать и загрузить', '作成してアップロード'],
+  'publish.submitUpdate': ['提交更新', 'Submit update', '업데이트 제출', 'Отправить обновление', '更新を送信'],
+  'publish.categoryGraphical': ['美化', 'Graphical', '그래픽', 'Графика', 'グラフィック'],
+  'publish.categoryCampaign': ['战役', 'Campaign', '캠페인', 'Кампания', 'キャンペーン'],
+  'publish.categoryUnits': ['单位', 'Units', '유닛', 'Отряды', 'ユニット'],
+  'publish.categoryBattle': ['战斗', 'Battle', '전투', 'Битвы', 'バトル'],
+  'publish.categoryUi': ['界面', 'UI', 'UI', 'Интерфейс', 'UI'],
+  'publish.categoryMaps': ['地图', 'Maps', '지도', 'Карты', 'マップ'],
+  'publish.categoryOverhaul': ['大修', 'Overhaul', '대규모 개편', 'Глобальная переработка', 'オーバーホール'],
+  'publish.categoryCompilation': ['合集', 'Compilation', '모음집', 'Сборник', 'コレクション'],
+  'publish.categoryCheat': ['修改', 'Cheat', '치트', 'Читы', 'チート'],
+
+  'settings.aria': ['设置', 'Settings', '설정', 'Настройки', '設定'],
+  'settings.eyebrow': ['设置', 'CONFIGURATION', '설정', 'НАСТРОЙКИ', '設定'],
+  'settings.title': ['管理器设置', 'Manager settings', '관리자 설정', 'Настройки менеджера', 'マネージャー設定'],
+  'settings.pagesAria': ['设置分页', 'Settings pages', '설정 페이지', 'Разделы настроек', '設定ページ'],
+  'settings.tabBasic': ['基础设置', 'Basic settings', '기본 설정', 'Основные настройки', '基本設定'],
+  'settings.tabBasicDetail': ['路径与工坊', 'Paths and Workshop', '경로 및 창작마당', 'Пути и Мастерская', 'パスとワークショップ'],
+  'settings.tabFeatures': ['功能', 'Features', '기능', 'Функции', '機能'],
+  'settings.tabFeaturesDetail': ['游戏启动增强', 'Game launch enhancements', '게임 실행 향상', 'Улучшения запуска игры', 'ゲーム起動の拡張'],
+  'settings.tabAi': ['AI 集成', 'AI integration', 'AI 통합', 'Интеграция ИИ', 'AI 統合'],
+  'settings.tabAiDetail': ['翻译与摘要', 'Translation and summaries', '번역 및 요약', 'Перевод и сводки', '翻訳と要約'],
+  'settings.tabAbout': ['关于项目', 'About', '프로젝트 정보', 'О проекте', 'プロジェクトについて'],
+  'settings.tabAboutDetail': ['更新与支持', 'Updates and support', '업데이트 및 지원', 'Обновления и поддержка', '更新とサポート'],
+  'settings.basicEyebrow': ['基础设置', 'GENERAL', '기본 설정', 'ОБЩИЕ', '基本設定'],
+  'settings.basicIntro': ['管理界面语言、游戏路径和工坊信息检查。', 'Manage interface language, game paths, and Workshop information checks.', '인터페이스 언어, 게임 경로 및 창작마당 정보 확인을 관리합니다.', 'Настройка языка интерфейса, путей игры и проверки данных Мастерской.', '表示言語、ゲームパス、ワークショップ情報の確認を管理します。'],
+  'settings.pathValid': ['Warhammer III 路径有效', 'Warhammer III path is valid', 'Warhammer III 경로가 유효함', 'Путь к Warhammer III корректен', 'Warhammer III のパスは有効です'],
+  'settings.pathInvalid': ['尚未找到有效游戏目录', 'No valid game folder found', '유효한 게임 폴더를 찾지 못함', 'Папка игры не найдена', '有効なゲームフォルダーが見つかりません'],
+  'settings.pathRequirement': ['需要包含 Warhammer3.exe 和 data 目录。', 'The folder must contain Warhammer3.exe and the data folder.', '폴더에 Warhammer3.exe와 data 폴더가 있어야 합니다.', 'Папка должна содержать Warhammer3.exe и каталог data.', 'フォルダーには Warhammer3.exe と data フォルダーが必要です。'],
+  'settings.autoDetectSteam': ['自动检测 Steam', 'Detect with Steam', 'Steam에서 자동 감지', 'Найти через Steam', 'Steam から自動検出'],
+  'settings.interfaceLanguage': ['界面语言', 'Interface language', '인터페이스 언어', 'Язык интерфейса', '表示言語'],
+  'settings.languageHelp': ['保存后，界面、状态提示和更新日志都会切换为所选语言；创意工坊内容缺失时回退英语。', 'After saving, the interface, status messages, and changelog use the selected language. Workshop content falls back to English when unavailable.', '저장하면 인터페이스, 상태 메시지 및 변경 내역이 선택한 언어로 바뀝니다. 창작마당 내용이 없으면 영어를 사용합니다.', 'После сохранения интерфейс, сообщения состояния и журнал изменений будут показаны на выбранном языке. Для отсутствующих материалов Мастерской используется английский.', '保存後、画面、ステータス表示、更新履歴が選択した言語に切り替わります。ワークショップ内容がない場合は英語にフォールバックします。'],
+  'settings.gameFolder': ['游戏目录', 'Game folder', '게임 폴더', 'Папка игры', 'ゲームフォルダー'],
+  'settings.workshopFolder': ['创意工坊内容目录', 'Workshop content folder', '창작마당 콘텐츠 폴더', 'Папка содержимого Мастерской', 'ワークショップコンテンツフォルダー'],
+  'settings.workshopChecks': ['工坊与检查', 'Workshop and checks', '창작마당 및 확인', 'Мастерская и проверки', 'ワークショップと確認'],
+  'settings.scanScope': ['MOD 扫描覆盖游戏 Data 与 STEAM 创意工坊。', 'MOD scanning covers Game Data and Steam Workshop.', 'MOD 검색은 게임 Data와 Steam 창작마당을 대상으로 합니다.', 'Сканирование MOD охватывает Data игры и Мастерскую Steam.', 'MOD スキャンはゲーム Data と Steam ワークショップを対象にします。'],
+  'settings.refreshOnStart': ['启动时后台刷新工坊信息', 'Refresh Workshop information at startup', '시작할 때 창작마당 정보 새로 고침', 'Обновлять данные Мастерской при запуске', '起動時にワークショップ情報を更新'],
+  'settings.refreshOnStartHelp': ['自动获取标题、作者昵称、发布时间和预览图；关闭后仍可从主界面手动刷新', 'Fetch titles, author names, timestamps, and previews automatically; manual refresh remains available', '제목, 작성자 이름, 시간 및 미리보기를 자동으로 가져오며 수동 새로 고침도 사용할 수 있습니다', 'Автоматически получать названия, авторов, даты и изображения; ручное обновление останется доступно', 'タイトル、作者名、日時、プレビューを自動取得します。無効でも手動更新できます'],
+  'settings.checkOutdated': ['检查过期 MOD', 'Check for outdated MODs', '오래된 MOD 확인', 'Проверять устаревшие MOD', '古い MOD を確認'],
+  'settings.checkOutdatedHelp': ['过期MOD仅代表该MOD在游戏本体更新后未更新，不代表这个MOD无法使用', 'An outdated MOD only means it has not been updated since the game was updated; it does not mean the MOD cannot be used.', '오래된 MOD는 게임 본체 업데이트 후 갱신되지 않았다는 뜻일 뿐이며, 해당 MOD를 사용할 수 없다는 의미는 아닙니다.', 'Устаревший MOD означает лишь, что он не обновлялся после обновления игры; это не значит, что MOD нельзя использовать.', '古い MOD とはゲーム本体の更新後に更新されていないという意味にすぎず、その MOD が使用できないという意味ではありません。'],
+  'settings.featuresEyebrow': ['功能', 'FEATURES', '기능', 'ФУНКЦИИ', '機能'],
+  'settings.featuresIntro': ['这些功能仅在通过管理器启动 Warhammer III 时生效。', 'These features apply only when Warhammer III is launched through the manager.', '이 기능은 관리자를 통해 Warhammer III를 실행할 때만 적용됩니다.', 'Эти функции действуют только при запуске Warhammer III через менеджер.', 'これらの機能はマネージャーから Warhammer III を起動した場合のみ有効です。'],
+  'settings.allUnitsLords': ['自定义战斗将所有单位视为领主', 'Treat all units as lords in custom battles', '사용자 지정 전투에서 모든 유닛을 군주로 취급', 'Считать все отряды лордами в пользовательских битвах', 'カスタムバトルですべてのユニットをロードとして扱う'],
+  'settings.allUnitsLordsHelp': ['启动时生成临时权限表，方便在自定义战斗中测试单位', 'Generate a temporary permissions table at launch to simplify unit testing in custom battles', '실행 시 임시 권한 표를 생성하여 사용자 지정 전투에서 유닛 테스트를 간소화합니다', 'Создавать временную таблицу разрешений для тестирования отрядов в пользовательских битвах', '起動時に一時的な権限テーブルを作り、カスタムバトルでのユニットテストを容易にします'],
+  'settings.scriptLogging': ['启用脚本日志', 'Enable script logging', '스크립트 로그 활성화', 'Включить журнал скриптов', 'スクリプトログを有効化'],
+  'settings.scriptLoggingHelp': ['启动时启用脚本控制台日志，供 MOD 脚本调试使用', 'Enable script console logging at launch for MOD debugging', '실행 시 MOD 디버깅용 스크립트 콘솔 로그를 활성화합니다', 'Включать консольный журнал скриптов для отладки MOD', '起動時に MOD デバッグ用のスクリプトコンソールログを有効にします'],
+  'settings.skipIntro': ['跳过开场动画', 'Skip intro movies', '인트로 영상 건너뛰기', 'Пропускать вступительные ролики', 'イントロムービーをスキップ'],
+  'settings.skipIntroHelp': ['跳过警告页与启动影片', 'Skip the warning screen and startup movies', '경고 화면과 시작 영상을 건너뜁니다', 'Пропускать экран предупреждения и стартовые ролики', '警告画面と起動ムービーをスキップします'],
+  'settings.runtimeNote': ['不会修改任何原始 MOD Pack；运行时文件会由管理器按当前选项生成。', 'Original MOD Packs are never modified; runtime files are generated from the current options.', '원본 MOD Pack은 수정하지 않으며 현재 옵션에 따라 런타임 파일을 생성합니다.', 'Исходные Pack MOD не изменяются; рабочие файлы создаются по текущим параметрам.', '元の MOD Pack は変更せず、現在の設定から実行時ファイルを生成します。'],
+  'settings.aiEyebrow': ['AI 集成', 'AI INTEGRATION', 'AI 통합', 'ИНТЕГРАЦИЯ ИИ', 'AI 統合'],
+  'settings.aiIntro': ['生成当前语言的 MOD 标题和摘要备注。', 'Generate MOD titles and summary notes in the current language.', '현재 언어로 MOD 제목과 요약 메모를 생성합니다.', 'Создавать названия MOD и краткие заметки на текущем языке.', '現在の言語で MOD タイトルと要約メモを生成します。'],
+  'settings.aiEnable': ['启用 AI 生成当前语言标题和摘要备注', 'Use AI to generate titles and summary notes in the current language', 'AI로 현재 언어 제목 및 요약 메모 생성', 'Создавать названия и сводки на текущем языке с помощью ИИ', 'AI で現在の言語のタイトルと要約メモを生成'],
+  'settings.aiEnableHelp': ['标题直接翻译；备注先结合标题总结原简介，再翻译为当前设置语言', 'Titles are translated directly; notes summarize the original description with the title, then translate the summary', '제목은 직접 번역하고 메모는 제목과 원문 설명을 요약한 뒤 번역합니다', 'Название переводится напрямую; заметка сначала суммирует исходное описание с учётом названия, затем переводится', 'タイトルは直接翻訳し、メモはタイトルを踏まえて元説明を要約してから翻訳します'],
+  'settings.baseUrl': ['OpenAI 兼容接口地址', 'OpenAI-compatible base URL', 'OpenAI 호환 기본 URL', 'Базовый URL OpenAI-совместимого сервиса', 'OpenAI 互換ベース URL'],
+  'settings.model': ['模型', 'Model', '모델', 'Модель', 'モデル'],
+  'settings.modelPlaceholder': ['填写服务商提供的模型名称', 'Enter the model name provided by the service', '서비스에서 제공한 모델 이름 입력', 'Введите имя модели, указанное сервисом', 'サービス提供元のモデル名を入力'],
+  'settings.temperature': ['温度', 'Temperature', '온도', 'Температура', '温度'],
+  'settings.apiKey': ['API 密钥', 'API key', 'API 키', 'API-ключ', 'API キー'],
+  'settings.secretSaved': ['已保存；留空保持不变', 'Saved; leave blank to keep it', '저장됨; 유지하려면 비워 두세요', 'Сохранено; оставьте пустым без изменений', '保存済み；変更しない場合は空欄'],
+  'settings.secretOptional': ['本地服务无需密钥时可留空', 'Leave blank if the local service does not require a key', '로컬 서비스에 키가 필요 없으면 비워 두세요', 'Оставьте пустым, если локальному сервису не нужен ключ', 'ローカルサービスでキーが不要なら空欄にできます'],
+  'settings.clearSecret': ['清除已保存的 API Key', 'Clear saved API key', '저장된 API 키 지우기', 'Удалить сохранённый API-ключ', '保存済み API キーを消去'],
+  'settings.aiNote': ['优先复用本地战锤术语库，未命中时由 AI 根据原文直接翻译；不联网搜索、不查询原版 LOC。支持 OpenAI-compatible Chat Completions 接口，API Key 仅保存在本机。', 'The local Warhammer glossary is used first; unmatched terms are translated directly from the source by AI. No web search or original LOC lookup is performed. OpenAI-compatible Chat Completions are supported, and the API key stays on this device.', '로컬 워해머 용어집을 우선 사용하며 일치하지 않는 용어는 AI가 원문에서 직접 번역합니다. 웹 검색이나 원본 LOC 조회는 하지 않습니다. OpenAI 호환 Chat Completions를 지원하며 API 키는 이 기기에만 저장됩니다.', 'Сначала используется локальный словарь Warhammer; отсутствующие термины ИИ переводит напрямую из исходного текста. Поиск в интернете и сверка с оригинальными LOC не выполняются. Поддерживается OpenAI-совместимый Chat Completions, API-ключ хранится только на этом устройстве.', 'ローカルの Warhammer 用語集を優先し、未登録語は AI が原文から直接翻訳します。Web 検索や公式 LOC の照合は行いません。OpenAI 互換 Chat Completions に対応し、API キーはこの端末だけに保存されます。'],
+  'settings.aboutIntro': ['《全面战争：战锤 3》的播放集、工坊、依赖与启动管理工具。', 'A playset, Workshop, dependency, and launch manager for Total War: WARHAMMER III.', 'Total War: WARHAMMER III용 플레이 세트, 창작마당, 종속성 및 실행 관리자입니다.', 'Менеджер наборов, Мастерской, зависимостей и запуска Total War: WARHAMMER III.', 'Total War: WARHAMMER III のプレイセット、ワークショップ、依存関係、起動を管理します。'],
+  'settings.autoUpdate': ['自动检查更新', 'Check for updates automatically', '업데이트 자동 확인', 'Автоматически проверять обновления', '更新を自動確認'],
+  'settings.autoUpdateHelp': ['启动后每 24 小时最多检查一次', 'Check at most once every 24 hours after startup', '시작 후 24시간마다 최대 한 번 확인', 'Проверять не чаще раза в 24 часа после запуска', '起動後、24時間に最大1回確認'],
+  'settings.checkUpdate': ['检查更新', 'Check for updates', '업데이트 확인', 'Проверить обновления', '更新を確認'],
+  'settings.downloads': ['下载地址', 'Downloads', '다운로드', 'Загрузки', 'ダウンロード'],
+  'settings.downloadsHelp': ['访问 GitHub 或 Gitee 的公开发布版本。', 'Open public releases on GitHub or Gitee.', 'GitHub 또는 Gitee의 공개 릴리스를 엽니다.', 'Открыть публичные выпуски на GitHub или Gitee.', 'GitHub または Gitee の公開リリースを開きます。'],
+  'settings.githubReleases': ['GitHub 发布页', 'GitHub releases', 'GitHub 릴리스', 'Выпуски GitHub', 'GitHub リリース'],
+  'settings.githubReleasesNote': ['查看公开版本与更新说明。', 'View public versions and release notes.', '공개 버전 및 변경 내용을 확인합니다.', 'Просмотреть публичные версии и описания.', '公開バージョンと更新内容を確認します。'],
+  'settings.giteeReleases': ['Gitee 发布页', 'Gitee releases', 'Gitee 릴리스', 'Выпуски Gitee', 'Gitee リリース'],
+  'settings.giteeReleasesNote': ['下载国内发布文件。', 'Download releases from the China mirror.', '중국 미러에서 릴리스를 다운로드합니다.', 'Скачать выпуск с китайского зеркала.', '中国向けミラーからリリースをダウンロードします。'],
+  'settings.feedback': ['反馈与交流', 'Feedback and community', '피드백 및 커뮤니티', 'Обратная связь и сообщество', 'フィードバックと交流'],
+  'settings.feedbackHelp': ['反馈时建议附带截图、日志和复现步骤。', 'Include screenshots, logs, and reproduction steps when reporting an issue.', '문제를 보고할 때 스크린샷, 로그 및 재현 단계를 포함하세요.', 'При сообщении о проблеме приложите снимки экрана, журналы и шаги воспроизведения.', '問題報告にはスクリーンショット、ログ、再現手順を添えてください。'],
+  'settings.githubIssuesNote': ['提交问题、建议及可复现步骤。', 'Submit issues, suggestions, and reproduction steps.', '문제, 제안 및 재현 단계를 제출합니다.', 'Сообщить о проблеме, предложении и шагах воспроизведения.', '問題、提案、再現手順を投稿します。'],
+  'settings.qqGroup': ['QQ群', 'QQ group', 'QQ 그룹', 'Группа QQ', 'QQ グループ'],
+  'settings.qqGroupNote': ['加入群聊反馈问题、交流使用心得。', 'Join the group to report issues and discuss usage.', '그룹에 참여하여 문제를 보고하고 사용 경험을 공유하세요.', 'Присоединяйтесь к группе для вопросов и обсуждения.', 'グループに参加して問題報告や使い方を交流できます。'],
+  'settings.updateChannel': ['软件更新通道', 'Software update channel', '소프트웨어 업데이트 채널', 'Канал обновления программы', 'ソフトウェア更新チャンネル'],
+  'settings.updateChannelHelp': ['留空时自动检查 Gitee 与 GitHub，也可以指定自己的正式更新清单。', 'Leave blank to check Gitee and GitHub automatically, or provide a custom release manifest.', '비워 두면 Gitee와 GitHub를 자동 확인하며 사용자 지정 릴리스 매니페스트를 지정할 수도 있습니다.', 'Оставьте пустым для автоматической проверки Gitee и GitHub или укажите свой манифест выпуска.', '空欄の場合は Gitee と GitHub を自動確認します。独自の正式更新マニフェストも指定できます。'],
+  'settings.customManifest': ['自定义更新清单地址（可选）', 'Custom update manifest URL (optional)', '사용자 지정 업데이트 매니페스트 URL(선택 사항)', 'URL пользовательского манифеста обновления (необязательно)', 'カスタム更新マニフェスト URL（任意）'],
+  'settings.manifestPlaceholder': ['留空时自动检查 Gitee 与 GitHub', 'Leave blank to check Gitee and GitHub', '비워 두면 Gitee와 GitHub 확인', 'Оставьте пустым для проверки Gitee и GitHub', '空欄の場合は Gitee と GitHub を確認'],
+  'settings.manifestHelp': ['中文优先使用 Gitee，其他语言优先使用 GitHub；两个仓库都会检查，版本相同时采用首选源。填写地址后将只使用该自定义更新通道。', 'Chinese prefers Gitee and other languages prefer GitHub. Both repositories are checked, and the preferred source wins when versions match. A custom URL replaces both built-in channels.', '중국어는 Gitee를, 다른 언어는 GitHub를 우선 사용합니다. 두 저장소를 모두 확인하고 버전이 같으면 기본 소스를 사용합니다. 사용자 지정 URL을 입력하면 해당 채널만 사용합니다.', 'Для китайского приоритетен Gitee, для остальных языков — GitHub. Проверяются оба репозитория; при одинаковой версии используется предпочтительный источник. Пользовательский URL заменяет оба встроенных канала.', '中国語では Gitee、その他の言語では GitHub を優先します。両リポジトリを確認し、同じバージョンなら優先ソースを使用します。カスタム URL を入力すると、そのチャンネルのみ使用します。'],
+  'settings.donate': ['打赏支持', 'Support the project', '프로젝트 후원', 'Поддержать проект', 'プロジェクトを支援'],
+  'settings.donateHelp': ['如果这个项目帮到了你，可以使用微信或支付宝支持后续开发与维护。', 'If this project helped you, you can support future development and maintenance through WeChat or Alipay.', '이 프로젝트가 도움이 되었다면 WeChat 또는 Alipay로 향후 개발 및 유지 관리를 지원할 수 있습니다.', 'Если проект оказался полезен, поддержите дальнейшую разработку через WeChat или Alipay.', 'このプロジェクトが役立った場合、WeChat または Alipay で今後の開発と保守を支援できます。'],
+  'settings.showQr': ['查看收款码', 'Show payment QR code', '결제 QR 코드 보기', 'Показать QR-код', '支払い QR コードを表示'],
+  'settings.saveRescan': ['保存并重新扫描', 'Save and rescan', '저장 후 다시 검색', 'Сохранить и сканировать снова', '保存して再スキャン'],
+  'settings.donateEyebrow': ['支持', 'SUPPORT', '지원', 'ПОДДЕРЖКА', 'サポート'],
+  'settings.donateAlt': ['微信与支付宝收款二维码', 'WeChat and Alipay payment QR code', 'WeChat 및 Alipay 결제 QR 코드', 'QR-код оплаты WeChat и Alipay', 'WeChat と Alipay の支払い QR コード'],
+  'settings.donateThanks': ['感谢支持！微信和支付宝都可以扫码。', 'Thank you for your support. The code works with WeChat and Alipay.', '후원해 주셔서 감사합니다. WeChat과 Alipay 모두 사용할 수 있습니다.', 'Спасибо за поддержку. Код можно сканировать в WeChat и Alipay.', 'ご支援ありがとうございます。WeChat と Alipay のどちらでも読み取れます。'],
+  'settings.openFailed': ['打开链接失败', 'Failed to open the link', '링크를 열지 못했습니다', 'Не удалось открыть ссылку', 'リンクを開けませんでした'],
+  'settings.linkCopied': ['链接已复制', 'Link copied', '링크가 복사됨', 'Ссылка скопирована', 'リンクをコピーしました'],
+  'settings.copyFailed': ['复制失败，请手动复制链接', 'Copy failed. Copy the link manually.', '복사에 실패했습니다. 링크를 직접 복사하세요.', 'Не удалось скопировать. Скопируйте ссылку вручную.', 'コピーに失敗しました。リンクを手動でコピーしてください。'],
+
+  'busy.initialize': ['初始化', 'Initializing', '초기화 중', 'Инициализация', '初期化中'],
+  'busy.refreshWorkshop': ['刷新工坊信息', 'Refreshing Workshop information', '창작마당 정보 새로 고침', 'Обновление данных Мастерской', 'ワークショップ情報を更新中'],
+  'busy.scanMods': ['扫描 MOD', 'Scanning MODs', 'MOD 검색 중', 'Сканирование MOD', 'MOD をスキャン中'],
+  'busy.createPlayset': ['新建播放集', 'Creating playset', '플레이 세트 생성 중', 'Создание набора', 'プレイセットを作成中'],
+  'busy.renamePlayset': ['重命名播放集', 'Renaming playset', '플레이 세트 이름 변경 중', 'Переименование набора', 'プレイセット名を変更中'],
+  'busy.deletePlayset': ['删除播放集', 'Deleting playset', '플레이 세트 삭제 중', 'Удаление набора', 'プレイセットを削除中'],
+  'busy.switchPlayset': ['切换播放集', 'Switching playset', '플레이 세트 전환 중', 'Переключение набора', 'プレイセットを切替中'],
+  'busy.launchGame': ['启动游戏', 'Launching game', '게임 실행 중', 'Запуск игры', 'ゲームを起動中'],
+  'busy.continueGame': ['继续游戏', 'Continuing game', '게임 계속하는 중', 'Продолжение игры', 'ゲームを再開中'],
+  'busy.readSaves': ['读取存档列表', 'Reading save list', '저장 목록 읽는 중', 'Чтение списка сохранений', 'セーブ一覧を読み込み中'],
+  'busy.loadSave': ['载入指定存档', 'Loading save', '저장 불러오는 중', 'Загрузка сохранения', 'セーブを読み込み中'],
+  'busy.saveSettings': ['保存设置', 'Saving settings', '설정 저장 중', 'Сохранение настроек', '設定を保存中'],
+  'busy.checkUpdates': ['检查软件更新', 'Checking for updates', '업데이트 확인 중', 'Проверка обновлений', '更新を確認中'],
+  'busy.downloadUpdate': ['下载并校验更新', 'Downloading and verifying update', '업데이트 다운로드 및 확인 중', 'Загрузка и проверка обновления', '更新をダウンロードして検証中'],
+  'busy.installUpdate': ['准备安装更新', 'Preparing update installation', '업데이트 설치 준비 중', 'Подготовка установки обновления', '更新のインストールを準備中'],
+  'busy.detectSteam': ['检测 Steam 路径', 'Detecting Steam paths', 'Steam 경로 감지 중', 'Поиск путей Steam', 'Steam パスを検出中'],
+  'busy.aiGenerate': ['AI 生成标题和摘要备注', 'Generating title and summary with AI', 'AI로 제목 및 요약 생성 중', 'Создание названия и сводки с ИИ', 'AI でタイトルと要約を生成中'],
+  'busy.editType': ['修改 MOD 类型', 'Changing MOD type', 'MOD 유형 변경 중', 'Изменение типа MOD', 'MOD の種類を変更中'],
+  'busy.hideMod': ['隐藏 MOD', 'Hiding MOD', 'MOD 숨기는 중', 'Скрытие MOD', 'MOD を非表示中'],
+  'busy.unhideMod': ['取消隐藏 MOD', 'Unhiding MOD', 'MOD 숨김 해제 중', 'Отображение MOD', 'MOD を再表示中'],
+  'busy.createType': ['新增 MOD 类型', 'Creating MOD type', 'MOD 유형 생성 중', 'Создание типа MOD', 'MOD の種類を作成中'],
+  'busy.deleteType': ['删除 MOD 类型', 'Deleting MOD type', 'MOD 유형 삭제 중', 'Удаление типа MOD', 'MOD の種類を削除中'],
+  'busy.previewShare': ['检查分享码订阅状态', 'Checking share-code subscriptions', '공유 코드 구독 상태 확인 중', 'Проверка подписок из кода', '共有コードの購読状態を確認中'],
+  'busy.subscribeWorkshop': ['自动订阅创意工坊 MOD', 'Subscribing to Workshop MODs', '창작마당 MOD 구독 중', 'Подписка на MOD Мастерской', 'ワークショップ MOD を購読中'],
+  'busy.importShare': ['导入到当前播放集', 'Importing into current playset', '현재 플레이 세트로 가져오는 중', 'Импорт в текущий набор', '現在のプレイセットへインポート中'],
+  'busy.ignoreIssue': ['忽略 MOD 问题', 'Ignoring MOD issue', 'MOD 문제 무시 중', 'Игнорирование проблемы MOD', 'MOD 問題を無視中'],
+  'busy.restoreIssue': ['恢复 MOD 问题', 'Restoring MOD issue', 'MOD 문제 복원 중', 'Восстановление проблемы MOD', 'MOD 問題を復元中'],
+  'busy.unsubscribeWorkshop': ['取消 Steam 创意工坊订阅', 'Unsubscribing from Steam Workshop', 'Steam 창작마당 구독 취소 중', 'Отмена подписки в Мастерской Steam', 'Steam ワークショップの購読を解除中'],
+  'busy.forceUpdateWorkshop': ['请求 Steam 强制更新', 'Requesting a Steam force update', 'Steam 강제 업데이트 요청 중', 'Запрос принудительного обновления Steam', 'Steam の強制更新を要求中'],
+  'busy.uploadWorkshop': ['上传到 Steam 创意工坊', 'Uploading to Steam Workshop', 'Steam 창작마당에 업로드 중', 'Загрузка в Мастерскую Steam', 'Steam ワークショップへアップロード中'],
+  'busy.updateWorkshop': ['更新 Steam 创意工坊', 'Updating Steam Workshop', 'Steam 창작마당 업데이트 중', 'Обновление Мастерской Steam', 'Steam ワークショップを更新中'],
+  'busy.startRpfm': ['启动 RPFM', 'Starting RPFM', 'RPFM 시작 중', 'Запуск RPFM', 'RPFM を起動中'],
+  'busy.copyData': ['复制 MOD 到 Data', 'Copying MOD to Data', 'MOD를 Data로 복사 중', 'Копирование MOD в Data', 'MOD を Data へコピー中'],
+  'busy.syncData': ['同步工坊 MOD 到 Data', 'Syncing Workshop MODs to Data', '창작마당 MOD를 Data로 동기화 중', 'Синхронизация MOD Мастерской с Data', 'ワークショップ MOD を Data へ同期中'],
+  'busy.alreadyRunning': ['正在执行：{task}', 'Already running: {task}', '이미 실행 중: {task}', 'Уже выполняется: {task}', '実行中：{task}'],
+
+  'toast.updateRollback': ['自动更新安装失败，已恢复旧版本：{error}', 'Automatic update installation failed; the previous version was restored: {error}', '자동 업데이트 설치에 실패하여 이전 버전을 복원했습니다: {error}', 'Не удалось установить обновление; восстановлена предыдущая версия: {error}', '自動更新のインストールに失敗し、以前のバージョンを復元しました：{error}'],
+  'toast.scanComplete': ['扫描完成：{count} 个 Pack', 'Scan complete: {count} Packs', '검색 완료: Pack {count}개', 'Сканирование завершено: Pack — {count}', 'スキャン完了：Pack {count}件'],
+  'toast.workshopComplete': ['工坊信息已在后台刷新完成', 'Workshop information refresh completed', '창작마당 정보 새로 고침 완료', 'Обновление данных Мастерской завершено', 'ワークショップ情報の更新が完了しました'],
+  'toast.workshopFailed': ['后台刷新工坊信息失败', 'Background Workshop refresh failed', '백그라운드 창작마당 새로 고침 실패', 'Не удалось обновить данные Мастерской в фоне', 'バックグラウンド更新に失敗しました'],
+  'toast.playsetSaveFailed': ['保存当前播放集失败：{error}', 'Failed to save the current playset: {error}', '현재 플레이 세트 저장 실패: {error}', 'Не удалось сохранить текущий набор: {error}', '現在のプレイセットを保存できませんでした：{error}'],
+  'toast.playsetCreated': ['已新建播放集“{name}”', 'Created playset “{name}”', '플레이 세트 “{name}” 생성됨', 'Создан набор «{name}»', 'プレイセット「{name}」を作成しました'],
+  'toast.playsetRenamed': ['播放集已重命名为“{name}”', 'Playset renamed to “{name}”', '플레이 세트 이름이 “{name}”(으)로 변경됨', 'Набор переименован в «{name}»', 'プレイセット名を「{name}」に変更しました'],
+  'toast.playsetSwitched': ['已切换到播放集“{name}”', 'Switched to playset “{name}”', '플레이 세트 “{name}”(으)로 전환됨', 'Выбран набор «{name}»', 'プレイセット「{name}」に切り替えました'],
+  'toast.playsetMissing': ['播放集中有 {count} 个 Pack 未安装', '{count} Packs in the playset are not installed', '플레이 세트의 Pack {count}개가 설치되지 않음', 'В наборе не установлено Pack: {count}', 'プレイセット内の Pack {count}件が未インストールです'],
+  'toast.gameLaunched': ['Warhammer III 已启动（PID {pid}）', 'Warhammer III launched (PID {pid})', 'Warhammer III 실행됨(PID {pid})', 'Warhammer III запущена (PID {pid})', 'Warhammer III を起動しました（PID {pid}）'],
+  'toast.loadingSave': ['正在载入 {name}', 'Loading {name}', '{name} 불러오는 중', 'Загрузка {name}', '{name} を読み込み中'],
+  'toast.settingsSaved': ['设置已保存', 'Settings saved', '설정이 저장됨', 'Настройки сохранены', '設定を保存しました'],
+  'toast.latestVersion': ['当前已是最新版本 v{version}', 'You are using the latest version, v{version}', '최신 버전 v{version}을 사용 중입니다', 'Установлена последняя версия v{version}', '最新バージョン v{version} です'],
+  'toast.updateDownloaded': ['v{version} 已下载并通过校验', 'v{version} downloaded and verified', 'v{version} 다운로드 및 확인 완료', 'v{version} загружена и проверена', 'v{version} をダウンロードして検証しました'],
+  'toast.installingUpdate': ['正在退出并安装新版本', 'Exiting to install the new version', '새 버전 설치를 위해 종료 중', 'Выход для установки новой версии', '新しいバージョンをインストールするため終了します'],
+  'toast.updateIgnored': ['已忽略 v{version}；仍可手动检查并安装', 'Ignored v{version}; you can still check and install it manually', 'v{version}을 무시했습니다. 수동으로 확인하고 설치할 수 있습니다', 'Версия v{version} игнорируется; её можно установить вручную', 'v{version} を無視しました。手動で確認・インストールできます'],
+  'toast.pathsDetected': ['已定位 Warhammer III', 'Warhammer III located', 'Warhammer III 위치 확인됨', 'Warhammer III найдена', 'Warhammer III を検出しました'],
+  'toast.modInfoSaved': ['MOD 信息已保存', 'MOD information saved', 'MOD 정보가 저장됨', 'Сведения MOD сохранены', 'MOD 情報を保存しました'],
+  'toast.aiSaved': ['AI 已生成并保存当前语言标题和摘要备注', 'AI generated and saved the title and summary in the current language', 'AI가 현재 언어 제목과 요약을 생성하고 저장했습니다', 'ИИ создал и сохранил название и сводку на текущем языке', 'AI が現在の言語のタイトルと要約を生成して保存しました'],
+  'toast.typeChanged': ['已修改类型为“{name}”', 'Type changed to “{name}”', '유형이 “{name}”(으)로 변경됨', 'Тип изменён на «{name}»', '種類を「{name}」に変更しました'],
+  'toast.typeSet': ['已设置类型：{names}', 'Types set: {names}', '유형 설정: {names}', 'Установлены типы: {names}', '種類を設定：{names}'],
+  'toast.modMissing': ['MOD 不存在或尚未扫描', 'The MOD does not exist or has not been scanned', 'MOD가 없거나 아직 검색되지 않음', 'MOD не существует или ещё не просканирован', 'MOD が存在しないか、まだスキャンされていません'],
+  'toast.hidden': ['已从列表中隐藏 MOD', 'MOD hidden from the list', '목록에서 MOD를 숨김', 'MOD скрыт из списка', 'MOD を一覧から非表示にしました'],
+  'toast.unhidden': ['已取消隐藏 MOD', 'MOD is visible again', 'MOD 숨김 해제됨', 'MOD снова отображается', 'MOD を再表示しました'],
+  'toast.typeCreated': ['已新增类型“{name}”', 'Created type “{name}”', '유형 “{name}” 생성됨', 'Создан тип «{name}»', '種類「{name}」を作成しました'],
+  'toast.typeDeleted': ['自定义类型已删除，相关 MOD 的类型已同步更新', 'The custom type was deleted and related MODs were updated', '사용자 정의 유형이 삭제되고 관련 MOD가 업데이트됨', 'Пользовательский тип удалён, связанные MOD обновлены', 'カスタム種類を削除し、関連 MOD を更新しました'],
+  'toast.subscriptionAccepted': ['Steam 已接受 {subscribed} 个订阅请求{existing}', 'Steam accepted {subscribed} subscription requests{existing}', 'Steam에서 구독 요청 {subscribed}개를 수락함{existing}', 'Steam принял запросы на подписку: {subscribed}{existing}', 'Steam が {subscribed}件の購読要求を受け付けました{existing}'],
+  'toast.subscriptionExisting': ['，{count} 个已订阅', '; {count} already subscribed', ', {count}개 이미 구독됨', '; уже подписано: {count}', '、{count}件は購読済み'],
+  'toast.pendingDownloads': ['有 {count} 个创意工坊 MOD 等待下载；重新扫描后会自动加入当前播放集', '{count} Workshop MODs are waiting to download; rescan to add them to the current playset automatically', '창작마당 MOD {count}개가 다운로드 대기 중입니다. 다시 검색하면 현재 플레이 세트에 자동 추가됩니다', 'MOD Мастерской ожидают загрузки: {count}; после повторного сканирования они будут добавлены в текущий набор', 'ワークショップ MOD {count}件がダウンロード待ちです。再スキャンすると現在のプレイセットに自動追加されます'],
+  'toast.localMissing': ['有 {count} 个本地项目未安装', '{count} local items are not installed', '로컬 항목 {count}개가 설치되지 않음', 'Не установлено локальных объектов: {count}', 'ローカル項目 {count}件が未インストールです'],
+  'toast.playsetUpdated': ['已更新当前播放集“{name}”', 'Updated current playset “{name}”', '현재 플레이 세트 “{name}” 업데이트됨', 'Текущий набор «{name}» обновлён', '現在のプレイセット「{name}」を更新しました'],
+  'toast.unsubscribeAccepted': ['Steam 已接受取消订阅请求', 'Steam accepted the unsubscribe request', 'Steam에서 구독 취소 요청을 수락함', 'Steam принял запрос на отмену подписки', 'Steam が購読解除要求を受け付けました'],
+  'toast.forceUpdateAccepted': ['Steam 已接受高优先级更新请求', 'Steam accepted the high-priority update request', 'Steam에서 높은 우선순위 업데이트 요청을 수락함', 'Steam принял приоритетный запрос на обновление', 'Steam が優先更新要求を受け付けました'],
+  'toast.publishCopyFailed': ['读取创意工坊多语言简介失败', 'Failed to read multilingual Workshop content', '창작마당 다국어 콘텐츠 읽기 실패', 'Не удалось получить многоязычное описание Мастерской', 'ワークショップの多言語内容を読み込めませんでした'],
+  'toast.agreementNeeded': ['；还需在 Steam 创意工坊接受创作者协议', '; the Steam Workshop contributor agreement must also be accepted', '; Steam 창작마당 기여자 계약에 동의해야 함', '; также требуется принять соглашение автора Мастерской Steam', '；Steam ワークショップの投稿者契約への同意も必要です'],
+  'toast.workshopUploaded': ['工坊项目已创建并上传（ID {id}）{agreement}', 'Workshop item created and uploaded (ID {id}){agreement}', '창작마당 항목 생성 및 업로드 완료(ID {id}){agreement}', 'Объект Мастерской создан и загружен (ID {id}){agreement}', 'ワークショップ項目を作成してアップロードしました（ID {id}）{agreement}'],
+  'toast.workshopUpdated': ['工坊项目已更新（ID {id}）{agreement}', 'Workshop item updated (ID {id}){agreement}', '창작마당 항목 업데이트 완료(ID {id}){agreement}', 'Объект Мастерской обновлён (ID {id}){agreement}', 'ワークショップ項目を更新しました（ID {id}）{agreement}'],
+  'toast.rpfmOpened': ['已在 RPFM 中打开 Pack', 'Pack opened in RPFM', 'RPFM에서 Pack을 열었습니다', 'Pack открыт в RPFM', 'RPFM で Pack を開きました'],
+  'toast.alreadyData': ['该 MOD 已位于 Data 目录', 'This MOD is already in Data', '이 MOD는 이미 Data에 있습니다', 'Этот MOD уже находится в Data', 'この MOD はすでに Data にあります'],
+  'toast.copiedData': ['已复制 {name} 到 Data 目录', 'Copied {name} to Data', '{name}을(를) Data에 복사했습니다', '{name} скопирован в Data', '{name} を Data にコピーしました'],
+  'toast.syncComplete': ['同步完成：新增 {copied}，更新 {updated}，未变化 {unchanged}{skipped}', 'Sync complete: {copied} added, {updated} updated, {unchanged} unchanged{skipped}', '동기화 완료: 추가 {copied}, 업데이트 {updated}, 변경 없음 {unchanged}{skipped}', 'Синхронизация завершена: добавлено {copied}, обновлено {updated}, без изменений {unchanged}{skipped}', '同期完了：追加 {copied}、更新 {updated}、変更なし {unchanged}{skipped}'],
+  'toast.syncSkipped': ['，跳过 {count}', ', {count} skipped', ', {count}개 건너뜀', ', пропущено {count}', '、{count}件をスキップ'],
+}
+
+const catalogs = Object.fromEntries(languageCodes.map((code, languageIndex) => [
+  code,
+  Object.fromEntries(Object.entries(entries).map(([key, variants]) => [key, variants[languageIndex]])),
+]))
+
+export const interfaceLanguage = ref(DEFAULT_LANGUAGE)
 
 export const normalizeLanguage = language => (
   supportedLanguages.has(language) ? language : DEFAULT_LANGUAGE
 )
 
-export const contentLanguageFor = language => (
-  contentLanguageBySelection[normalizeLanguage(language)] || DEFAULT_LANGUAGE
-)
+export const contentLanguageFor = language => normalizeLanguage(language)
+
+export const t = (key, params = {}) => {
+  const language = normalizeLanguage(interfaceLanguage.value)
+  const template = catalogs[language]?.[key] ?? catalogs['en-US']?.[key] ?? key
+  return String(template).replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+  ))
+}
+
+export const hasTranslation = key => languageCodes.every(code => Boolean(catalogs[code]?.[key]))
+
+export const currentLocale = () => normalizeLanguage(interfaceLanguage.value)
+
+export const languageLabel = language => t(language?.labelKey || 'language.zhCN')
 
 export const applyInterfaceLanguage = language => {
   const selectedLanguage = normalizeLanguage(language)
-  const contentLanguage = contentLanguageFor(selectedLanguage)
-  document.documentElement.lang = contentLanguage
-  document.documentElement.dataset.selectedLanguage = selectedLanguage
-  document.documentElement.dataset.contentLanguage = contentLanguage
+  interfaceLanguage.value = selectedLanguage
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = selectedLanguage
+    document.documentElement.dataset.selectedLanguage = selectedLanguage
+    document.documentElement.dataset.contentLanguage = selectedLanguage
+  }
   return selectedLanguage
 }
+
+export const localizedPlaysetName = playset => (
+  playset?.is_default || playset?.id === 'default' ? t('common.default') : String(playset?.name || '')
+)
+
+export const localizedModTypeName = type => (
+  type?.built_in && type?.id ? t(`modType.${type.id}`) : String(type?.name || '')
+)
+
+const hanPattern = /[\u3400-\u9fff]/u
+
+export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
+  const value = String(message || '').trim()
+  const language = normalizeLanguage(interfaceLanguage.value)
+  if (!value) return t(fallbackKey)
+  if (!hanPattern.test(value)) {
+    if (language === 'en-US') return value
+    return t(fallbackKey)
+  }
+  if (language === 'zh-CN') return value
+  if (value.startsWith('缺少依赖：')) {
+    return t('warnings.missingMessage', { names: value.slice('缺少依赖：'.length) })
+  }
+  if (value === 'Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态') {
+    return t('warnings.workshopDependencyMessage')
+  }
+  if (value === '该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用') {
+    return t('warnings.outdatedMessage')
+  }
+  return t(fallbackKey)
+}
+
+export const translationKeys = Object.freeze(Object.keys(entries))

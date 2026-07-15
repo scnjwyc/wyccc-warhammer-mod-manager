@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import urllib.parse
 import zlib
 from typing import Any
 
@@ -9,6 +10,7 @@ from .models import ModAsset
 
 PREFIX = "WMM1"
 LEGACY_PREFIXES = ("WWM1", "WWMM1")
+PENDING_WORKSHOP_PREFIX = "pending:steam:"
 
 
 def export_share(mods: list[ModAsset]) -> str:
@@ -88,39 +90,86 @@ def resolve_share(
     ordered_ids: list[str] = []
     missing: list[dict[str, Any]] = []
     for reference in references:
-        if reference.get("legacy_workshop_project"):
-            workshop_id = str(reference.get("workshop_id") or "")
-            candidates = sorted(
-                (
-                    asset
-                    for asset in assets.values()
-                    if workshop_id and asset.workshop_id == workshop_id
-                ),
-                key=lambda item: (item.pack_name.casefold(), item.id),
-            )
-            if not candidates:
-                missing.append(reference)
-                continue
-            for candidate in candidates:
-                if candidate.id not in ordered_ids:
-                    ordered_ids.append(candidate.id)
+        candidates = _resolve_reference(reference, assets)
+        if not candidates:
+            missing.append(reference)
             continue
+        for candidate in candidates:
+            if candidate.id not in ordered_ids:
+                ordered_ids.append(candidate.id)
+    return ordered_ids, missing
 
-        selected = assets.get(str(reference.get("id") or ""))
-        if not selected:
-            workshop_id = str(reference.get("workshop_id") or "")
-            pack_name = str(reference.get("pack_name") or "").casefold()
-            source = str(reference.get("source") or "")
-            candidates = [
-                asset
-                for asset in assets.values()
-                if (not workshop_id or asset.workshop_id == workshop_id)
-                and (not pack_name or asset.pack_name.casefold() == pack_name)
-                and (not source or asset.source == source)
-            ]
-            selected = sorted(candidates, key=lambda item: item.id)[0] if candidates else None
-        if selected and selected.id not in ordered_ids:
-            ordered_ids.append(selected.id)
+
+def resolve_share_with_pending(
+    references: list[dict[str, Any]],
+    assets: dict[str, ModAsset],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Resolve installed items while preserving downloadable Workshop entries in order."""
+    ordered_ids: list[str] = []
+    missing: list[dict[str, Any]] = []
+    for reference in references:
+        candidates = _resolve_reference(reference, assets)
+        if candidates:
+            resolved_ids = [candidate.id for candidate in candidates]
         else:
             missing.append(reference)
+            pending_id = pending_workshop_mod_id(reference)
+            resolved_ids = [pending_id] if pending_id else []
+        for mod_id in resolved_ids:
+            if mod_id and mod_id not in ordered_ids:
+                ordered_ids.append(mod_id)
     return ordered_ids, missing
+
+
+def pending_workshop_mod_id(reference: dict[str, Any]) -> str:
+    workshop_id = str(reference.get("workshop_id") or "").strip()
+    if not workshop_id.isdigit():
+        return ""
+    pack_name = urllib.parse.quote(
+        str(reference.get("pack_name") or "").strip().casefold(),
+        safe="",
+    )
+    return f"{PENDING_WORKSHOP_PREFIX}{workshop_id}:{pack_name}"
+
+
+def parse_pending_workshop_mod_id(value: str) -> tuple[str, str] | None:
+    normalized = str(value or "")
+    if not normalized.startswith(PENDING_WORKSHOP_PREFIX):
+        return None
+    payload = normalized[len(PENDING_WORKSHOP_PREFIX) :]
+    workshop_id, separator, encoded_pack_name = payload.partition(":")
+    if not separator or not workshop_id.isdigit():
+        return None
+    return workshop_id, urllib.parse.unquote(encoded_pack_name).casefold()
+
+
+def _resolve_reference(
+    reference: dict[str, Any],
+    assets: dict[str, ModAsset],
+) -> list[ModAsset]:
+    if reference.get("legacy_workshop_project"):
+        workshop_id = str(reference.get("workshop_id") or "")
+        return sorted(
+            (
+                asset
+                for asset in assets.values()
+                if workshop_id and asset.workshop_id == workshop_id
+            ),
+            key=lambda item: (item.pack_name.casefold(), item.id),
+        )
+
+    selected = assets.get(str(reference.get("id") or ""))
+    if selected:
+        return [selected]
+    workshop_id = str(reference.get("workshop_id") or "")
+    pack_name = str(reference.get("pack_name") or "").casefold()
+    source = str(reference.get("source") or "")
+    candidates = [
+        asset
+        for asset in assets.values()
+        if (not workshop_id or asset.workshop_id == workshop_id)
+        and (not pack_name or asset.pack_name.casefold() == pack_name)
+        and (not source or asset.source == source)
+    ]
+    selected = sorted(candidates, key=lambda item: item.id)[0] if candidates else None
+    return [selected] if selected else []

@@ -1,3 +1,5 @@
+import { t } from './languages'
+
 const TAG_ALIASES = {
   s: 'strike',
   ul: 'list',
@@ -172,10 +174,10 @@ const renderNode = node => {
       const videoId = node.option.split(';')[0].trim()
       if (!/^[a-z0-9_-]{6,20}$/i.test(videoId)) return ''
       const target = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
-      return `<a class="workshop-video" href="${target}" target="_blank" rel="noopener noreferrer">YouTube 预览</a>`
+      return `<a class="workshop-video" href="${target}" target="_blank" rel="noopener noreferrer">${t('details.youtubePreview')}</a>`
     }
     case 'spoiler':
-      return `<details class="workshop-spoiler"><summary>显示隐藏内容</summary>${children()}</details>`
+      return `<details class="workshop-spoiler"><summary>${t('details.showSpoiler')}</summary>${children()}</details>`
     case 'center': return `<div class="workshop-center">${children()}</div>`
     case 'table': return `<table class="workshop-table"><tbody>${children()}</tbody></table>`
     case 'tr': return `<tr>${children()}</tr>`

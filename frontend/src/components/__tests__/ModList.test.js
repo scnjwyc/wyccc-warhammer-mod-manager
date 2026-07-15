@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import ModList from '../ModList.vue'
 
@@ -34,7 +34,7 @@ describe('ModList previews and source collisions', () => {
     expect(row.classes()).toContain('source-duplicate')
     expect(row.get('.mod-thumbnail img').attributes('src')).toBe(thumbnail)
     expect(row.find('.mod-sigil').exists()).toBe(false)
-    expect(row.findAll('.source-badge').map(item => item.text())).toEqual(['DATA', 'WORKSHOP'])
+    expect(row.findAll('.source-badge').map(item => item.text())).toEqual(['游戏 DATA', 'STEAM 创意工坊'])
     expect(row.get('.row-subtitle').text()).toBe('same.pack')
     expect(row.get('.mod-author').text()).toBe('Example Author')
     expect(row.get('.mod-type-badge').text()).toBe('大修')
@@ -95,6 +95,7 @@ describe('ModList previews and source collisions', () => {
     const wrapper = mount(ModList, {
       props: {
         title: 'Mods',
+        active: true,
         mods: [{
           ...duplicateMod,
           warnings: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：base.pack' }],
@@ -105,6 +106,21 @@ describe('ModList previews and source collisions', () => {
     const badge = wrapper.get('[data-testid="mod-warning-badge"]')
     expect(badge.classes()).toContain('error')
     expect(badge.text()).toBe('! 缺少依赖')
+  })
+
+  it('does not show a stale missing-dependency badge in the inactive list', () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: 'Mods',
+        active: false,
+        mods: [{
+          ...duplicateMod,
+          warnings: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：base.pack' }],
+        }],
+      },
+    })
+
+    expect(wrapper.find('[data-testid="mod-warning-badge"]').exists()).toBe(false)
   })
 
   it('places the warning entry in the active-list heading and opens it on click', async () => {
@@ -121,5 +137,81 @@ describe('ModList previews and source collisions', () => {
     expect(warningButton.text()).toContain('3 条警告')
     await warningButton.trigger('click')
     expect(wrapper.emitted('show-warnings')).toHaveLength(1)
+  })
+
+  it('drags selected inactive mods together in their temporary order', async () => {
+    const mods = ['b', 'c', 'd', 'e'].map(id => ({
+      ...duplicateMod,
+      id,
+      pack_name: `${id}.pack`,
+      effective_name: id.toUpperCase(),
+    }))
+    const wrapper = mount(ModList, {
+      props: {
+        title: '未启用 MOD',
+        mods,
+        selectedId: 'd',
+        selectedIds: ['b', 'd'],
+        orderIds: ['b', 'c', 'd', 'e'],
+      },
+    })
+    const values = {}
+    const dataTransfer = {
+      effectAllowed: '',
+      setData: vi.fn((type, value) => { values[type] = value }),
+      getData: vi.fn(type => values[type] || ''),
+    }
+    const rows = wrapper.findAll('.mod-row')
+
+    expect(rows[0].attributes('draggable')).toBe('true')
+    await rows[0].trigger('dragstart', { dataTransfer })
+    expect(rows[0].classes()).toContain('dragging')
+    expect(rows[2].classes()).toContain('dragging')
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'b\nd')
+
+    await rows[3].trigger('drop', { dataTransfer })
+    expect(wrapper.emitted('drop-mods')[0][0]).toEqual({
+      source: 'inactive',
+      target: 'inactive',
+      ids: ['b', 'd'],
+      draggedId: 'b',
+      sourceOrder: ['b', 'c', 'd', 'e'],
+      targetId: 'e',
+      targetOrder: ['b', 'c', 'd', 'e'],
+    })
+  })
+
+  it('accepts a selected active batch dropped into the inactive list', async () => {
+    const activeMods = ['a', 'b'].map(id => ({ ...duplicateMod, id, pack_name: `${id}.pack` }))
+    const inactiveMods = ['c', 'd'].map(id => ({ ...duplicateMod, id, pack_name: `${id}.pack` }))
+    const source = mount(ModList, {
+      props: {
+        title: '已启用 MOD',
+        active: true,
+        mods: activeMods,
+        selectedId: 'b',
+        selectedIds: ['a', 'b'],
+        orderIds: ['a', 'b'],
+      },
+    })
+    const target = mount(ModList, {
+      props: { title: '未启用 MOD', mods: inactiveMods },
+    })
+    const values = {}
+    const dataTransfer = {
+      effectAllowed: '',
+      setData: (type, value) => { values[type] = value },
+      getData: type => values[type] || '',
+    }
+
+    await source.findAll('.mod-row')[0].trigger('dragstart', { dataTransfer })
+    await target.findAll('.mod-row')[1].trigger('drop', { dataTransfer })
+
+    expect(target.emitted('drop-mods')[0][0]).toMatchObject({
+      source: 'active',
+      target: 'inactive',
+      ids: ['a', 'b'],
+      targetId: 'd',
+    })
   })
 })

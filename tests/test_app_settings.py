@@ -4,15 +4,16 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from backend.app_settings import SettingsService, default_settings
+from backend.app_settings import SettingsService, default_settings, detect_system_language
 
 
 class SettingsMigrationTests(unittest.TestCase):
     def test_new_installs_enable_background_workshop_refresh(self) -> None:
         self.assertTrue(default_settings()["fetch_workshop_metadata"])
         self.assertEqual(default_settings()["schema_version"], 7)
-        self.assertEqual(default_settings()["language"], "zh-CN")
+        self.assertEqual(default_settings()["language"], "en-US")
         for removed_key in (
             "rpfm_path",
             "scan_data",
@@ -29,7 +30,7 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertEqual(default_settings()["update_manifest_url"], "")
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.3.0")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.5.0")
 
     def test_schema_one_settings_migrate_to_background_refresh_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -79,7 +80,52 @@ class SettingsMigrationTests(unittest.TestCase):
             service = SettingsService(Path(temporary))
 
             self.assertEqual(service.save({"language": "ja-JP"})["language"], "ja-JP")
-            self.assertEqual(service.save({"language": "unsupported"})["language"], "zh-CN")
+            self.assertEqual(service.save({"language": "unsupported"})["language"], "en-US")
+
+    def test_first_launch_detects_and_persists_supported_system_languages(self) -> None:
+        cases = {
+            "zh-CN": "zh-CN",
+            "zh-Hant-TW": "zh-CN",
+            "en-GB": "en-US",
+            "ko_KR": "ko-KR",
+            "ru-RU.UTF-8": "ru-RU",
+            "ja-JP": "ja-JP",
+        }
+        for system_locale, expected in cases.items():
+            with self.subTest(system_locale=system_locale), tempfile.TemporaryDirectory() as temporary:
+                data_dir = Path(temporary)
+                with patch(
+                    "backend.app_settings._system_locale_name",
+                    return_value=system_locale,
+                ):
+                    first = SettingsService(data_dir).get()
+                self.assertEqual(first["language"], expected)
+                self.assertEqual(
+                    json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))["language"],
+                    expected,
+                )
+
+                with patch(
+                    "backend.app_settings._system_locale_name",
+                    return_value="zh-CN" if expected != "zh-CN" else "en-US",
+                ):
+                    reopened = SettingsService(data_dir).get()
+                self.assertEqual(reopened["language"], expected)
+
+    def test_system_language_detection_falls_back_to_english(self) -> None:
+        cases = (
+            {"return_value": "fr-FR"},
+            {"side_effect": OSError("locale unavailable")},
+        )
+        for mocked_detection in cases:
+            with self.subTest(mocked_detection=mocked_detection), tempfile.TemporaryDirectory() as temporary:
+                with patch(
+                    "backend.app_settings._system_locale_name",
+                    **mocked_detection,
+                ):
+                    self.assertEqual(detect_system_language(), "en-US")
+                    settings = SettingsService(Path(temporary)).get()
+                self.assertEqual(settings["language"], "en-US")
 
     def test_removed_rpfm_and_scan_settings_are_not_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -140,7 +186,7 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-            self.assertEqual(migrated["last_seen_app_version"], "0.3.0")
+            self.assertEqual(migrated["last_seen_app_version"], "0.5.0")
 
 
 if __name__ == "__main__":
