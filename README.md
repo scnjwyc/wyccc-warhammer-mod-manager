@@ -1,5 +1,7 @@
 # Wyccc's Mod Manager
 
+**简体中文** | [English](README.en.md)
+
 一个面向《全面战争：战锤 3》（Total War: WARHAMMER III）的轻量 MOD 管理器。
 
 当前版本为 `0.5.0`。它把 MOD、播放集、Steam 创意工坊与游戏启动集中在一个界面中，无需复杂配置即可开始使用。
