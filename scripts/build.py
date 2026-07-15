@@ -13,6 +13,10 @@ FRONTEND = ROOT / "frontend"
 PACKAGING = ROOT / "packaging"
 STEAM_RUNTIME = ROOT / "steam_runtime"
 EXECUTABLE_NAME = "Wyccc's Mod Manager"
+# PyInstaller 6.21 writes --name into the generated spec using single quotes
+# without escaping apostrophes. Build with a spec-safe internal name, then
+# rename the finished one-file executable to the public product name.
+PYINSTALLER_BUNDLE_NAME = "WycccModManager"
 DEFAULT_RELEASE_DIR = (
     Path(r"G:\Wyccc's Mod Manager")
     if os.name == "nt"
@@ -138,7 +142,7 @@ def package_desktop(output_dir: Path) -> Path:
             "--noconsole",
             "--noupx",
             "--name",
-            EXECUTABLE_NAME,
+            PYINSTALLER_BUNDLE_NAME,
             "--icon",
             str(icon_path),
             "--version-file",
@@ -160,9 +164,16 @@ def package_desktop(output_dir: Path) -> Path:
             str(ROOT / "main.py"),
         ]
     )
+    built_executable = output_dir / f"{PYINSTALLER_BUNDLE_NAME}.exe"
+    if not built_executable.is_file():
+        raise SystemExit(f"打包结束但未找到内部可执行文件：{built_executable}")
     executable = output_dir / f"{EXECUTABLE_NAME}.exe"
-    if not executable.is_file():
-        raise SystemExit(f"打包结束但未找到可执行文件：{executable}")
+    try:
+        os.replace(built_executable, executable)
+    except OSError as exc:
+        raise SystemExit(
+            f"无法写入最终可执行文件：{executable}。请确认旧版程序未在运行。"
+        ) from exc
     return executable
 
 
