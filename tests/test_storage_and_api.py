@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
+import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -9,8 +10,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.api import API
-from backend.constants import SOURCE_WORKSHOP
+from backend.constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS, SOURCE_WORKSHOP
+from backend.game_data import GameDataBuildResult, GameDataEntry
 from backend.models import ModAsset
+from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
 from backend.storage import StateRepository
 from tests.helpers import make_asset, write_pack
@@ -232,6 +235,342 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_force_update_requires_the_workshop_download_to_finish(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            asset = ModAsset(
+                id="steam:123:missing.pack",
+                pack_name="missing.pack",
+                display_name="Missing Workshop MOD",
+                path=str(Path(temporary) / "missing.pack"),
+                directory=temporary,
+                source=SOURCE_WORKSHOP,
+                workshop_id="123",
+            )
+            api._assets = {asset.id: asset}
+
+            with patch(
+                "backend.api.perform_workshop_operation",
+                return_value={
+                    "operation": "force_update",
+                    "workshop_id": "123",
+                    "accepted": True,
+                    "completed": False,
+                },
+            ):
+                result = api.call("force_update_workshop_mod", [asset.id])
+
+        self.assertFalse(result["ok"])
+        self.assertIn("未完成", result["error"]["message"])
+
+    def test_game_data_feature_status_uses_fixed_workshop_subscriptions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            items = GAME_DATA_FEATURE_WORKSHOP_ITEMS
+            with patch(
+                "backend.api.query_workshop_subscription_status",
+                return_value=[
+                    {
+                        "workshop_id": items["unit_size"]["workshop_id"],
+                        "title": "动态单位规模 - Dynamic Unit Size",
+                        "subscribed": True,
+                    },
+                    {
+                        "workshop_id": items["friendly_fire"]["workshop_id"],
+                        "title": "动态禁用友伤 - Dynamic No Friendly Fire",
+                        "subscribed": False,
+                    },
+                ],
+            ) as query:
+                result = api.call("get_game_data_feature_status")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"]["items"],
+            {
+                "unit_size": {
+                    **items["unit_size"],
+                    "title": "动态单位规模 - Dynamic Unit Size",
+                    "subscribed": True,
+                },
+                "friendly_fire": {
+                    **items["friendly_fire"],
+                    "title": "动态禁用友伤 - Dynamic No Friendly Fire",
+                    "subscribed": False,
+                },
+            },
+        )
+        self.assertEqual(result["data"]["warning"], "")
+        query.assert_called_once_with(
+            [items["unit_size"]["workshop_id"], items["friendly_fire"]["workshop_id"]],
+            "schinese",
+            app_id="1142710",
+        )
+
+    def test_launch_does_not_refresh_subscriptions_for_game_data_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            scan = api.call("scan_mods", [False])
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=AssertionError("launch must not refresh game-data subscriptions"),
+                ) as query,
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                ) as builder,
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call(
+                    "launch_game",
+                    [[], scan["data"]["order_token"]],
+                )
+
+        self.assertTrue(launched["ok"])
+        self.assertNotIn("subscribed_workshop_ids", builder.call_args.kwargs)
+        query.assert_not_called()
+
+    def test_generate_game_data_patch_persists_settings_after_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "db.pack")
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            statuses = [
+                {
+                    "workshop_id": item["workshop_id"],
+                    "title": item["title"],
+                    "subscribed": True,
+                }
+                for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
+            ]
+            built = GameDataBuildResult(
+                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patch"),),
+                {"unit_model_multiplier": 2.0, "unit_rows_scaled": 1},
+            )
+
+            with (
+                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
+                patch("backend.start_options.build_game_data_entries", return_value=built),
+            ):
+                result = api.call(
+                    "generate_game_data_patch",
+                    [{"unit_model_multiplier": 2.0}, []],
+                )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 2.0)
+            self.assertEqual(
+                Path(result["data"]["patch"]["path"]).name,
+                "!!!!wyccc_game_data_patch.pack",
+            )
+            self.assertEqual(api.settings_service.get()["unit_model_multiplier"], 2.0)
+
+    def test_failed_game_data_patch_generation_does_not_save_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "db.pack")
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            statuses = [{"workshop_id": unit_item["workshop_id"], "subscribed": True}]
+
+            with (
+                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
+                patch(
+                    "backend.start_options.build_game_data_entries",
+                    side_effect=ValueError("缺少 main_units_tables"),
+                ),
+            ):
+                result = api.call(
+                    "generate_game_data_patch",
+                    [{"unit_model_multiplier": 2.0}, []],
+                )
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["error"]["code"], "VALUEERROR")
+            self.assertIn("main_units_tables", result["error"]["message"])
+            self.assertEqual(api.settings_service.get()["unit_model_multiplier"], 1.0)
+
+    def test_launch_includes_an_existing_game_data_patch_without_rebuilding_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "data.pack")
+            patch_path = root / "state" / "runtime" / "!!!!wyccc_game_data_patch.pack"
+            write_pack(patch_path)
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            scan = api.call("scan_mods", [False])
+
+            with (
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+            self.assertTrue(launched["ok"])
+            self.assertIn("!!!!wyccc_game_data_patch.pack", launched["data"]["launch_plan"]["content"])
+            self.assertTrue(launched["data"]["launch_plan"]["target_path"].endswith("wyccc_launch_mods.txt"))
+
+    def test_launch_is_rejected_while_game_data_patch_generation_is_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "data.pack")
+            write_pack(data / "db.pack")
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            scan = api.call("scan_mods", [False])
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            statuses = [{"workshop_id": unit_item["workshop_id"], "subscribed": True}]
+            started = threading.Event()
+            release = threading.Event()
+            built = GameDataBuildResult(
+                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patch"),),
+                {"unit_model_multiplier": 2.0},
+            )
+
+            def blocking_builder(*args, **kwargs):
+                started.set()
+                release.wait(5)
+                return built
+
+            with (
+                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
+                patch("backend.start_options.build_game_data_entries", side_effect=blocking_builder),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}) as launch,
+                patch.object(api, "set_game_running"),
+                ThreadPoolExecutor(max_workers=1) as executor,
+            ):
+                future = executor.submit(
+                    api.call,
+                    "generate_game_data_patch",
+                    [{"unit_model_multiplier": 2.0}, []],
+                )
+                self.assertTrue(started.wait(1))
+                try:
+                    launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+                finally:
+                    release.set()
+                generated = future.result(timeout=5)
+
+            self.assertFalse(launched["ok"])
+            self.assertIn("补丁", launched["error"]["message"])
+            self.assertTrue(generated["ok"])
+            launch.assert_not_called()
+
+    def test_scan_discards_internal_feature_mods_from_a_stale_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            fire_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]
+            unit_pack = write_pack(data / unit_item["pack_name"])
+            write_pack(data / "visible.pack")
+
+            api = API(root / "state")
+            api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            initial = api.call("scan_mods", [False])
+            self.assertTrue(initial["ok"])
+            stale_local_id = _asset_id("data", unit_pack)
+            stale_workshop_id = (
+                f"steam:{fire_item['workshop_id']}:{fire_item['pack_name']}"
+            )
+            api.state_repository.set_published_workshop_id(
+                stale_local_id,
+                unit_item["workshop_id"],
+            )
+            api.state_repository.update_current_playset(
+                [stale_local_id, stale_workshop_id]
+            )
+
+            rescanned = api.call("scan_mods", [False])
+
+        self.assertTrue(rescanned["ok"])
+        self.assertEqual(
+            [item["pack_name"] for item in rescanned["data"]["mods"]],
+            ["visible.pack"],
+        )
+        self.assertEqual(rescanned["data"]["enabled_order"], [])
+        self.assertEqual(rescanned["data"]["missing_enabled_ids"], [])
+        self.assertEqual(
+            rescanned["data"]["current_playset"]["mod_ids"],
+            [],
+        )
+
+    def test_game_data_settings_rpc_only_updates_the_three_supported_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            original_language = api.settings_service.get()["language"]
+
+            result = api.call(
+                "save_game_data_settings",
+                [{
+                    "unit_model_multiplier": 2.5,
+                    "disable_unit_friendly_fire": True,
+                    "disable_spell_friendly_fire": True,
+                    "language": "ja-JP",
+                }],
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 2.5)
+            self.assertTrue(result["data"]["settings"]["disable_unit_friendly_fire"])
+            self.assertTrue(result["data"]["settings"]["disable_spell_friendly_fire"])
+            self.assertEqual(result["data"]["settings"]["language"], original_language)
+
     def test_first_scan_restores_installed_used_mods_without_subscribing_missing_mods(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -730,7 +1069,12 @@ class ApiContractTests(unittest.TestCase):
 
             with patch(
                 "backend.api.perform_workshop_operation",
-                return_value={"operation": "force_update", "workshop_id": "123", "accepted": True},
+                return_value={
+                    "operation": "force_update",
+                    "workshop_id": "123",
+                    "accepted": True,
+                    "completed": True,
+                },
             ) as steam_operation:
                 updated = api.call("force_update_workshop_mod", [merged["id"]])
                 unsubscribed = api.call("unsubscribe_workshop_mod", [merged["id"]])

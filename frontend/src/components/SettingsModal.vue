@@ -191,6 +191,10 @@ const closeSettings = () => {
                 <span><strong>{{ t('settings.refreshOnStart') }}</strong><small>{{ t('settings.refreshOnStartHelp') }}</small></span>
               </label>
               <label class="switch-row">
+                <input v-model="draft.live_mod_detection" type="checkbox" data-testid="live-mod-detection" />
+                <span><strong>{{ t('settings.liveModDetection') }}</strong><small>{{ t('settings.liveModDetectionHelp') }}</small></span>
+              </label>
+              <label class="switch-row">
                 <input v-model="draft.check_outdated_mods" type="checkbox" data-testid="check-outdated-mods" />
                 <span><strong>{{ t('settings.checkOutdated') }}</strong><small>{{ t('settings.checkOutdatedHelp') }}</small></span>
               </label>

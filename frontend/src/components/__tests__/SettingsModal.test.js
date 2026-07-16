@@ -46,6 +46,7 @@ describe('language settings', () => {
           ai_base_url: 'https://api.openai.com/v1',
           ai_model: '',
           ai_temperature: 0.3,
+          live_mod_detection: true,
           check_outdated_mods: false,
           custom_battle_all_units_as_lords: false,
           enable_script_logging: false,
@@ -59,6 +60,7 @@ describe('language settings', () => {
     await wrapper.get('[data-testid="ai-enabled"]').setValue(true)
     await wrapper.get('[data-testid="ai-model"]').setValue('example-model')
     await wrapper.get('[data-testid="check-outdated-mods"]').setValue(true)
+    await wrapper.get('[data-testid="live-mod-detection"]').setValue(false)
     await wrapper.get('[data-testid="all-units-as-lords"]').setValue(true)
     await wrapper.get('[data-testid="script-logging"]').setValue(true)
     await wrapper.get('[data-testid="skip-intro-movies"]').setValue(true)
@@ -68,6 +70,7 @@ describe('language settings', () => {
       ai_enabled: true,
       ai_model: 'example-model',
       check_outdated_mods: true,
+      live_mod_detection: false,
       custom_battle_all_units_as_lords: true,
       enable_script_logging: true,
       skip_intro_movies: true,

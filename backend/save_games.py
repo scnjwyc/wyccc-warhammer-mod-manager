@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
+
+
+_PACK_NAME_RE = re.compile(r'^[^<>:"/\\|?*\x00-\x1f]{1,260}\.pack$', re.IGNORECASE)
+_PACK_SUFFIX = b".pack\0"
+_MAX_PACK_TOKEN_BYTES = 1024
 
 
 def default_save_directory() -> Path:
@@ -67,3 +73,41 @@ class SaveGameService:
         if not saves:
             raise ValueError("没有可用于继续游戏的战役存档")
         return saves[0]
+
+    def pack_names(
+        self,
+        save_name: str,
+        excluded_pack_names: set[str] | None = None,
+    ) -> dict[str, Any]:
+        save = self.require(save_name)
+        save_path = Path(save["path"])
+        try:
+            content = save_path.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"无法读取存档：{exc}") from exc
+
+        excluded = {str(name).casefold() for name in (excluded_pack_names or set())}
+        lowered = content.lower()
+        pack_names: list[str] = []
+        seen: set[str] = set()
+        cursor = 0
+        while True:
+            marker = lowered.find(_PACK_SUFFIX, cursor)
+            if marker < 0:
+                break
+            token_end = marker + len(b".pack")
+            token_start = content.rfind(
+                b"\0",
+                max(0, marker - _MAX_PACK_TOKEN_BYTES),
+                marker,
+            ) + 1
+            raw_token = content[token_start:token_end]
+            cursor = token_end + 1
+            token = raw_token.decode("utf-8", errors="replace").strip()
+            pack_name = Path(token.replace("\\", "/")).name
+            key = pack_name.casefold()
+            if not _PACK_NAME_RE.fullmatch(pack_name) or key in excluded or key in seen:
+                continue
+            seen.add(key)
+            pack_names.append(pack_name)
+        return {"save": save, "pack_names": pack_names}

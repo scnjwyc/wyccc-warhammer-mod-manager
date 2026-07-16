@@ -91,6 +91,38 @@ describe('ModList previews and source collisions', () => {
     })
   })
 
+  it('toggles only the double-clicked mod and ignores row action controls', async () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: '已启用 MOD',
+        active: true,
+        mods: [duplicateMod],
+        orderIds: [duplicateMod.id],
+      },
+    })
+
+    await wrapper.get('.mod-row').trigger('dblclick')
+    expect(wrapper.emitted('toggle-active')).toEqual([[duplicateMod.id]])
+
+    await wrapper.get('.icon-button.danger').trigger('dblclick')
+    expect(wrapper.emitted('toggle-active')).toHaveLength(1)
+  })
+
+  it('emits only the current visible list for Ctrl+A and leaves editable controls alone', async () => {
+    const second = { ...duplicateMod, id: 'second', pack_name: 'second.pack' }
+    const wrapper = mount(ModList, {
+      props: { title: 'Mods', mods: [duplicateMod, second] },
+    })
+
+    await wrapper.get('[data-testid="mod-list"]').trigger('keydown', { key: 'a', ctrlKey: true })
+    expect(wrapper.emitted('select-all')[0]).toEqual([[duplicateMod.id, 'second']])
+
+    const input = document.createElement('input')
+    wrapper.get('[data-testid="mod-list"]').element.appendChild(input)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }))
+    expect(wrapper.emitted('select-all')).toHaveLength(1)
+  })
+
   it('renders missing dependencies as a red error badge', () => {
     const wrapper = mount(ModList, {
       props: {

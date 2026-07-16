@@ -10,13 +10,14 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   types: { type: Array, default: () => [] },
   selectionCount: { type: Number, default: 1 },
+  gameRunning: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = 420
+  const height = 500
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -34,6 +35,11 @@ const hasWorkshop = computed(() => !!props.mod?.workshop_id)
 const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.sources : [props.mod?.source]))
 const canCopyToData = computed(() => !!props.mod?.path && !sources.value.has('data'))
 const canPublish = computed(() => sources.value.has('data'))
+const deleteLabel = computed(() => (
+  sources.value.has('data') && sources.value.has('workshop')
+    ? t('context.deleteFromData')
+    : t('context.deleteModFile')
+))
 const hasSteamActions = computed(() => hasWorkshop.value || canPublish.value)
 const isBatchSelection = computed(() => Number(props.selectionCount) > 1)
 const batchLabel = label => (
@@ -129,7 +135,14 @@ const run = (action, value = null, close = true) => {
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('open-workshop')">
             <span class="context-menu-icon">↗</span><span>{{ batchLabel(t('context.visitWorkshop')) }}</span>
           </button>
-          <button v-if="hasWorkshop" type="button" class="context-menu-item danger-item" @click.stop="run('unsubscribe')">
+          <button
+            v-if="hasWorkshop"
+            type="button"
+            class="context-menu-item danger-item"
+            :disabled="gameRunning"
+            :title="gameRunning ? t('context.gameRunningBlocked') : ''"
+            @click.stop="run('unsubscribe')"
+          >
             <span class="context-menu-icon">⊘</span><span>{{ batchLabel(t('context.unsubscribe')) }}</span>
           </button>
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('force-update')">
@@ -176,6 +189,21 @@ const run = (action, value = null, close = true) => {
       </div>
 
       <div class="context-menu-divider"></div>
+
+      <button type="button" class="context-menu-item" @click="run('copy-path')">
+        <span class="context-menu-icon">⧉</span>
+        <span>{{ batchLabel(t('context.copyModPath')) }}</span>
+      </button>
+      <button
+        type="button"
+        class="context-menu-item danger-item"
+        :disabled="gameRunning"
+        :title="gameRunning ? t('context.gameRunningBlocked') : ''"
+        @click="run('delete-file')"
+      >
+        <span class="context-menu-icon">×</span>
+        <span>{{ batchLabel(deleteLabel) }}</span>
+      </button>
 
       <button type="button" class="context-menu-item" @click="run('open-folder')">
         <span class="context-menu-icon">▣</span>

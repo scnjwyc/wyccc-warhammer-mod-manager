@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import locale
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from .constants import (
     APP_VERSION,
     DEFAULT_UPDATE_MANIFEST_URL,
     LEGACY_APP_SLUGS,
+    UNIT_MODEL_MULTIPLIER_MAX,
+    UNIT_MODEL_MULTIPLIER_MIN,
     WH3_APP_ID,
 )
 from .json_store import AtomicJsonStore
@@ -91,11 +94,12 @@ def default_data_dir() -> Path:
 
 def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     return {
-        "schema_version": 7,
+        "schema_version": 9,
         "language": language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE,
         "game_path": "",
         "workshop_path": "",
         "fetch_workshop_metadata": True,
+        "live_mod_detection": True,
         "check_outdated_mods": False,
         "ai_enabled": False,
         "ai_base_url": "https://api.openai.com/v1",
@@ -105,6 +109,9 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "custom_battle_all_units_as_lords": False,
         "enable_script_logging": False,
         "skip_intro_movies": False,
+        "unit_model_multiplier": 1.0,
+        "disable_unit_friendly_fire": False,
+        "disable_spell_friendly_fire": False,
         "check_updates_automatically": True,
         "update_manifest_url": DEFAULT_UPDATE_MANIFEST_URL,
         "last_update_check_at": 0,
@@ -142,9 +149,9 @@ class SettingsService:
             payload["language"] = LEGACY_DEFAULT_LANGUAGE
         if stored_version < 2:
             payload["fetch_workshop_metadata"] = True
-        payload["schema_version"] = 7
+        payload["schema_version"] = 9
         normalized = self._normalize(payload)
-        if is_first_launch or stored_version < 7 or language_was_missing:
+        if is_first_launch or stored_version < 9 or language_was_missing:
             self.store.save(normalized)
         return normalized
 
@@ -155,7 +162,7 @@ class SettingsService:
         payload["ai_api_key"] = ""
         return payload
 
-    def save(self, changes: dict[str, Any]) -> dict[str, Any]:
+    def normalize_changes(self, changes: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(changes, dict):
             raise ValueError("设置必须是对象")
         current = self.get()
@@ -168,7 +175,10 @@ class SettingsService:
             current[key] = value
         if clear_ai_api_key:
             current["ai_api_key"] = ""
-        normalized = self._normalize(current)
+        return self._normalize(current)
+
+    def save(self, changes: dict[str, Any]) -> dict[str, Any]:
+        normalized = self.normalize_changes(changes)
         self.store.save(normalized)
         return normalized
 
@@ -231,11 +241,14 @@ class SettingsService:
                 result[path_key] = ""
         for key in (
             "fetch_workshop_metadata",
+            "live_mod_detection",
             "check_outdated_mods",
             "ai_enabled",
             "custom_battle_all_units_as_lords",
             "enable_script_logging",
             "skip_intro_movies",
+            "disable_unit_friendly_fire",
+            "disable_spell_friendly_fire",
             "check_updates_automatically",
         ):
             result[key] = bool(result.get(key, default_settings()[key]))
@@ -254,8 +267,18 @@ class SettingsService:
         except (TypeError, ValueError):
             temperature = 0.3
         result["ai_temperature"] = max(0.0, min(2.0, temperature))
+        try:
+            unit_multiplier = float(result.get("unit_model_multiplier", 1.0))
+        except (TypeError, ValueError):
+            unit_multiplier = 1.0
+        if not math.isfinite(unit_multiplier):
+            unit_multiplier = 1.0
+        result["unit_model_multiplier"] = max(
+            UNIT_MODEL_MULTIPLIER_MIN,
+            min(UNIT_MODEL_MULTIPLIER_MAX, unit_multiplier),
+        )
         result["theme"] = str(result.get("theme") or "crimson")
         language = str(result.get("language") or DEFAULT_LANGUAGE).strip()
         result["language"] = language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
-        result["schema_version"] = 7
+        result["schema_version"] = 9
         return result

@@ -33,7 +33,8 @@ describe('ModContextMenu', () => {
     for (const label of [
       '停用', '修改类型', '类型管理', '指定加载顺序', '列表顶部', '列表底部',
       '访问创意工坊', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
-      '复制模组到 Data 文件夹', '忽略问题', '忽略 MOD 过期', '忽略缺失依赖',
+      '复制 MOD 路径', '删除 MOD 文件', '复制模组到 Data 文件夹',
+      '忽略问题', '忽略 MOD 过期', '忽略缺失依赖',
     ]) {
       expect(wrapper.text()).toContain(label)
     }
@@ -41,6 +42,20 @@ describe('ModContextMenu', () => {
     await buttonByText(wrapper, '音效').trigger('click')
     expect(wrapper.emitted('action')[0][0]).toMatchObject({ action: 'toggle-type', value: 'custom:audio', mod })
     expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('labels a merged deletion as Data-only and blocks destructive actions while the game runs', () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod: { ...mod, source: 'data', sources: ['data', 'workshop'] },
+        types,
+        gameRunning: true,
+      },
+    })
+
+    expect(buttonByText(wrapper, '从 DATA 中删除').attributes('disabled')).toBeDefined()
+    expect(buttonByText(wrapper, '取消订阅').attributes('disabled')).toBeDefined()
   })
 
   it('shows batch counts on top-level actions and disables the RPFM action', async () => {

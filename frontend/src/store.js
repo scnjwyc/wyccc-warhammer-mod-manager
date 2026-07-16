@@ -16,6 +16,33 @@ import {
 
 let playsetWriteQueue = Promise.resolve()
 
+const defaultGameDataFeatures = () => ({
+  unit_size: {
+    workshop_id: '3765783838',
+    title: 'Dynamic Unit Size',
+    pack_name: 'wyccc_dynamic_unit_size.pack',
+    subscribed: false,
+  },
+  friendly_fire: {
+    workshop_id: '3765783977',
+    title: 'Dynamic No Friendly Fire',
+    pack_name: 'wyccc_dynamic_no_friendly_fire.pack',
+    subscribed: false,
+  },
+})
+
+export const gameDataSettingsSignature = settings => {
+  const numeric = Number(settings?.unit_model_multiplier ?? 1)
+  const multiplier = Number.isFinite(numeric)
+    ? Math.max(0.5, Math.min(5, numeric))
+    : 1
+  return JSON.stringify([
+    multiplier,
+    Boolean(settings?.disable_unit_friendly_fire),
+    Boolean(settings?.disable_spell_friendly_fire),
+  ])
+}
+
 const enqueuePlaysetWrite = task => {
   const pending = playsetWriteQueue.catch(() => {}).then(task)
   playsetWriteQueue = pending
@@ -25,7 +52,7 @@ const enqueuePlaysetWrite = task => {
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.5.0',
+    appVersion: '0.6.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -54,11 +81,13 @@ export const useAppStore = defineStore('app', {
     orderSaveError: '',
     busy: '',
     workshopRefreshing: false,
+    liveModRefreshing: false,
     warnings: [],
     ignoredScanWarningCodes: [],
     gameUpdatedAt: 0,
     missingEnabledIds: [],
-    runtime: { running: false },
+    runtime: { running: false, mod_revision: 0 },
+    modRevision: 0,
     saveGames: [],
     saveGamesDirectory: '',
     changelog: [],
@@ -66,9 +95,14 @@ export const useAppStore = defineStore('app', {
     updateChecking: false,
     autoUpdateDue: false,
     toast: null,
+    gameDataFeatures: defaultGameDataFeatures(),
+    gameDataFeatureWarning: '',
   }),
   getters: {
     modMap: (state) => new Map(state.mods.map(mod => [mod.id, mod])),
+    gameDataFeatureSubscribed: (state) => featureKey => (
+      Boolean(state.gameDataFeatures?.[featureKey]?.subscribed)
+    ),
     modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
     warningItems(state) {
@@ -196,11 +230,18 @@ export const useAppStore = defineStore('app', {
       this.modTypes = data.mod_types || []
       this.orderToken = data.order_token
       this.runtime = data.runtime
+      this.modRevision = Number(data.runtime?.mod_revision || 0)
       this.changelog = data.changelog || []
       this.autoUpdateDue = Boolean(data.auto_update_due)
       if (this.pathHealth.game_ready) {
         await this.scan(false)
-        if (this.settings.fetch_workshop_metadata) void this.refreshWorkshopInBackground()
+        if (this.settings.fetch_workshop_metadata) {
+          window.setTimeout(() => {
+            if (this.settings.fetch_workshop_metadata && !this.runtime.running) {
+              void this.refreshWorkshopInBackground()
+            }
+          }, 1200)
+        }
       }
       if (data.update_install_error) {
         const installError = String(data.update_install_error).slice(-320)
@@ -232,6 +273,7 @@ export const useAppStore = defineStore('app', {
         this.orderToken = data.order_token
         this.warnings = data.warnings
         this.gameUpdatedAt = Number(data.game_updated_at || 0)
+        this.modRevision = Number(data.mod_revision ?? this.modRevision)
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
         if (!this.selectedId || !installed.has(this.selectedId)) {
@@ -247,7 +289,7 @@ export const useAppStore = defineStore('app', {
       })
     },
     async refreshWorkshopInBackground() {
-      if (this.workshopRefreshing) return
+      if (this.workshopRefreshing || this.runtime.running) return
       await this.flushPlaysetUpdates()
       this.workshopRefreshing = true
       try {
@@ -265,6 +307,7 @@ export const useAppStore = defineStore('app', {
         this.orderToken = data.order_token
         this.warnings = data.warnings
         this.gameUpdatedAt = Number(data.game_updated_at || 0)
+        this.modRevision = Number(data.mod_revision ?? this.modRevision)
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
         if (!this.selectedId || !installed.has(this.selectedId)) {
@@ -333,6 +376,17 @@ export const useAppStore = defineStore('app', {
         this.selectionAnchorId = modId
       }
       await this.loadPreview(this.selectedId)
+    },
+    async selectAllMods(orderedIds) {
+      const available = new Set(this.mods.map(mod => mod.id))
+      const selected = [...new Set((orderedIds || []).map(String))]
+        .filter(id => available.has(id))
+      if (!selected.length) return []
+      this.selectedIds = selected
+      this.selectedId = selected[0]
+      this.selectionAnchorId = selected[0]
+      await this.loadPreview(this.selectedId)
+      return selected
     },
     async loadPreview(modId) {
       this.selectedPreview = ''
@@ -680,6 +734,69 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
+    async readSaveMods(saveName) {
+      return this.withBusy(t('busy.readSaveMods'), () => invoke('get_save_mods', saveName))
+    },
+    saveModLookup() {
+      const byPackName = new Map()
+      for (const mod of this.mods) {
+        const key = String(mod.pack_name || '').toLocaleLowerCase()
+        if (!key) continue
+        const existing = byPackName.get(key)
+        const sources = new Set(mod.sources?.length ? mod.sources : [mod.source])
+        const existingSources = new Set(
+          existing?.sources?.length ? existing.sources : [existing?.source],
+        )
+        if (
+          !existing
+          || (sources.has('data') && !existingSources.has('data'))
+          || (sources.has('data') === existingSources.has('data') && mod.id < existing.id)
+        ) {
+          byPackName.set(key, mod)
+        }
+      }
+      return byPackName
+    },
+    async compareSaveMods(saveName) {
+      const data = await this.readSaveMods(saveName)
+      const byPackName = this.saveModLookup()
+      const saveKeys = new Set(data.pack_names.map(name => name.toLocaleLowerCase()))
+      const active = this.activeIds.map(id => this.modMap.get(id)).filter(Boolean)
+      const activeKeys = new Set(active.map(mod => mod.pack_name.toLocaleLowerCase()))
+      const saveEntries = data.pack_names.map(packName => ({
+        packName,
+        mod: byPackName.get(packName.toLocaleLowerCase()) || null,
+      }))
+      return {
+        save: data.save,
+        saveOnly: saveEntries.filter(item => !activeKeys.has(item.packName.toLocaleLowerCase())),
+        currentOnly: active
+          .filter(mod => !saveKeys.has(mod.pack_name.toLocaleLowerCase()))
+          .map(mod => ({ packName: mod.pack_name, mod })),
+        shared: saveEntries.filter(item => activeKeys.has(item.packName.toLocaleLowerCase())),
+      }
+    },
+    async enableModsFromSave(saveName) {
+      const data = await this.readSaveMods(saveName)
+      const byPackName = this.saveModLookup()
+      const enabledIds = []
+      const missingPackNames = []
+      for (const packName of data.pack_names) {
+        const mod = byPackName.get(packName.toLocaleLowerCase())
+        if (mod) enabledIds.push(mod.id)
+        else missingPackNames.push(packName)
+      }
+      this.replaceActiveIds(enabledIds)
+      this.dirty = true
+      this.recordCurrentPlaysetChange()
+      this.notify(
+        missingPackNames.length
+          ? t('toast.saveModsEnabledMissing', { enabled: enabledIds.length, missing: missingPackNames.length })
+          : t('toast.saveModsEnabled', { count: enabledIds.length }),
+        missingPackNames.length ? 'warning' : 'success',
+      )
+      return { save: data.save, enabledIds, missingPackNames }
+    },
     async launchSave(saveName) {
       await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.loadSave'), async () => {
@@ -709,6 +826,28 @@ export const useAppStore = defineStore('app', {
         const changelog = await invoke('get_changelog')
         this.changelog = changelog.items || []
         this.notify(t('toast.settingsSaved'))
+        return data
+      })
+    },
+    async generateGameDataPatch(changes) {
+      return this.withBusy(t('busy.generateGameDataPatch'), async () => {
+        await this.flushPlaysetUpdates()
+        const data = await invoke('generate_game_data_patch', changes, [...this.activeIds])
+        this.settings = data.settings
+        this.notify(t('toast.gameDataPatchGenerated'))
+        return data
+      })
+    },
+    async saveGameDataSettings(changes, generatedSignature = '') {
+      const draftSignature = gameDataSettingsSignature(changes)
+      const settingsChanged = draftSignature !== gameDataSettingsSignature(this.settings)
+      if (settingsChanged && draftSignature !== generatedSignature) {
+        return this.generateGameDataPatch(changes)
+      }
+      return this.withBusy(t('busy.saveGameData'), async () => {
+        const data = await invoke('save_game_data_settings', changes)
+        this.settings = data.settings
+        this.notify(t('toast.gameDataSaved'))
         return data
       })
     },
@@ -769,6 +908,23 @@ export const useAppStore = defineStore('app', {
         this.updateInfo.has_update = false
       }
       this.notify(t('toast.updateIgnored', { version }))
+      return data
+    },
+    async refreshGameDataFeatures() {
+      const data = await invoke('get_game_data_feature_status')
+      const defaults = defaultGameDataFeatures()
+      const received = data?.items || {}
+      this.gameDataFeatures = Object.fromEntries(
+        Object.entries(defaults).map(([key, fallback]) => [
+          key,
+          {
+            ...fallback,
+            ...(received[key] || {}),
+            subscribed: Boolean(received[key]?.subscribed),
+          },
+        ]),
+      )
+      this.gameDataFeatureWarning = String(data?.warning || '')
       return data
     },
     async loadChangelog() {
@@ -940,8 +1096,106 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
+    async selectOfficialProfile() {
+      return invoke('select_mod_profile')
+    },
+    async previewOfficialProfile(path) {
+      return this.withBusy(
+        t('busy.previewOfficialProfile'),
+        () => invoke('preview_mod_profile', path),
+      )
+    },
+    async importOfficialProfile(path, mode) {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('busy.importOfficialProfile'), async () => {
+        const data = await invoke('import_mod_profile', path, mode)
+        this.applyPlaysetPayload(data)
+        this.dirty = true
+        this.recordCurrentPlaysetChange()
+        this.notify(
+          (data.pending_workshop_ids || []).length
+            ? t('toast.officialPending', { count: data.pending_workshop_ids.length })
+            : t('toast.officialImported', { name: localizedPlaysetName(data.current_playset) }),
+          (data.pending_workshop_ids || []).length ? 'warning' : 'success',
+        )
+        return data
+      })
+    },
     async openModFolder(modId) {
       await invoke('open_mod_folder', modId)
+    },
+    async copyModPaths(modIds) {
+      const paths = []
+      const seen = new Set()
+      for (const modId of modIds || []) {
+        const path = String(this.modMap.get(modId)?.path || '')
+        const key = path.toLocaleLowerCase()
+        if (!path || seen.has(key)) continue
+        seen.add(key)
+        paths.push(path)
+      }
+      if (!paths.length) return []
+      await navigator.clipboard.writeText(paths.join('\n'))
+      this.notify(t('toast.modPathsCopied', { count: paths.length }))
+      return paths
+    },
+    async previewDeleteModFiles(modIds) {
+      return this.withBusy(
+        t('busy.previewDeleteMods'),
+        () => invoke('preview_delete_mod_files', modIds),
+      )
+    },
+    async applyExternalScan(data) {
+      if (!data) return
+      const previousIds = [...this.activeIds]
+      const installed = new Set((data.mods || []).map(mod => mod.id))
+      this.mods = data.mods || []
+      this.replaceActiveIds(
+        this.dirty ? previousIds.filter(id => installed.has(id)) : (data.enabled_order || []),
+      )
+      this.reconcileInactiveOrder()
+      this.missingEnabledIds = data.missing_enabled_ids || []
+      this.orderToken = data.order_token || this.orderToken
+      this.warnings = data.warnings || []
+      this.gameUpdatedAt = Number(data.game_updated_at || 0)
+      this.modRevision = Number(data.mod_revision ?? this.modRevision)
+      this.playsets = data.playsets || this.playsets
+      this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+      if (!installed.has(this.selectedId)) this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
+      this.selectedIds = this.selectedIds.filter(id => installed.has(id))
+      if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
+      this.selectionAnchorId = installed.has(this.selectionAnchorId) ? this.selectionAnchorId : this.selectedId
+      await this.loadPreview(this.selectedId)
+      void this.loadThumbnails()
+    },
+    async refreshModsInBackground() {
+      if (this.liveModRefreshing || this.workshopRefreshing || this.runtime.running || this.busy) return null
+      this.liveModRefreshing = true
+      try {
+        await this.flushPlaysetUpdates()
+        const data = await invoke('scan_mods', false)
+        await this.applyExternalScan(data)
+        return data
+      } catch (error) {
+        this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
+        return null
+      } finally {
+        this.liveModRefreshing = false
+      }
+    },
+    async deleteModFiles(previewToken) {
+      const data = await this.withBusy(
+        t('busy.deleteMods'),
+        () => invoke('delete_mod_files', previewToken),
+      )
+      await this.applyExternalScan(data.scan)
+      this.notify(
+        data.failed_count
+          ? t('toast.modsDeletedPartial', { deleted: data.deleted_count, failed: data.failed_count })
+          : t('toast.modsDeleted', { count: data.deleted_count }),
+        data.failed_count ? 'warning' : 'success',
+      )
+      return data
     },
     async setModWarningIgnored(modId, warningCode, ignored) {
       return this.withBusy(ignored ? t('busy.ignoreIssue') : t('busy.restoreIssue'), async () => {
@@ -967,16 +1221,26 @@ export const useAppStore = defineStore('app', {
       return invoke('open_external_url', url)
     },
     async unsubscribeWorkshop(modId) {
-      return this.withBusy(t('busy.unsubscribeWorkshop'), async () => {
-        const data = await invoke('unsubscribe_workshop_mod', modId)
-        this.notify(t('toast.unsubscribeAccepted'))
-        return data
-      })
+      return this.unsubscribeWorkshopMany([modId])
+    },
+    async unsubscribeWorkshopMany(modIds) {
+      const data = await this.withBusy(
+        t('busy.unsubscribeWorkshop'),
+        () => invoke('unsubscribe_workshop_mods', modIds),
+      )
+      await this.applyExternalScan(data.scan)
+      this.notify(
+        data.failed_count
+          ? t('toast.unsubscribePartial', { completed: data.completed_count, failed: data.failed_count })
+          : t('toast.unsubscribeRemoved', { count: data.completed_count }),
+        data.failed_count ? 'warning' : 'success',
+      )
+      return data
     },
     async forceUpdateWorkshop(modId) {
       return this.withBusy(t('busy.forceUpdateWorkshop'), async () => {
         const data = await invoke('force_update_workshop_mod', modId)
-        this.notify(t('toast.forceUpdateAccepted'))
+        this.notify(t('toast.forceUpdateCompleted'))
         return data
       })
     },
@@ -1074,7 +1338,20 @@ export const useAppStore = defineStore('app', {
     },
     async refreshRuntime() {
       try {
-        this.runtime = await invoke('get_runtime_status')
+        const previousRevision = this.modRevision
+        const runtime = await invoke('get_runtime_status')
+        this.runtime = runtime
+        const nextRevision = Number(runtime.mod_revision || 0)
+        if (
+          this.settings.live_mod_detection
+          && !runtime.running
+          && nextRevision > previousRevision
+        ) {
+          const refreshed = await this.refreshModsInBackground()
+          if (!refreshed) this.modRevision = previousRevision
+        } else {
+          this.modRevision = nextRevision
+        }
       } catch {
         // Runtime polling must never interrupt the main workflow.
       }

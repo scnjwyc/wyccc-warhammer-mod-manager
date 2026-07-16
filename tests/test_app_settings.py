@@ -12,7 +12,8 @@ from backend.app_settings import SettingsService, default_settings, detect_syste
 class SettingsMigrationTests(unittest.TestCase):
     def test_new_installs_enable_background_workshop_refresh(self) -> None:
         self.assertTrue(default_settings()["fetch_workshop_metadata"])
-        self.assertEqual(default_settings()["schema_version"], 7)
+        self.assertTrue(default_settings()["live_mod_detection"])
+        self.assertEqual(default_settings()["schema_version"], 9)
         self.assertEqual(default_settings()["language"], "en-US")
         for removed_key in (
             "rpfm_path",
@@ -27,10 +28,13 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertFalse(default_settings()["custom_battle_all_units_as_lords"])
         self.assertFalse(default_settings()["enable_script_logging"])
         self.assertFalse(default_settings()["skip_intro_movies"])
+        self.assertEqual(default_settings()["unit_model_multiplier"], 1.0)
+        self.assertFalse(default_settings()["disable_unit_friendly_fire"])
+        self.assertFalse(default_settings()["disable_spell_friendly_fire"])
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertEqual(default_settings()["update_manifest_url"], "")
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.5.0")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.6.0")
 
     def test_schema_one_settings_migrate_to_background_refresh_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -48,7 +52,7 @@ class SettingsMigrationTests(unittest.TestCase):
             service = SettingsService(data_dir)
 
             migrated = service.get()
-            self.assertEqual(migrated["schema_version"], 7)
+            self.assertEqual(migrated["schema_version"], 9)
             self.assertTrue(migrated["fetch_workshop_metadata"])
 
             service.save({"fetch_workshop_metadata": False})
@@ -70,7 +74,7 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-            self.assertEqual(migrated["schema_version"], 7)
+            self.assertEqual(migrated["schema_version"], 9)
             self.assertEqual(migrated["language"], "zh-CN")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertNotIn("scan_merged", migrated)
@@ -182,11 +186,80 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-            self.assertEqual(migrated["schema_version"], 7)
+            self.assertEqual(migrated["schema_version"], 9)
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-            self.assertEqual(migrated["last_seen_app_version"], "0.5.0")
+            self.assertEqual(migrated["last_seen_app_version"], "0.6.0")
+
+    def test_schema_eight_settings_enable_live_mod_detection_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            (data_dir / "settings.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 8,
+                        "language": "zh-CN",
+                        "live_mod_detection": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            migrated = SettingsService(data_dir).get()
+
+            self.assertEqual(migrated["schema_version"], 9)
+            self.assertFalse(migrated["live_mod_detection"])
+
+            fresh_legacy = data_dir / "fresh-legacy"
+            (fresh_legacy / "settings.json").parent.mkdir(parents=True)
+            (fresh_legacy / "settings.json").write_text(
+                json.dumps({"schema_version": 8, "language": "zh-CN"}),
+                encoding="utf-8",
+            )
+            self.assertTrue(SettingsService(fresh_legacy).get()["live_mod_detection"])
+
+    def test_game_data_settings_are_clamped_normalized_and_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = SettingsService(Path(temporary))
+
+            saved = service.save(
+                {
+                    "unit_model_multiplier": "75.5",
+                    "disable_unit_friendly_fire": 1,
+                    "disable_spell_friendly_fire": "",
+                }
+            )
+
+            self.assertEqual(saved["unit_model_multiplier"], 5.0)
+            self.assertTrue(saved["disable_unit_friendly_fire"])
+            self.assertFalse(saved["disable_spell_friendly_fire"])
+            reopened = SettingsService(Path(temporary)).get()
+            self.assertEqual(reopened["unit_model_multiplier"], 5.0)
+            self.assertTrue(reopened["disable_unit_friendly_fire"])
+
+            self.assertEqual(
+                service.save({"unit_model_multiplier": "0.1"})["unit_model_multiplier"],
+                0.5,
+            )
+
+            self.assertEqual(
+                service.save({"unit_model_multiplier": "invalid"})["unit_model_multiplier"],
+                1.0,
+            )
+
+    def test_normalize_changes_previews_values_without_persisting_them(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = SettingsService(Path(temporary))
+            normalize_changes = getattr(service, "normalize_changes", None)
+
+            self.assertTrue(callable(normalize_changes))
+            if not callable(normalize_changes):
+                return
+            normalized = normalize_changes({"unit_model_multiplier": "75.5"})
+
+            self.assertEqual(normalized["unit_model_multiplier"], 5.0)
+            self.assertEqual(service.get()["unit_model_multiplier"], 1.0)
 
 
 if __name__ == "__main__":

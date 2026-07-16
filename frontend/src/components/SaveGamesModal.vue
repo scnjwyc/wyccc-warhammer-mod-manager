@@ -10,7 +10,7 @@ const props = defineProps({
   running: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'refresh', 'load'])
+const emit = defineEmits(['close', 'refresh', 'load', 'enable-mods', 'compare-mods'])
 const query = ref('')
 
 watch(() => props.open, open => {
@@ -63,12 +63,28 @@ const formatSize = value => {
             <strong :title="save.name">{{ save.name }}</strong>
             <span>{{ formatDate(save.modified_at) }} · {{ formatSize(save.size) }}</span>
           </div>
-          <button
-            type="button"
-            class="primary-button"
-            :disabled="!!busy || running"
-            @click="emit('load', save.name)"
-          >{{ t('saves.load') }}</button>
+          <div class="save-game-actions">
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="save-compare-mods"
+              :disabled="!!busy"
+              @click="emit('compare-mods', save.name)"
+            >{{ t('saves.compareMods') }}</button>
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="save-enable-mods"
+              :disabled="!!busy || running"
+              @click="emit('enable-mods', save.name)"
+            >{{ t('saves.enableMods') }}</button>
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="!!busy || running"
+              @click="emit('load', save.name)"
+            >{{ t('saves.load') }}</button>
+          </div>
         </article>
         <div v-if="!filteredSaves.length" class="empty-state save-games-empty">
           <p>{{ saves.length ? t('saves.noMatches') : t('saves.none') }}</p>

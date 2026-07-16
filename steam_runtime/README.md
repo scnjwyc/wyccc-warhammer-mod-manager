@@ -14,3 +14,8 @@
 [steamworks.js](https://github.com/ceifa/steamworks.js)，许可证见
 `../licenses/steamworks.js-LICENSE.txt`。本项目为语言化 Workshop 更新添加的最小原生补丁及
 可复现来源记录见 `steamworks/LOCAL_PATCH.md`。
+
+依赖关系查询使用隔离的 `steamworks_dependencies/` 运行时。该模块提供 Steam 官方
+`GetQueryUGCChildren` 对应的 `getItemDependencies`，并与其匹配的 `steam_api64.dll`
+放在独立目录，避免和语言化更新模块的 Steamworks SDK 版本互相覆盖。来源、哈希与许可证记录
+见 `steamworks_dependencies/README.md`。

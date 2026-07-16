@@ -647,6 +647,13 @@ class StateRepository:
             "updated_at": now,
         }
 
+    def delete_data_sync_item(self, pack_name: str) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "DELETE FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE",
+                (Path(str(pack_name or "")).name,),
+            )
+
     @staticmethod
     def _validate_mod_type_name(name: str) -> str:
         clean_name = str(name or "").strip()

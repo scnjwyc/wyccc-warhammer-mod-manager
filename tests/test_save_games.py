@@ -13,6 +13,20 @@ from backend.save_games import SaveGameService
 
 
 class SaveGameTests(unittest.TestCase):
+    def test_extracts_ordered_mod_pack_names_and_filters_vanilla_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            save_dir = Path(temporary)
+            save = save_dir / "campaign.save"
+            save.write_bytes(
+                b"header\0data.pack\0first.pack\0FIRST.PACK\0folder\\second.pack\0tail"
+            )
+            service = SaveGameService(save_dir)
+
+            result = service.pack_names("CAMPAIGN.SAVE", {"data.pack"})
+
+        self.assertEqual(result["save"]["name"], "campaign.save")
+        self.assertEqual(result["pack_names"], ["first.pack", "second.pack"])
+
     def test_lists_only_save_files_newest_first_and_rejects_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             save_dir = Path(temporary)
@@ -81,6 +95,21 @@ class SaveGameTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         launch.assert_called_once_with(["a"], "token", "latest.save")
         self.assertEqual(listed["data"]["items"][0]["name"], "latest.save")
+
+    def test_save_mod_rpc_returns_save_metadata_and_pack_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_dir = root / "saves"
+            save_dir.mkdir()
+            (save_dir / "campaign.save").write_bytes(b"\0data.pack\0example.pack\0")
+            api = API(root / "state")
+            api.save_games = SaveGameService(save_dir)
+            with patch.object(api, "_vanilla_pack_names", return_value={"data.pack"}):
+                response = api.call("get_save_mods", ["campaign.save"])
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["save"]["name"], "campaign.save")
+        self.assertEqual(response["data"]["pack_names"], ["example.pack"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from typing import Any
 
 
 RESULT_PREFIX = "WMM_WORKSHOP_RESULT="
+logger = logging.getLogger(__name__)
 
 
 class SteamworksBridgeError(RuntimeError):
@@ -153,13 +155,27 @@ def query_workshop_dependencies(
     if not isinstance(source, dict):
         raise SteamworksBridgeError("Steamworks bridge result has no dependency data")
     failures = payload.get("dependency_failures")
-    if isinstance(failures, list) and failures:
-        failed_ids = ", ".join(str(value) for value in failures[:10])
-        raise SteamworksBridgeError(
-            f"Steamworks could not read dependencies for Workshop items: {failed_ids}"
+    failed_ids = {
+        str(value)
+        for value in failures
+        if str(value).isdigit()
+    } if isinstance(failures, list) else set()
+    if failed_ids:
+        warnings = payload.get("warnings")
+        details = " | ".join(
+            str(value)
+            for value in warnings[:5]
+        ) if isinstance(warnings, list) else ""
+        logger.warning(
+            "Steamworks dependency query retained cache for %s item(s): %s%s",
+            len(failed_ids),
+            ", ".join(sorted(failed_ids)[:10]),
+            f"; {details}" if details else "",
         )
     result: dict[str, list[dict[str, str]]] = {}
     for workshop_id in ids:
+        if workshop_id in failed_ids or workshop_id not in source:
+            continue
         required_items = source.get(workshop_id, [])
         if not isinstance(required_items, list):
             required_items = []
@@ -247,6 +263,11 @@ def perform_workshop_operation(
     normalized_id = str(workshop_id or "").strip()
     if not normalized_id.isdigit():
         raise ValueError("Invalid Workshop ID")
+    effective_timeout_seconds = (
+        max(int(timeout_seconds), 660)
+        if normalized_operation == "force_update"
+        else int(timeout_seconds)
+    )
     payload = _run_bridge_request(
         {
             "operation": normalized_operation,
@@ -254,7 +275,7 @@ def perform_workshop_operation(
             "id": normalized_id,
         },
         root=root,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=effective_timeout_seconds,
     )
     result = payload.get("result")
     if not isinstance(result, dict):

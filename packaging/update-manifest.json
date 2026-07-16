@@ -1,101 +1,87 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.5.0",
-  "published_at": "2026-07-15",
+  "version": "0.6.0",
+  "published_at": "2026-07-16",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.5.0/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "599ed220d3d458487f8ea8275f7fd66618928d43fa23beae3bdf7f9e3a8c6af3",
-    "size": 60954760
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.6.0/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "b695348c6fba9e788a44e5abfbbc1bfafefbb157425abeb4b614cec0c3b099cd",
+    "size": 61888402
   },
   "changelog": [
     {
-      "title": "设置与关于项目",
+      "title": "启动与低消耗模式",
       "changes": [
         {
           "type": "feature",
-          "text": "设置界面拆分为基础设置、功能（游戏启动增强）、AI 集成和关于项目四个分页。"
+          "text": "新增低消耗模式：游戏运行时自动降低管理器资源占用，退出游戏后恢复。"
         },
         {
           "type": "feature",
-          "text": "新增关于项目页，集中显示版本与更新信息；下载入口仅指向 GitHub、Gitee 发布页，反馈与交流提供 GitHub Issues 和 QQ 群 592799189。"
-        }
-      ]
-    },
-    {
-      "title": "启动恢复与列表操作",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "首次启动时自动读取 Warhammer III 上次使用的 used_mods.txt，仅按本机已安装 MOD 恢复启用状态与加载顺序，不会下载或订阅缺失 MOD。"
-        },
-        {
-          "type": "feature",
-          "text": "已启用与未启用 MOD 均支持单项或 Ctrl、Shift 批量拖拽；可在两栏之间移动，已启用顺序即时保存，未启用顺序仅在本次运行中保留。"
+          "text": "新增即时 MOD 增删检测：安装或删除 MOD 后自动刷新列表。"
         },
         {
           "type": "improvement",
-          "text": "统一打开目录、重新扫描、刷新工坊信息和打开游戏目录等按钮样式，并将页面入口统一命名为“创意工坊页面”。"
+          "text": "优化启动和工坊刷新；重复启动会唤醒已有窗口，游戏运行状态识别也更准确。"
         }
       ]
     },
     {
-      "title": "创意工坊发布与分享码导入",
+      "title": "游戏数据修改",
       "changes": [
         {
           "type": "feature",
-          "text": "发布 MOD 更新时可选择语言，默认使用当前界面语言；切换语言后自动载入对应的创意工坊标题与描述，只有英文简介时自动使用英文。"
+          "text": "新增“游戏数据修改”窗口，可调整兵模人数和友伤选项；支持一键生成补丁，保存更改时也会自动更新。"
         },
         {
           "type": "feature",
-          "text": "将“更新说明”调整为默认为空的“更新日志”，并通过本地 Steamworks 补丁写入所选发布语言。"
+          "text": "订阅 Dynamic Unit Size 后，可按 0.5–5 倍调整普通单位、骑乘与战争机器的兵模人数。"
         },
         {
           "type": "feature",
-          "text": "分享码导入会列出未订阅的 MOD，在用户确认后自动订阅，并在下载完成、重新扫描后还原到播放集。"
+          "text": "订阅 Dynamic No Friendly Fire 后，可分别禁用单位友伤和法术友伤，增益与治疗仍可正常作用于友军。"
         }
       ]
     },
     {
-      "title": "内置多语言",
+      "title": "存档与 MOD 列表操作",
       "changes": [
         {
           "type": "feature",
-          "text": "首次启动时根据系统语言自动选择简体中文、英语、韩语、俄语或日语；检测失败或系统语言不受支持时默认使用英语。"
+          "text": "存档列表可一键启用存档使用的 MOD，并与当前启用列表进行比较。"
         },
         {
           "type": "feature",
-          "text": "界面与更新日志现已内置简体中文、英语、韩语、俄语和日语。"
+          "text": "新增 Ctrl+A 全选和双击启用或停用，让 MOD 列表操作更快捷。"
         },
         {
-          "type": "improvement",
-          "text": "统一各语言下的按钮、标题、状态与提示文本，避免界面混用其他语言。"
-        }
-      ]
-    },
-    {
-      "title": "警告检测与提示修复",
-      "changes": [
+          "type": "feature",
+          "text": "支持导入官方 MOD 启动器配置，快速新建播放集或替换当前播放集。"
+        },
         {
           "type": "fix",
-          "text": "修复过期 MOD 检查的时间比较方向错误；现在仅当 MOD 在游戏本体更新后尚未更新时提示，同步更新说明文本，并兼容旧版忽略记录。"
-        },
-        {
-          "type": "improvement",
-          "text": "缺失依赖警告现在只检查已启用 MOD；启用、停用、排序、跨栏拖放、切换播放集或导入后都会立即重新检测。"
-        },
-        {
-          "type": "improvement",
-          "text": "当 Steam 暂时无法读取部分创意工坊依赖时，明确说明正在使用缓存且缺失依赖结果可能不是最新状态，并允许在本次运行中忽略该提示。"
+          "text": "修复工坊依赖刷新不准确的问题，让缺失依赖警告更可靠。"
         }
       ]
     },
     {
-      "title": "文档与项目说明",
+      "title": "MOD 文件与工坊操作",
       "changes": [
         {
+          "type": "feature",
+          "text": "支持批量复制 MOD 路径，详情栏的 MOD 名称和文件名也可直接选中复制。"
+        },
+        {
+          "type": "feature",
+          "text": "支持将 MOD 文件移入 Windows 回收站，误删后仍可恢复。"
+        },
+        {
           "type": "improvement",
-          "text": "重写 README 的用户功能介绍，精简不必要的实现细节，并补充 Warhammer Mod Manager 与 RimCrow 的致谢。"
+          "text": "取消订阅时会同步清理对应工坊文件，并立即刷新 MOD 列表。"
+        },
+        {
+          "type": "fix",
+          "text": "强制更新现在可重新下载并恢复缺失的工坊 MOD 文件。"
         }
       ]
     }

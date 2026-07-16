@@ -154,10 +154,10 @@ function Get-WmmPython {
     }
 
     $probe = if ($IncludeBuildTools) {
-        "import webview, PyInstaller, PIL, lz4.frame, zstandard"
+        "import webview, PyInstaller, PIL, lz4.frame, zstandard, watchdog.observers"
     }
     else {
-        "import webview, lz4.frame, zstandard"
+        "import webview, lz4.frame, zstandard, watchdog.observers"
     }
     if (-not (Test-WmmPythonImports -Python $venvPython -Probe $probe)) {
         $projectRequirement = if ($IncludeBuildTools) { "${Root}[build]" } else { $Root }

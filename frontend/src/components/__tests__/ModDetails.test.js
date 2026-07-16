@@ -27,6 +27,13 @@ const sampleMod = {
 }
 
 describe('ModDetails', () => {
+  it('allows selecting the mod name and pack filename as text', () => {
+    const wrapper = mount(ModDetails, { props: { mod: sampleMod, preview: '' } })
+
+    expect(wrapper.get('[data-testid="mod-display-name"]').classes()).toContain('selectable-detail-text')
+    expect(wrapper.get('[data-testid="mod-source-name"]').classes()).toContain('selectable-detail-text')
+  })
+
   it('shows core metadata but ignores excluded detail fields', () => {
     const wrapper = mount(ModDetails, { props: { mod: sampleMod, preview: '' } })
     const text = wrapper.text()

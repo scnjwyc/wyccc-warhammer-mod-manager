@@ -32,7 +32,10 @@ class FakeResponse:
 
 class WorkshopMetadataTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = patch("backend.workshop.query_workshop_dependencies", return_value={})
+        patcher = patch(
+            "backend.workshop.query_workshop_dependencies",
+            return_value={"123": []},
+        )
         self.query_dependencies = patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -400,6 +403,76 @@ class WorkshopMetadataTests(unittest.TestCase):
         )
         self.assertEqual(cached["required_workshop_items"], item["required_workshop_items"])
         self.query_dependencies.assert_called_once_with(["123"], "schinese")
+
+    def test_dependency_refresh_preserves_only_the_failed_items_cache(self) -> None:
+        self.query_dependencies.return_value = {
+            "123": [{"workshop_id": "456", "title": "Fresh dependency"}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_path = Path(temporary) / "workshop_cache.json"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 5,
+                        "items": {
+                            "789": {
+                                "workshop_id": "789",
+                                "required_workshop_items": [
+                                    {"workshop_id": "999", "title": "Cached dependency"}
+                                ],
+                            }
+                        },
+                        "authors": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = WorkshopMetadataService(cache_path)
+            result = service.ensure_dependencies(["123", "789"], "zh-CN")
+
+        self.assertEqual(
+            result["123"]["required_workshop_items"],
+            [{"workshop_id": "456", "title": "Fresh dependency"}],
+        )
+        self.assertEqual(
+            result["789"]["required_workshop_items"],
+            [{"workshop_id": "999", "title": "Cached dependency"}],
+        )
+        self.assertEqual(service.last_refresh_warning, DEPENDENCY_CACHE_WARNING)
+
+    def test_schema_five_failure_retries_immediately_with_the_fixed_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_path = Path(temporary) / "workshop_cache.json"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 5,
+                        "items": {
+                            "123": {
+                                "workshop_id": "123",
+                                "dependencies_last_error_at": 9_999_999_999_999,
+                                "required_workshop_items": [
+                                    {"workshop_id": "456", "title": "Old cache"}
+                                ],
+                            }
+                        },
+                        "authors": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = WorkshopMetadataService(cache_path)
+            with (
+                patch.object(service, "_refresh_english_details"),
+                patch.object(service, "_refresh_author_profiles"),
+            ):
+                item = service.refresh(["123"], "en-US")["123"]
+            persisted = json.loads(cache_path.read_text(encoding="utf-8"))
+
+        self.query_dependencies.assert_called_once_with(["123"], "english")
+        self.assertEqual(item["required_workshop_items"], [])
+        self.assertEqual(item["dependencies_last_error_at"], 0)
+        self.assertEqual(persisted["schema_version"], 6)
 
 
 if __name__ == "__main__":

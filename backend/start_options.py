@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import math
 import os
 import struct
 import tempfile
@@ -9,10 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from .constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS
+from .game_data import (
+    TABLE_PREFIXES,
+    DbSource,
+    GameDataEntry,
+    build_game_data_entries,
+)
 from .models import ModAsset
 
 
 RUNTIME_PACK_NAME = "!!!!wyccc_runtime_options.pack"
+GAME_DATA_PATCH_NAME = "!!!!wyccc_game_data_patch.pack"
 PERMISSIONS_PREFIX = "db\\units_custom_battle_permissions_tables\\"
 PERMISSIONS_ENTRY = f"{PERMISSIONS_PREFIX}!!!!wyccc_runtime"
 PERMISSIONS_VERSION = 11
@@ -109,7 +118,15 @@ def _decompress_payload(raw: bytes, name: str) -> bytes:
     raise ValueError(f"无法解压权限表 {name}：{last_error or '未知压缩格式'}")
 
 
-def read_pack_entries(path: Path, prefix: str = "") -> list[PackEntry]:
+def read_pack_entries(
+    path: Path,
+    prefix: str | Iterable[str] = "",
+) -> list[PackEntry]:
+    prefixes = (
+        ((prefix,) if prefix else ())
+        if isinstance(prefix, str)
+        else tuple(str(item) for item in prefix if str(item))
+    )
     try:
         with path.open("rb") as stream:
             header = stream.read(28)
@@ -136,7 +153,9 @@ def read_pack_entries(path: Path, prefix: str = "") -> list[PackEntry]:
                 if file_size < 0 or terminator < 0:
                     raise ValueError(f"Pack 文件索引损坏：{path.name}")
                 name = index[cursor:terminator].decode("utf-8", errors="replace")
-                if not prefix or name.casefold().startswith(prefix.casefold()):
+                if not prefixes or any(
+                    name.casefold().startswith(item.casefold()) for item in prefixes
+                ):
                     selected.append((name, current_offset, file_size, compressed))
                 current_offset += file_size
                 cursor = terminator + 1
@@ -288,6 +307,124 @@ def write_pfh5_pack(path: Path, entries: Iterable[PackEntry]) -> Path:
     return path
 
 
+def _effective_game_data_settings(
+    settings: dict[str, Any],
+    subscribed_workshop_ids: Iterable[str],
+) -> dict[str, float | bool]:
+    subscribed_ids = {
+        str(workshop_id).strip()
+        for workshop_id in subscribed_workshop_ids
+        if str(workshop_id).strip()
+    }
+    unit_size_available = (
+        GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]["workshop_id"] in subscribed_ids
+    )
+    friendly_fire_available = (
+        GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]["workshop_id"] in subscribed_ids
+    )
+    try:
+        unit_multiplier = float(settings.get("unit_model_multiplier", 1.0))
+    except (TypeError, ValueError):
+        unit_multiplier = 1.0
+    if not math.isfinite(unit_multiplier):
+        unit_multiplier = 1.0
+    return {
+        "unit_model_multiplier": unit_multiplier if unit_size_available else 1.0,
+        "disable_unit_friendly_fire": (
+            bool(settings.get("disable_unit_friendly_fire")) if friendly_fire_available else False
+        ),
+        "disable_spell_friendly_fire": (
+            bool(settings.get("disable_spell_friendly_fire")) if friendly_fire_available else False
+        ),
+    }
+
+
+def _game_data_enabled(settings: dict[str, float | bool]) -> bool:
+    return (
+        not math.isclose(
+            float(settings["unit_model_multiplier"]),
+            1.0,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        or bool(settings["disable_unit_friendly_fire"])
+        or bool(settings["disable_spell_friendly_fire"])
+    )
+
+
+def _enabled_game_data_options(settings: dict[str, float | bool]) -> list[str]:
+    options: list[str] = []
+    if not math.isclose(
+        float(settings["unit_model_multiplier"]),
+        1.0,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        options.append("unit_model_multiplier")
+    if settings["disable_unit_friendly_fire"]:
+        options.append("disable_unit_friendly_fire")
+    if settings["disable_spell_friendly_fire"]:
+        options.append("disable_spell_friendly_fire")
+    return options
+
+
+def _collect_game_data_sources(
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+) -> tuple[DbSource, ...]:
+    active_assets = [
+        assets[mod_id]
+        for mod_id in active_ids
+        if mod_id in assets and Path(assets[mod_id].path).is_file()
+    ]
+    active_paths = [Path(asset.path).resolve(strict=False) for asset in active_assets]
+    db_pack = (Path(data_path) / "db.pack").resolve(strict=False)
+    prioritized_paths = list(dict.fromkeys([*active_paths, db_pack]))
+    return tuple(
+        DbSource(
+            path.name,
+            tuple(
+                GameDataEntry(entry.name, entry.payload)
+                for entry in read_pack_entries(path, TABLE_PREFIXES)
+            ),
+        )
+        for path in prioritized_paths
+        if path.is_file()
+    )
+
+
+def build_game_data_patch(
+    output_dir: Path,
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+    settings: dict[str, Any],
+    subscribed_workshop_ids: Iterable[str] = (),
+) -> dict[str, Any]:
+    effective_settings = _effective_game_data_settings(settings, subscribed_workshop_ids)
+    output_path = Path(output_dir) / GAME_DATA_PATCH_NAME
+    if not _game_data_enabled(effective_settings):
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "options": [],
+            "entry_count": 0,
+            "game_data": {},
+        }
+
+    sources = _collect_game_data_sources(data_path, assets, active_ids)
+    game_data = build_game_data_entries(sources, effective_settings)
+    entries = [PackEntry(entry.name, entry.payload) for entry in game_data.entries]
+    write_pfh5_pack(output_path, entries)
+    return {
+        "path": str(output_path.resolve(strict=False)),
+        "options": _enabled_game_data_options(effective_settings),
+        "entry_count": len(entries),
+        "game_data": game_data.stats,
+    }
+
+
 def build_runtime_options_pack(
     output_dir: Path,
     data_path: str,
@@ -304,7 +441,9 @@ def build_runtime_options_pack(
             for mod_id in active_ids
             if mod_id in assets and Path(assets[mod_id].path).is_file()
         )
-        unique_paths = list(dict.fromkeys(path.resolve(strict=False) for path in pack_paths if path.is_file()))
+        unique_paths = list(
+            dict.fromkeys(path.resolve(strict=False) for path in pack_paths if path.is_file())
+        )
         entries.append(PackEntry(PERMISSIONS_ENTRY, _build_permission_table(unique_paths)))
         enabled_options.append("custom_battle_all_units_as_lords")
     if settings.get("enable_script_logging"):
@@ -317,10 +456,16 @@ def build_runtime_options_pack(
     output_path = Path(output_dir) / RUNTIME_PACK_NAME
     if not entries:
         output_path.unlink(missing_ok=True)
-        return {"path": "", "options": [], "entry_count": 0}
+        return {
+            "path": "",
+            "options": [],
+            "entry_count": 0,
+            "game_data": {},
+        }
     write_pfh5_pack(output_path, entries)
     return {
         "path": str(output_path.resolve(strict=False)),
         "options": enabled_options,
         "entry_count": len(entries),
+        "game_data": {},
     }

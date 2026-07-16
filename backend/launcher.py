@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import csv
+import ctypes
 import os
 import subprocess
 from pathlib import Path
@@ -8,27 +8,129 @@ from pathlib import Path
 from .constants import WH3_EXECUTABLE, WH3_PROCESS_NAME
 
 
-def is_game_running() -> bool:
+def _windows_process_entries() -> list[tuple[int, str]]:
+    from ctypes import wintypes
+
+    class ProcessEntry32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry32W))
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry32W))
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if snapshot in (None, 0, ctypes.c_void_p(-1).value):
+        raise OSError(ctypes.get_last_error(), "CreateToolhelp32Snapshot failed")
+    entries: list[tuple[int, str]] = []
+    try:
+        entry = ProcessEntry32W()
+        entry.dwSize = ctypes.sizeof(entry)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return entries
+        while True:
+            entries.append((int(entry.th32ProcessID), str(entry.szExeFile)))
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return entries
+
+
+def _windows_executable_path(process_id: int) -> str:
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.QueryFullProcessImageNameW.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPWSTR,
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(0x1000, False, int(process_id))
+    if not handle:
+        return ""
+    try:
+        buffer = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(buffer))
+        if not kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+            return ""
+        return buffer.value
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _windows_process_has_visible_window(process_id: int) -> bool:
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    found = False
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    @callback_type
+    def visit_window(window: int, _parameter: int) -> bool:
+        nonlocal found
+        if not user32.IsWindowVisible(window) or user32.GetWindowTextLengthW(window) <= 0:
+            return True
+        owner_process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(window, ctypes.byref(owner_process_id))
+        if int(owner_process_id.value) != int(process_id):
+            return True
+        found = True
+        return False
+
+    user32.EnumWindows(visit_window, 0)
+    return found
+
+
+def _normalized_executable_path(path: str | Path) -> str:
+    value = os.fspath(path).strip().strip('"')
+    return os.path.normcase(os.path.abspath(value)) if value else ""
+
+
+def is_game_running(expected_executable: str | Path = "") -> bool:
     if os.name == "nt":
         try:
-            completed = subprocess.run(
-                [
-                    "tasklist",
-                    "/FI",
-                    f"IMAGENAME eq {WH3_PROCESS_NAME}",
-                    "/FO",
-                    "CSV",
-                    "/NH",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            rows = list(csv.reader(completed.stdout.splitlines()))
-            return any(row and row[0].casefold() == WH3_PROCESS_NAME.casefold() for row in rows)
-        except (OSError, subprocess.SubprocessError):
+            expected = WH3_PROCESS_NAME.casefold()
+            matches = [
+                process_id
+                for process_id, process_name in _windows_process_entries()
+                if process_name.casefold() == expected
+            ]
+            if not matches:
+                return False
+            configured_path = _normalized_executable_path(expected_executable)
+            if not configured_path:
+                return True
+            for process_id in matches:
+                process_path = _windows_executable_path(process_id)
+                if process_path:
+                    if _normalized_executable_path(process_path) == configured_path:
+                        return True
+                    continue
+                if _windows_process_has_visible_window(process_id):
+                    return True
+            return False
+        except OSError:
             return False
     try:
         completed = subprocess.run(
@@ -53,7 +155,7 @@ def launch_game(
         raise ValueError(f"找不到游戏可执行文件：{executable}")
     if not Path(mod_list_path).is_file():
         raise ValueError(f"找不到启动清单：{mod_list_path}")
-    if is_game_running():
+    if is_game_running(executable):
         raise ValueError("Warhammer3.exe 已经在运行")
 
     normalized_save_name = str(save_name or "").strip()

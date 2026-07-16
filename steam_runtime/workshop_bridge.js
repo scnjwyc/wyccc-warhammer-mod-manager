@@ -1,10 +1,15 @@
 "use strict";
 
 const fs = require("fs");
-const steamworks = require("./steamworks");
+const path = require("path");
 
 const RESULT_PREFIX = "WMM_WORKSHOP_RESULT=";
 const QUERY_CHUNK_SIZE = 100;
+const DEPENDENCY_QUERY_CONCURRENCY = 16;
+const WORKSHOP_ITEM_INSTALLED = 4;
+const WORKSHOP_ITEM_DOWNLOAD_BUSY = 8 | 16 | 32;
+const FORCE_UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
+const FORCE_UPDATE_POLL_INTERVAL_MS = 100;
 
 const writeResultAndExit = (payload, exitCode) => {
   const line = `${RESULT_PREFIX}${JSON.stringify(payload)}\n`;
@@ -15,6 +20,82 @@ const readRequest = async () => {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+};
+
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+const directorySize = root => {
+  if (!root || !fs.existsSync(root)) return 0n;
+  const pending = [root];
+  let total = 0n;
+  while (pending.length) {
+    const directory = pending.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return 0n;
+    }
+    for (const entry of entries) {
+      const itemPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(itemPath);
+      } else if (entry.isFile()) {
+        try {
+          total += BigInt(fs.statSync(itemPath).size);
+        } catch {
+          return 0n;
+        }
+      }
+    }
+  }
+  return total;
+};
+
+const workshopDownloadStatus = (workshop, itemId) => {
+  const state = Number(workshop.state(itemId) || 0);
+  const installInfo = workshop.installInfo(itemId);
+  const downloadInfo = workshop.downloadInfo(itemId);
+  const installPath = String(installInfo?.folder || "");
+  const expectedSize = BigInt(installInfo?.sizeOnDisk || 0);
+  const actualSize = directorySize(installPath);
+  return {
+    state,
+    installPath,
+    expectedSize,
+    actualSize,
+    downloadedBytes: BigInt(downloadInfo?.current || 0),
+    totalBytes: BigInt(downloadInfo?.total || 0),
+  };
+};
+
+const waitForWorkshopDownload = async (workshop, itemId) => {
+  const startedAt = Date.now();
+  let status;
+  while (Date.now() - startedAt <= FORCE_UPDATE_TIMEOUT_MS) {
+    status = workshopDownloadStatus(workshop, itemId);
+    const installed = (status.state & WORKSHOP_ITEM_INSTALLED) !== 0;
+    const busy = (status.state & WORKSHOP_ITEM_DOWNLOAD_BUSY) !== 0;
+    const diskComplete = Boolean(status.installPath)
+      && fs.existsSync(status.installPath)
+      && (status.expectedSize === 0n || status.actualSize >= status.expectedSize);
+    if (installed && !busy && diskComplete) {
+      return {
+        completed: true,
+        state: status.state,
+        install_path: status.installPath,
+        size_on_disk: status.expectedSize.toString(),
+        actual_size_on_disk: status.actualSize.toString(),
+        downloaded_bytes: status.downloadedBytes.toString(),
+        total_bytes: status.totalBytes.toString(),
+      };
+    }
+    await wait(FORCE_UPDATE_POLL_INTERVAL_MS);
+  }
+  throw new Error(
+    `Timed out waiting for Workshop item ${itemId.toString()} to finish downloading `
+    + `(state=${status?.state ?? 0}, downloaded=${status?.downloadedBytes ?? 0}/${status?.totalBytes ?? 0})`,
+  );
 };
 
 const serializeItem = item => ({
@@ -64,12 +145,30 @@ const queryLanguage = async (client, ids, language, warnings) => {
   return items;
 };
 
+const forEachConcurrent = async (values, concurrency, worker) => {
+  let nextIndex = 0;
+  const runners = Array.from(
+    { length: Math.min(Math.max(1, concurrency), values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        await worker(values[index], index);
+      }
+    },
+  );
+  await Promise.all(runners);
+};
+
 const main = async () => {
   const request = await readRequest();
   const appId = Number(request?.appId || 0);
   const operation = String(request?.operation || "query");
   if (!Number.isInteger(appId) || appId <= 0) throw new Error("Invalid Steam App ID");
 
+  const steamworks = operation === "query_dependencies"
+    ? require("./steamworks_dependencies")
+    : require("./steamworks");
   const client = steamworks.init(appId);
   if (operation === "query_subscriptions") {
     const ids = [...new Set((request?.ids || []).map(String))]
@@ -210,9 +309,15 @@ const main = async () => {
     }
     const accepted = client.workshop.download(itemId, true);
     if (!accepted) throw new Error(`Steam rejected the update request for Workshop item ${workshopId}`);
+    const completion = await waitForWorkshopDownload(client.workshop, itemId);
     writeResultAndExit({
       ok: true,
-      result: { operation, workshop_id: workshopId, accepted: true },
+      result: {
+        operation,
+        workshop_id: workshopId,
+        accepted: true,
+        ...completion,
+      },
     }, 0);
     return;
   }
@@ -221,11 +326,14 @@ const main = async () => {
       .filter(value => /^\d+$/.test(value));
     const language = String(request?.language || "english");
     if (!ids.length) throw new Error("No valid Workshop IDs were supplied");
+    if (typeof client.workshop.getItemDependencies !== "function") {
+      throw new Error("The bundled Steamworks dependency-query module is incompatible");
+    }
     const warnings = [];
     const dependencyIdsByItem = {};
     const dependencyFailures = [];
     const allDependencyIds = new Set();
-    await Promise.all(ids.map(async id => {
+    await forEachConcurrent(ids, DEPENDENCY_QUERY_CONCURRENCY, async id => {
       try {
         const dependencyIds = await client.workshop.getItemDependencies(BigInt(id));
         dependencyIdsByItem[id] = dependencyIds.map(value => value.toString());
@@ -235,7 +343,7 @@ const main = async () => {
         dependencyFailures.push(id);
         warnings.push(`dependencies item ${id}: ${String(error)}`);
       }
-    }));
+    });
 
     const titles = allDependencyIds.size
       ? await queryLanguage(

@@ -131,6 +131,41 @@ class SteamworksBridgeTests(unittest.TestCase):
         self.assertEqual(request["ids"], ["123"])
         self.assertEqual(request["language"], "schinese")
 
+    def test_dependency_query_keeps_successes_when_one_item_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = root / "steam_runtime" / "workshop_bridge.js"
+            script.parent.mkdir(parents=True)
+            script.write_text("// fixture", encoding="utf-8")
+            node = root / "node.exe"
+            node.write_bytes(b"node fixture")
+            payload = {
+                "ok": True,
+                "dependencies": {
+                    "123": [{"workshop_id": "456", "title": "依赖 MOD"}],
+                    "789": [],
+                },
+                "dependency_failures": ["789"],
+                "warnings": ["dependencies item 789: access denied"],
+            }
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=f"{RESULT_PREFIX}{json.dumps(payload, ensure_ascii=False)}\n",
+                stderr="",
+            )
+            with (
+                patch("backend.steamworks_bridge.find_node_executable", return_value=node),
+                patch("backend.steamworks_bridge.subprocess.run", return_value=completed),
+            ):
+                result = query_workshop_dependencies(
+                    ["123", "789"],
+                    "schinese",
+                    root=root,
+                )
+
+        self.assertEqual(result, {"123": [{"workshop_id": "456", "title": "依赖 MOD"}]})
+
     def test_workshop_operation_sends_force_update_request(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -145,6 +180,7 @@ class SteamworksBridgeTests(unittest.TestCase):
                     "operation": "force_update",
                     "workshop_id": "123",
                     "accepted": True,
+                    "completed": True,
                 },
             }
             completed = subprocess.CompletedProcess(
@@ -164,6 +200,7 @@ class SteamworksBridgeTests(unittest.TestCase):
         request = json.loads(run.call_args.kwargs["input"])
         self.assertEqual(request["operation"], "force_update")
         self.assertEqual(request["id"], "123")
+        self.assertGreaterEqual(run.call_args.kwargs["timeout"], 600)
 
     def test_subscription_query_and_bulk_subscribe_use_the_native_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

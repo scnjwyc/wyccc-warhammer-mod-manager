@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.constants import PACK_TYPE_MOD, PACK_TYPE_MOVIE
+from backend.constants import (
+    GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    PACK_TYPE_MOD,
+    PACK_TYPE_MOVIE,
+)
 from backend.models import GamePaths
 from backend.scanner import ModScanner, read_pack_dependencies, read_pack_type
 from tests.helpers import write_pack
@@ -89,19 +93,63 @@ class DependencyWorkshopMetadata(OfflineWorkshopMetadata):
 class DependencyWarningWorkshopMetadata(DependencyWorkshopMetadata):
     last_refresh_warning = ""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.ensure_calls = 0
+
     def ensure_dependencies(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
     ) -> dict[str, dict]:
+        self.ensure_calls += 1
         self.last_refresh_warning = (
             "Steam 暂时无法读取部分工坊依赖，已使用已有缓存；"
             "缺失依赖结果可能不是最新状态"
         )
         return self.get_many(workshop_ids, interface_language)
 
+    def refresh(
+        self,
+        workshop_ids: list[str],
+        interface_language: str = "en-US",
+    ) -> dict[str, dict]:
+        return self.ensure_dependencies(workshop_ids, interface_language)
+
 
 class ScannerTests(unittest.TestCase):
+    def test_internal_game_data_feature_mods_are_excluded_from_all_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            workshop = root / "steamapps" / "workshop" / "content" / "1142710"
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            fire_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]
+            write_pack(data / "data.pack")
+            write_pack(data / unit_item["pack_name"])
+            write_pack(data / "visible_local.pack")
+            write_pack(workshop / unit_item["workshop_id"] / unit_item["pack_name"])
+            write_pack(workshop / fire_item["workshop_id"] / fire_item["pack_name"])
+            write_pack(workshop / "123456" / "visible_workshop.pack")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+
+            metadata = OfflineWorkshopMetadata()
+            result = ModScanner(metadata).scan(
+                GamePaths(
+                    game_path=str(game),
+                    data_path=str(data),
+                    workshop_path=str(workshop),
+                ),
+                {"language": "zh-CN", "check_outdated_mods": False},
+            )
+
+            self.assertEqual(
+                {mod.pack_name for mod in result.mods},
+                {"visible_local.pack", "visible_workshop.pack"},
+            )
+            self.assertEqual(metadata.requested_ids, ["123456"])
+
     def test_reads_pfh5_mod_and_movie_pack_types(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -241,9 +289,11 @@ class ScannerTests(unittest.TestCase):
             write_pack(workshop / "101" / "first.pack")
             write_pack(workshop / "102" / "requirement.pack")
 
-            result = ModScanner(DependencyWarningWorkshopMetadata()).scan(
+            metadata = DependencyWarningWorkshopMetadata()
+            result = ModScanner(metadata).scan(
                 GamePaths(workshop_path=str(workshop)),
                 {"language": "zh-CN", "check_outdated_mods": False},
+                refresh_workshop=True,
             )
 
         notice = next(
@@ -254,6 +304,29 @@ class ScannerTests(unittest.TestCase):
         )
         self.assertTrue(notice["ignorable"])
         self.assertIn("已有缓存", notice["message"])
+        self.assertEqual(metadata.ensure_calls, 1)
+
+    def test_normal_scan_never_refreshes_workshop_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "1142710"
+            write_pack(workshop / "101" / "first.pack")
+            metadata = DependencyWarningWorkshopMetadata()
+
+            result = ModScanner(metadata).scan(
+                GamePaths(workshop_path=str(workshop)),
+                {"language": "zh-CN", "check_outdated_mods": False},
+                refresh_workshop=False,
+            )
+
+        self.assertEqual(metadata.ensure_calls, 0)
+        self.assertFalse(
+            any(
+                isinstance(warning, dict)
+                and warning.get("code") == "workshop_dependency_refresh"
+                for warning in result.warnings
+            )
+        )
 
     def test_workshop_metadata_overrides_created_time_and_exposes_author_id(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

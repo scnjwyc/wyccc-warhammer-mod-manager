@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 import os
 import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import traceback
+import uuid
 import webbrowser
 from io import BytesIO
 from pathlib import Path
@@ -27,13 +30,23 @@ from .changelog import get_all_changelogs
 from .constants import (
     APP_NAME,
     APP_VERSION,
+    GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    INTERNAL_FEATURE_WORKSHOP_IDS,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
     WH3_APP_ID,
+    WH3_EXECUTABLE,
+)
+from .file_operations import (
+    build_delete_preview,
+    execute_delete_preview,
+    workshop_item_directory,
 )
 from .launcher import is_game_running, launch_game
 from .load_order import LoadOrderService, current_order_path, file_token
 from .models import ModAsset
+from .mod_profiles import existing_profile_directory, parse_mod_profile
+from .mod_watcher import ModChangeMonitor
 from .scanner import ModScanner
 from .save_games import SaveGameService
 from .share import (
@@ -44,7 +57,12 @@ from .share import (
     resolve_share_with_pending,
 )
 from .storage import StateRepository
-from .start_options import RUNTIME_PACK_NAME, build_runtime_options_pack
+from .start_options import (
+    GAME_DATA_PATCH_NAME,
+    RUNTIME_PACK_NAME,
+    build_game_data_patch,
+    build_runtime_options_pack,
+)
 from .steamworks_bridge import (
     SteamworksBridgeError,
     perform_workshop_operation,
@@ -58,6 +76,16 @@ from .workshop import (
     WorkshopMetadataService,
     interface_language_for_steam,
     steam_language_for_interface,
+)
+
+
+logger = logging.getLogger(__name__)
+GAME_DATA_SETTING_KEYS = frozenset(
+    {
+        "unit_model_multiplier",
+        "disable_unit_friendly_fire",
+        "disable_spell_friendly_fire",
+    }
 )
 
 
@@ -78,11 +106,29 @@ class API:
         self._thumbnail_cache: dict[str, tuple[str, str]] = {}
         self._scan_lock = threading.Lock()
         self._order_lock = threading.Lock()
+        self._delete_preview_lock = threading.Lock()
+        self._delete_previews: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._mod_revision_lock = threading.Lock()
+        self._mod_revision = 0
+        self._runtime_lock = threading.Lock()
+        self._last_runtime_running: bool | None = None
+        self._game_executable_lock = threading.Lock()
+        self._game_executable_cache: str | None = None
+        self._game_data_subscription_lock = threading.Lock()
+        self._game_data_subscription_cache: dict[str, dict[str, Any]] = {}
+        self._game_data_patch_lock = threading.Lock()
+        self._internal_feature_mod_ids: set[str] = set()
+        self.mod_monitor = ModChangeMonitor(self._record_mod_change)
+        self._window: Any | None = None
+        self._exit_low_consumption_callback: Callable[[], bool] | None = None
         self._last_order_token = "missing"
         self._rpc: dict[str, Callable[..., Any]] = {
             "get_bootstrap": self._get_bootstrap,
             "detect_paths": self._detect_paths,
             "save_settings": self._save_settings,
+            "save_game_data_settings": self._save_game_data_settings,
+            "generate_game_data_patch": self._generate_game_data_patch,
+            "get_game_data_feature_status": self._get_game_data_feature_status,
             "check_for_updates": self._check_for_updates,
             "download_update": self._download_update,
             "install_update": self._install_update,
@@ -90,6 +136,7 @@ class API:
             "get_changelog": self._get_changelog,
             "acknowledge_changelog": self._acknowledge_changelog,
             "select_directory": self._select_directory,
+            "select_mod_profile": self._select_mod_profile,
             "scan_mods": self._scan_mods,
             "save_mod_user_data": self._save_mod_user_data,
             "generate_mod_user_data": self._generate_mod_user_data,
@@ -106,7 +153,10 @@ class API:
             "launch_game": self._launch_game,
             "continue_game": self._continue_game,
             "list_save_games": self._list_save_games,
+            "get_save_mods": self._get_save_mods,
             "get_runtime_status": self._get_runtime_status,
+            "exit_low_consumption_mode": self._exit_low_consumption_mode,
+            "exit_app": self._exit_app,
             "list_playsets": self._list_playsets,
             "create_playset": self._create_playset,
             "rename_playset": self._rename_playset,
@@ -117,6 +167,8 @@ class API:
             "export_share": self._export_share,
             "preview_import_share": self._preview_import_share,
             "import_share": self._import_share,
+            "preview_mod_profile": self._preview_mod_profile,
+            "import_mod_profile": self._import_mod_profile,
             "subscribe_workshop_items": self._subscribe_workshop_items,
             "get_mod_preview": self._get_mod_preview,
             "get_mod_thumbnails": self._get_mod_thumbnails,
@@ -125,7 +177,10 @@ class API:
             "open_game_folder": self._open_game_folder,
             "open_workshop_page": self._open_workshop_page,
             "open_external_url": self._open_external_url,
+            "preview_delete_mod_files": self._preview_delete_mod_files,
+            "delete_mod_files": self._delete_mod_files,
             "unsubscribe_workshop_mod": self._unsubscribe_workshop_mod,
+            "unsubscribe_workshop_mods": self._unsubscribe_workshop_mods,
             "force_update_workshop_mod": self._force_update_workshop_mod,
             "get_workshop_publish_copy": self._get_workshop_publish_copy,
             "publish_workshop_item": self._publish_workshop_item,
@@ -137,6 +192,41 @@ class API:
     @property
     def rpc_methods(self) -> frozenset[str]:
         return frozenset(self._rpc)
+
+    def bind_window(self, window: Any) -> None:
+        self._window = window
+
+    def bind_low_consumption_exit(self, callback: Callable[[], bool]) -> None:
+        self._exit_low_consumption_callback = callback
+
+    def interface_language(self) -> str:
+        return str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+
+    def close(self) -> None:
+        self.mod_monitor.stop()
+        self._exit_low_consumption_callback = None
+
+    def _exit_low_consumption_mode(self) -> dict[str, bool]:
+        callback = self._exit_low_consumption_callback
+        if callback is None:
+            raise ValueError("低消耗模式控制器尚未就绪")
+        return {"restored": bool(callback())}
+
+    def _exit_app(self) -> dict[str, bool]:
+        window = self._window
+        if window is None:
+            raise ValueError("应用窗口尚未就绪")
+
+        def destroy() -> None:
+            try:
+                window.destroy()
+            except Exception:
+                traceback.print_exc()
+
+        timer = threading.Timer(0.05, destroy)
+        timer.daemon = True
+        timer.start()
+        return {"closing": True}
 
     def call(
         self,
@@ -176,6 +266,7 @@ class API:
         self._last_order_token = file_token(target) if paths.game_path else "missing"
         current_playset = self.state_repository.get_current_playset()
         private_settings = self.settings_service.get()
+        running = self._current_runtime_running()
         return {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
@@ -188,11 +279,66 @@ class API:
             "backups": self.state_repository.list_backups(),
             "mod_types": self.state_repository.list_mod_types(),
             "order_token": self._last_order_token,
-            "runtime": {"running": is_game_running()},
+            "runtime": self._runtime_payload(running),
             "changelog": get_all_changelogs(str(settings.get("language") or DEFAULT_LANGUAGE)),
             "show_changelog": private_settings.get("last_seen_app_version") != APP_VERSION,
             "auto_update_due": self.update_service.should_check_automatically(private_settings),
             "update_install_error": self.update_service.consume_install_error(),
+        }
+
+    def _get_game_data_feature_status(self) -> dict[str, Any]:
+        workshop_ids = [
+            item["workshop_id"]
+            for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
+        ]
+        warning = ""
+        language = steam_language_for_interface(self.interface_language())
+        try:
+            statuses = query_workshop_subscription_status(
+                workshop_ids,
+                language,
+                app_id=WH3_APP_ID,
+            )
+        except SteamworksBridgeError as exc:
+            warning = f"无法刷新游戏数据功能的 Workshop 订阅状态：{exc}"
+        else:
+            status_by_id = {
+                str(item.get("workshop_id") or ""): item
+                for item in statuses
+                if isinstance(item, dict)
+            }
+            with self._game_data_subscription_lock:
+                self._game_data_subscription_cache = {
+                    item["workshop_id"]: {
+                        "subscribed": bool(
+                            status_by_id.get(item["workshop_id"], {}).get("subscribed")
+                        ),
+                        "title": str(
+                            status_by_id.get(item["workshop_id"], {}).get("title") or item["title"]
+                        ).strip(),
+                    }
+                    for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
+                }
+
+        with self._game_data_subscription_lock:
+            cached = {
+                workshop_id: dict(status)
+                for workshop_id, status in self._game_data_subscription_cache.items()
+            }
+        return {
+            "items": {
+                key: {
+                    **item,
+                    "title": str(
+                        cached.get(item["workshop_id"], {}).get("title") or item["title"]
+                    ),
+                    "subscribed": bool(
+                        cached.get(item["workshop_id"], {}).get("subscribed")
+                    ),
+                }
+                for key, item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.items()
+            },
+            "warning": warning,
         }
 
     def _check_for_updates(
@@ -236,6 +382,8 @@ class API:
         result["settings"] = self.settings_service.get_public()
         self._assets.clear()
         self._asset_aliases.clear()
+        self._invalidate_game_executable_cache()
+        self._sync_runtime_services(self.detect_game_running(), force=True)
         return result
 
     def _save_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
@@ -244,11 +392,69 @@ class API:
         paths = self.settings_service.resolve_game_paths()
         self._assets.clear()
         self._asset_aliases.clear()
+        self._invalidate_game_executable_cache()
+        self._sync_runtime_services(self.detect_game_running(), force=True)
         return {
             "settings": settings,
             "paths": paths.to_dict(),
             "path_health": self._path_health(paths.game_path, paths.data_path, paths.workshop_path),
         }
+
+    def _save_game_data_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
+        filtered = self._game_data_setting_changes(changes)
+        self.settings_service.save(filtered)
+        return {"settings": self.settings_service.get_public()}
+
+    @staticmethod
+    def _game_data_setting_changes(changes: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(changes, dict):
+            raise ValueError("游戏数据设置必须是对象")
+        return {key: value for key, value in changes.items() if key in GAME_DATA_SETTING_KEYS}
+
+    def _generate_game_data_patch(
+        self,
+        changes: dict[str, Any],
+        ordered_mod_ids: list[str],
+    ) -> dict[str, Any]:
+        if self.detect_game_running():
+            self.set_game_running(True, force=True)
+            raise ValueError("游戏运行时无法生成游戏数据补丁")
+        if not self._game_data_patch_lock.acquire(blocking=False):
+            raise ValueError("游戏正在启动或游戏数据补丁正在生成")
+        try:
+            if self.detect_game_running():
+                self.set_game_running(True, force=True)
+                raise ValueError("游戏运行时无法生成游戏数据补丁")
+            filtered = self._game_data_setting_changes(changes)
+            candidate = self.settings_service.normalize_changes(filtered)
+            paths = self.settings_service.resolve_game_paths()
+            if not self._path_health(
+                paths.game_path,
+                paths.data_path,
+                paths.workshop_path,
+            )["game_ready"]:
+                raise ValueError("生成游戏数据补丁前需要先设置有效的游戏目录")
+            feature_status = self._get_game_data_feature_status()
+            subscribed_feature_ids = tuple(
+                str(item.get("workshop_id") or "")
+                for item in feature_status["items"].values()
+                if item.get("subscribed")
+            )
+            patch_result = build_game_data_patch(
+                self.data_dir / "runtime",
+                paths.data_path,
+                self._assets,
+                self._canonicalize_mod_ids(ordered_mod_ids),
+                candidate,
+                subscribed_workshop_ids=subscribed_feature_ids,
+            )
+            self.settings_service.save(filtered)
+            return {
+                "settings": self.settings_service.get_public(),
+                "patch": patch_result,
+            }
+        finally:
+            self._game_data_patch_lock.release()
 
     @staticmethod
     def _select_directory(kind: str) -> dict[str, str]:
@@ -279,10 +485,33 @@ class API:
         except Exception as exc:
             raise ValueError(f"无法打开目录选择器：{exc}") from exc
 
+    @staticmethod
+    def _select_mod_profile() -> dict[str, str]:
+        try:
+            import tkinter
+            from tkinter import filedialog
+
+            root = tkinter.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            selected = filedialog.askopenfilename(
+                title="选择官方 MOD 启动器配置",
+                initialdir=str(existing_profile_directory()),
+                filetypes=(
+                    ("Total War MOD 配置", "*.twmods"),
+                    ("所有文件", "*.*"),
+                ),
+            )
+            root.destroy()
+            return {"path": str(selected or "")}
+        except Exception as exc:
+            raise ValueError(f"无法打开官方配置选择器：{exc}") from exc
+
     def _scan_mods(self, refresh_workshop: bool = False) -> dict[str, Any]:
         if not self._scan_lock.acquire(blocking=False):
             raise ValueError("扫描正在进行中")
         try:
+            scan_revision = self._mod_revision_value()
             settings = self.settings_service.get()
             paths = self.settings_service.resolve_game_paths()
             health = self._path_health(paths.game_path, paths.data_path, paths.workshop_path)
@@ -290,6 +519,12 @@ class API:
                 raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
             scan_result = self.scanner.scan(paths, settings, bool(refresh_workshop))
             user_data = self.state_repository.list_user_mod_data()
+            self._internal_feature_mod_ids = {
+                mod_id
+                for mod_id, custom in user_data.items()
+                if str(custom.get("published_workshop_id") or "")
+                in INTERNAL_FEATURE_WORKSHOP_IDS
+            }
             for mod in scan_result.mods:
                 custom = user_data.get(mod.id, {})
                 if not custom:
@@ -340,7 +575,7 @@ class API:
                 self.state_repository.update_current_playset(original_order)
                 self.state_repository.mark_playsets_initialized()
             stored_order = self._canonicalize_mod_ids(original_order)
-            if stored_order and stored_order != original_order:
+            if stored_order != original_order:
                 self.state_repository.update_current_playset(stored_order)
             present_order = [mod_id for mod_id in stored_order if mod_id in self._assets]
             missing_order = [mod_id for mod_id in stored_order if mod_id not in self._assets]
@@ -355,6 +590,9 @@ class API:
                     "order_token": self._last_order_token,
                     "playsets": self.state_repository.list_playsets(),
                     "current_playset": self.state_repository.get_current_playset(),
+                    # A filesystem event arriving during this scan must remain
+                    # visible to the frontend so it schedules one follow-up scan.
+                    "mod_revision": scan_revision,
                 }
             )
             return payload
@@ -486,6 +724,23 @@ class API:
         expected_token: str = "",
         save_name: str = "",
     ) -> dict[str, Any]:
+        if not self._game_data_patch_lock.acquire(blocking=False):
+            raise ValueError("游戏数据补丁正在生成，暂时无法启动游戏")
+        try:
+            return self._launch_game_when_patch_idle(
+                ordered_mod_ids,
+                expected_token,
+                save_name,
+            )
+        finally:
+            self._game_data_patch_lock.release()
+
+    def _launch_game_when_patch_idle(
+        self,
+        ordered_mod_ids: list[str],
+        expected_token: str,
+        save_name: str,
+    ) -> dict[str, Any]:
         with self._order_lock:
             selected_save = self.save_games.require(save_name) if save_name else None
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
@@ -499,10 +754,26 @@ class API:
             )
             launch_plan = saved["plan"]
             launch_path = saved["plan"]["target_path"]
+
+            internal_assets: dict[str, ModAsset] = {}
+            internal_ids: list[str] = []
+            game_data_path = self.data_dir / "runtime" / GAME_DATA_PATCH_NAME
+            if game_data_path.is_file():
+                game_data_id = "runtime:game-data-patch"
+                internal_assets[game_data_id] = ModAsset(
+                    id=game_data_id,
+                    pack_name=GAME_DATA_PATCH_NAME,
+                    display_name="Wyccc 游戏数据补丁",
+                    path=str(game_data_path.resolve(strict=False)),
+                    directory=str(game_data_path.parent.resolve(strict=False)),
+                    source="runtime",
+                    sources=["runtime"],
+                )
+                internal_ids.append(game_data_id)
             if runtime["path"]:
                 runtime_path = Path(runtime["path"])
                 runtime_id = "runtime:start-options"
-                runtime_asset = ModAsset(
+                internal_assets[runtime_id] = ModAsset(
                     id=runtime_id,
                     pack_name=RUNTIME_PACK_NAME,
                     display_name="Wyccc 启动选项",
@@ -511,12 +782,15 @@ class API:
                     source="runtime",
                     sources=["runtime"],
                 )
-                runtime_assets = {**self._assets, runtime_id: runtime_asset}
+                internal_ids.append(runtime_id)
+
+            if internal_ids:
+                runtime_assets = {**self._assets, **internal_assets}
                 runtime_plan = self.load_order.build_plan(
                     paths.game_path,
                     paths.data_path,
                     runtime_assets,
-                    [*saved["plan"]["ordered_mod_ids"], runtime_id],
+                    [*saved["plan"]["ordered_mod_ids"], *internal_ids],
                     target_name="wyccc_launch_mods.txt",
                 )
                 self.load_order._atomic_write(Path(runtime_plan.target_path), runtime_plan.content)
@@ -527,6 +801,7 @@ class API:
                 launch_path,
                 str(selected_save["name"]) if selected_save else "",
             )
+            self.set_game_running(True, force=True)
             return {
                 **saved,
                 "process": process,
@@ -553,9 +828,86 @@ class API:
             "items": self.save_games.list(),
         }
 
-    @staticmethod
-    def _get_runtime_status() -> dict[str, bool]:
-        return {"running": is_game_running()}
+    def _vanilla_pack_names(self) -> set[str]:
+        paths = self.settings_service.resolve_game_paths()
+        warnings: list[str] = []
+        data_path = Path(paths.data_path) if paths.data_path else Path()
+        return self.scanner._read_vanilla_manifest(data_path, warnings)
+
+    def _get_save_mods(self, save_name: str) -> dict[str, Any]:
+        return self.save_games.pack_names(save_name, self._vanilla_pack_names())
+
+    def _record_mod_change(self) -> None:
+        with self._mod_revision_lock:
+            self._mod_revision += 1
+
+    def _mod_revision_value(self) -> int:
+        with self._mod_revision_lock:
+            return self._mod_revision
+
+    def _sync_runtime_services(self, running: bool, *, force: bool = False) -> None:
+        with self._runtime_lock:
+            previous = self._last_runtime_running
+            if not force and previous is running:
+                return
+            self._last_runtime_running = running
+            if previous is None or previous is not running:
+                logger.info(
+                    "Warhammer III runtime state changed: running=%s executable=%s",
+                    running,
+                    self.game_executable_path(),
+                )
+            if running:
+                self.mod_monitor.stop()
+                return
+            settings = self.settings_service.get()
+            if not settings.get("live_mod_detection", True):
+                self.mod_monitor.stop()
+                return
+            paths = self.settings_service.resolve_game_paths()
+            self.mod_monitor.start(paths.data_path, paths.workshop_path)
+
+    def set_game_running(self, running: bool, *, force: bool = False) -> None:
+        self._sync_runtime_services(bool(running), force=force)
+
+    def _invalidate_game_executable_cache(self) -> None:
+        with self._game_executable_lock:
+            self._game_executable_cache = None
+
+    def game_executable_path(self) -> str:
+        with self._game_executable_lock:
+            cached = self._game_executable_cache
+        if cached is not None:
+            return cached
+        paths = self.settings_service.resolve_game_paths()
+        executable = str(Path(paths.game_path) / WH3_EXECUTABLE) if paths.game_path else ""
+        with self._game_executable_lock:
+            self._game_executable_cache = executable
+        return executable
+
+    def detect_game_running(self) -> bool:
+        return is_game_running(self.game_executable_path())
+
+    def _current_runtime_running(self) -> bool:
+        with self._runtime_lock:
+            cached = self._last_runtime_running
+        if cached is not None:
+            return cached
+        running = self.detect_game_running()
+        self._sync_runtime_services(running, force=True)
+        return running
+
+    def _runtime_payload(self, running: bool) -> dict[str, Any]:
+        return {
+            "running": running,
+            "mod_revision": self._mod_revision_value(),
+            "live_mod_detection_available": self.mod_monitor.available,
+            "live_mod_detection_active": self.mod_monitor.active,
+        }
+
+    def _get_runtime_status(self) -> dict[str, Any]:
+        running = self._current_runtime_running()
+        return self._runtime_payload(running)
 
     def _list_playsets(self) -> list[dict[str, Any]]:
         return self.state_repository.list_playsets()
@@ -674,6 +1026,81 @@ class API:
         )
         return {
             **self._current_playset_payload(),
+            "missing": missing,
+            "pending_workshop_ids": pending_workshop_ids,
+        }
+
+    def _preview_mod_profile(self, profile_path: str) -> dict[str, Any]:
+        parsed = parse_mod_profile(profile_path)
+        references = parsed["references"]
+        ordered_ids, missing = resolve_share(references, self._assets)
+        references_by_workshop_id = {
+            str(reference["workshop_id"]): reference
+            for reference in references
+        }
+        language = steam_language_for_interface(
+            str(self.settings_service.get().get("language") or "")
+        )
+        try:
+            statuses = query_workshop_subscription_status(
+                list(references_by_workshop_id),
+                language,
+                app_id=WH3_APP_ID,
+            )
+        except SteamworksBridgeError as exc:
+            raise ValueError(f"无法检查官方配置中的 Workshop 订阅状态：{exc}") from exc
+        unsubscribed = []
+        for item in statuses:
+            if item.get("subscribed"):
+                continue
+            workshop_id = str(item.get("workshop_id") or "")
+            reference = references_by_workshop_id.get(workshop_id, {})
+            unsubscribed.append(
+                {
+                    "workshop_id": workshop_id,
+                    "title": str(item.get("title") or "").strip(),
+                    "pack_name": str(reference.get("pack_name") or "").strip(),
+                }
+            )
+        return {
+            "profile": parsed["profile"],
+            "references": references,
+            "ordered_mod_ids": ordered_ids,
+            "missing": missing,
+            "unsubscribed": unsubscribed,
+            "unrecognized_lines": parsed["unrecognized_lines"],
+        }
+
+    def _import_mod_profile(self, profile_path: str, mode: str = "new") -> dict[str, Any]:
+        if mode not in {"new", "replace"}:
+            raise ValueError("官方配置导入模式无效")
+        parsed = parse_mod_profile(profile_path)
+        references = parsed["references"]
+        ordered_ids, missing = resolve_share_with_pending(references, self._assets)
+        if mode == "new":
+            existing_names = {
+                str(item.get("name") or "").casefold()
+                for item in self.state_repository.list_playsets()
+            }
+            base_name = str(parsed["profile"]["name"] or "官方启动器配置").strip()
+            name = base_name
+            suffix = 2
+            while name.casefold() in existing_names:
+                name = f"{base_name} ({suffix})"
+                suffix += 1
+            self.state_repository.create_playset(name, ordered_ids)
+        else:
+            self.state_repository.update_current_playset(ordered_ids)
+        pending_workshop_ids = list(
+            dict.fromkeys(
+                str(reference.get("workshop_id") or "")
+                for reference in missing
+                if str(reference.get("workshop_id") or "").isdigit()
+            )
+        )
+        return {
+            **self._current_playset_payload(),
+            "profile": parsed["profile"],
             "missing": missing,
             "pending_workshop_ids": pending_workshop_ids,
         }
@@ -803,13 +1230,94 @@ class API:
             raise ValueError("只允许打开有效的 HTTP 或 HTTPS 链接")
         return {"opened": bool(webbrowser.open(normalized)), "url": normalized}
 
+    def _preview_delete_mod_files(self, mod_ids: list[str]) -> dict[str, Any]:
+        if self.detect_game_running():
+            raise ValueError("游戏运行期间不能删除 MOD 文件")
+        if not isinstance(mod_ids, list):
+            raise ValueError("MOD ID 列表无效")
+        assets = [self._require_asset(mod_id) for mod_id in dict.fromkeys(map(str, mod_ids))]
+        preview = build_delete_preview(assets, self.settings_service.resolve_game_paths())
+        token = uuid.uuid4().hex
+        with self._delete_preview_lock:
+            now = time.monotonic()
+            self._delete_previews = {
+                key: value
+                for key, value in self._delete_previews.items()
+                if now - value[0] <= 300
+            }
+            self._delete_previews[token] = (now, preview)
+        return {**preview, "token": token}
+
+    def _delete_mod_files(self, preview_token: str) -> dict[str, Any]:
+        if self.detect_game_running():
+            raise ValueError("游戏运行期间不能删除 MOD 文件")
+        token = str(preview_token or "").strip()
+        with self._delete_preview_lock:
+            stored = self._delete_previews.pop(token, None)
+        if not stored or time.monotonic() - stored[0] > 300:
+            raise ValueError("删除确认已失效，请重新预览")
+        result = execute_delete_preview(
+            stored[1],
+            self.settings_service.resolve_game_paths(),
+        )
+        for item in result["deleted"]:
+            if item.get("source") == SOURCE_DATA:
+                self.state_repository.delete_data_sync_item(str(item.get("pack_name") or ""))
+        result["scan"] = self._scan_mods(False)
+        return result
+
     def _unsubscribe_workshop_mod(self, mod_id: str) -> dict[str, Any]:
-        asset = self._require_workshop_asset(mod_id)
-        return self._run_workshop_operation("unsubscribe", asset.workshop_id)
+        return self._unsubscribe_workshop_mods([mod_id])
+
+    def _unsubscribe_workshop_mods(self, mod_ids: list[str]) -> dict[str, Any]:
+        if self.detect_game_running():
+            raise ValueError("游戏运行期间不能取消订阅或删除工坊文件")
+        if not isinstance(mod_ids, list):
+            raise ValueError("MOD ID 列表无效")
+        assets = [self._require_workshop_asset(mod_id) for mod_id in dict.fromkeys(map(str, mod_ids))]
+        by_workshop_id = {
+            asset.workshop_id: asset
+            for asset in assets
+            if asset.workshop_id
+        }
+        paths = self.settings_service.resolve_game_paths()
+        if not paths.workshop_path:
+            raise ValueError("Workshop 目录无效")
+        completed: list[dict[str, Any]] = []
+        failures: list[dict[str, str]] = []
+        for workshop_id in by_workshop_id:
+            try:
+                steam_result = self._run_workshop_operation("unsubscribe", workshop_id)
+                if not steam_result.get("accepted"):
+                    raise ValueError("Steam 未接受取消订阅请求")
+                item_directory = workshop_item_directory(paths.workshop_path, workshop_id)
+                if item_directory.exists():
+                    shutil.rmtree(item_directory)
+                completed.append(
+                    {
+                        "workshop_id": workshop_id,
+                        "directory": str(item_directory),
+                        "steam": steam_result,
+                    }
+                )
+            except (OSError, ValueError) as exc:
+                failures.append({"workshop_id": workshop_id, "error": str(exc)})
+        return {
+            "completed": completed,
+            "failures": failures,
+            "completed_count": len(completed),
+            "failed_count": len(failures),
+            "scan": self._scan_mods(False),
+        }
 
     def _force_update_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_workshop_asset(mod_id)
-        return self._run_workshop_operation("force_update", asset.workshop_id)
+        result = self._run_workshop_operation("force_update", asset.workshop_id)
+        if not result.get("accepted"):
+            raise ValueError("Steam 未接受强制更新请求")
+        if not result.get("completed"):
+            raise ValueError("Steam Workshop MOD 下载未完成")
+        return result
 
     def _get_workshop_publish_copy(
         self,
@@ -1121,6 +1629,8 @@ class API:
         seen: set[str] = set()
         for raw_id in mod_ids:
             normalized = str(raw_id)
+            if self._is_internal_feature_mod_id(normalized):
+                continue
             pending = parse_pending_workshop_mod_id(normalized)
             if pending:
                 workshop_id, pack_name = pending
@@ -1142,6 +1652,18 @@ class API:
                 seen.add(canonical)
                 result.append(canonical)
         return result
+
+    def _is_internal_feature_mod_id(self, mod_id: str) -> bool:
+        normalized = str(mod_id)
+        if normalized in self._internal_feature_mod_ids:
+            return True
+        pending = parse_pending_workshop_mod_id(normalized)
+        if pending and pending[0] in INTERNAL_FEATURE_WORKSHOP_IDS:
+            return True
+        return any(
+            normalized.startswith(f"steam:{workshop_id}:")
+            for workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+        )
 
     def _refresh_missing_dependency_warnings(self, enabled_mod_ids: list[str]) -> None:
         self.scanner.refresh_missing_dependency_warnings(

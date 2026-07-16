@@ -23,6 +23,8 @@ const emit = defineEmits([
   'move',
   'context-menu',
   'show-warnings',
+  'select-all',
+  'toggle-active',
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
@@ -50,8 +52,29 @@ const selectMod = (event, mod) => {
   })
 }
 
+const onDoubleClick = (event, mod) => {
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('button, a, input, textarea, select, [contenteditable]')) return
+  emit('toggle-active', mod.id)
+}
+
 const onContextMenu = (event, mod) => {
   emit('context-menu', { x: event.clientX, y: event.clientY, mod, active: props.active })
+}
+
+const isEditableTarget = target => {
+  const element = target instanceof Element ? target : null
+  if (!element) return false
+  return Boolean(
+    element.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'),
+  )
+}
+
+const onKeydown = event => {
+  if (!event.ctrlKey || event.altKey || event.key.toLocaleLowerCase() !== 'a') return
+  if (isEditableTarget(event.target) || !props.mods.length) return
+  event.preventDefault()
+  emit('select-all', props.mods.map(mod => mod.id))
 }
 
 const clearDragging = () => {
@@ -128,7 +151,14 @@ const onDrop = (event, targetId = '') => {
       <span class="count-badge">{{ mods.length }}</span>
     </header>
 
-    <div class="mod-list" data-testid="mod-list" @dragover.prevent @drop.prevent="onDrop($event)">
+    <div
+      class="mod-list"
+      data-testid="mod-list"
+      tabindex="0"
+      @keydown="onKeydown"
+      @dragover.prevent
+      @drop.prevent="onDrop($event)"
+    >
       <div
         v-for="mod in mods"
         :key="mod.id"
@@ -145,6 +175,7 @@ const onDrop = (event, targetId = '') => {
         :aria-selected="isSelected(mod.id)"
         draggable="true"
         @click="selectMod($event, mod)"
+        @dblclick="onDoubleClick($event, mod)"
         @keydown.enter="selectMod($event, mod)"
         @keydown.space.prevent="selectMod($event, mod)"
         @contextmenu.prevent.stop="onContextMenu($event, mod)"

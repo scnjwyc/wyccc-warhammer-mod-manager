@@ -22,4 +22,19 @@ describe('SaveGamesModal', () => {
     await wrapper.get('.save-game-row .primary-button').trigger('click')
     expect(wrapper.emitted('load')[0]).toEqual(['震旦.save'])
   })
+
+  it('offers enable and compare actions for each save', async () => {
+    const wrapper = mount(SaveGamesModal, {
+      props: {
+        open: true,
+        saves: [{ name: 'campaign.save', path: 'one', modified_at: 2_000, size: 2048 }],
+      },
+    })
+
+    await wrapper.get('[data-testid="save-enable-mods"]').trigger('click')
+    await wrapper.get('[data-testid="save-compare-mods"]').trigger('click')
+
+    expect(wrapper.emitted('enable-mods')[0]).toEqual(['campaign.save'])
+    expect(wrapper.emitted('compare-mods')[0]).toEqual(['campaign.save'])
+  })
 })

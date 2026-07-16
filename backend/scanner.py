@@ -10,6 +10,8 @@ from typing import Iterable
 from .app_settings import DEFAULT_LANGUAGE
 from .constants import (
     CORE_VANILLA_PACKS,
+    INTERNAL_FEATURE_PACK_NAMES,
+    INTERNAL_FEATURE_WORKSHOP_IDS,
     PACK_TYPE_MOD,
     PACK_TYPE_MOVIE,
     PACK_TYPE_UNKNOWN,
@@ -127,6 +129,8 @@ class ModScanner:
                 for child in sorted(workshop_root.iterdir(), key=lambda item: item.name.casefold()):
                     if not child.is_dir() or not child.name.isdigit():
                         continue
+                    if child.name in INTERNAL_FEATURE_WORKSHOP_IDS:
+                        continue
                     workshop_ids.append(child.name)
                     self._scan_workshop_item(child, child.name, assets, result)
             elif str(workshop_root):
@@ -136,44 +140,25 @@ class ModScanner:
         if workshop_ids:
             interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
             metadata = self.workshop_metadata.get_many(workshop_ids, interface_language)
-            ensure_dependencies = getattr(
-                self.workshop_metadata,
-                "ensure_dependencies",
-                None,
-            )
-            if callable(ensure_dependencies):
+            if refresh_workshop:
                 try:
                     metadata.update(
-                        ensure_dependencies(workshop_ids, interface_language)
+                        self.workshop_metadata.refresh(workshop_ids, interface_language)
                     )
-                    dependency_warning = str(
+                    refresh_warning = str(
                         getattr(self.workshop_metadata, "last_refresh_warning", "") or ""
                     )
-                    if dependency_warning:
+                    if refresh_warning:
                         result.warnings.append(
                             {
                                 "code": "workshop_dependency_refresh",
                                 "severity": "warning",
-                                "message": dependency_warning,
+                                "message": refresh_warning,
                                 "ignorable": True,
                             }
                         )
                 except Exception as exc:
-                    result.warnings.append(f"工坊依赖扫描失败：{exc}")
-            if refresh_workshop:
-                stale_ids = workshop_ids
-                if stale_ids:
-                    try:
-                        metadata.update(
-                            self.workshop_metadata.refresh(stale_ids, interface_language)
-                        )
-                        refresh_warning = str(
-                            getattr(self.workshop_metadata, "last_refresh_warning", "") or ""
-                        )
-                        if refresh_warning:
-                            result.warnings.append(refresh_warning)
-                    except Exception as exc:
-                        result.warnings.append(f"工坊在线信息刷新失败：{exc}")
+                    result.warnings.append(f"工坊在线信息刷新失败：{exc}")
 
         for asset in assets.values():
             if asset.workshop_id:
@@ -408,7 +393,10 @@ class ModScanner:
         result: ScanResult,
         excluded_names: Iterable[str] = (),
     ) -> None:
-        excluded = {name.casefold() for name in excluded_names}
+        excluded = {
+            *(name.casefold() for name in excluded_names),
+            *INTERNAL_FEATURE_PACK_NAMES,
+        }
         if not directory.is_dir():
             return
         result.scanned_roots.append(str(directory.resolve(strict=False)))
@@ -443,6 +431,7 @@ class ModScanner:
                     item
                     for item in directory.iterdir()
                     if item.is_file() and item.suffix.casefold() == ".pack"
+                    and item.name.casefold() not in INTERNAL_FEATURE_PACK_NAMES
                 ),
                 key=lambda item: item.name.casefold(),
             )

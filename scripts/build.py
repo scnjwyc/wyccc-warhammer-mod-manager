@@ -122,6 +122,7 @@ def package_desktop(output_dir: Path) -> Path:
     if node_executable is None:
         raise SystemExit("找不到 Node.js，无法把 Steamworks 工坊查询运行时加入发布版。")
     bridge_script = STEAM_RUNTIME / "workshop_bridge.js"
+    schema_path = ROOT / "backend" / "wh3_db_schema.json"
     native_binding = (
         STEAM_RUNTIME
         / "steamworks"
@@ -129,8 +130,26 @@ def package_desktop(output_dir: Path) -> Path:
         / "win64"
         / "steamworksjs.win32-x64-msvc.node"
     )
-    if not bridge_script.is_file() or not native_binding.is_file():
+    dependency_native_binding = (
+        STEAM_RUNTIME
+        / "steamworks_dependencies"
+        / "dist"
+        / "win64"
+        / "steamworksjs.win32-x64-msvc.node"
+    )
+    dependency_steam_api = dependency_native_binding.with_name("steam_api64.dll")
+    if not all(
+        path.is_file()
+        for path in (
+            bridge_script,
+            native_binding,
+            dependency_native_binding,
+            dependency_steam_api,
+        )
+    ):
         raise SystemExit("Steamworks 工坊查询运行时不完整，无法打包。")
+    if not schema_path.is_file():
+        raise SystemExit("缺少战锤 3 DB 架构资源，无法打包。")
     run(
         [
             sys.executable,
@@ -151,6 +170,8 @@ def package_desktop(output_dir: Path) -> Path:
             "webview",
             "--add-data",
             f"{static_root}{separator}frontend/dist",
+            "--add-data",
+            f"{schema_path}{separator}backend",
             "--add-data",
             f"{STEAM_RUNTIME}{separator}steam_runtime",
             "--add-binary",

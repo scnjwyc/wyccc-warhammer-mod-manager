@@ -1,0 +1,175 @@
+import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import GameDataModificationModal from '../GameDataModificationModal.vue'
+import { applyInterfaceLanguage } from '../../languages'
+
+afterEach(() => applyInterfaceLanguage('zh-CN'))
+
+describe('game data modification modal', () => {
+  it('explains in every language that a 1× multiplier disables unit scaling', () => {
+    const expected = {
+      'zh-CN': ['1 倍', '关闭'],
+      'en-US': ['1×', 'disables'],
+      'ko-KR': ['1배', '꺼집니다'],
+      'ru-RU': ['1×', 'отключает'],
+      'ja-JP': ['1倍', '無効'],
+    }
+
+    for (const [language, terms] of Object.entries(expected)) {
+      applyInterfaceLanguage(language)
+      const wrapper = mount(GameDataModificationModal, {
+        props: {
+          open: true,
+          settings: { unit_model_multiplier: 1 },
+        },
+      })
+      const help = wrapper.get('.game-data-card-copy small').text()
+      for (const term of terms) expect(help).toContain(term)
+      wrapper.unmount()
+    }
+  })
+
+  it('edits and emits all three game data settings', async () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: {
+          unit_model_multiplier: 1.5,
+          disable_unit_friendly_fire: false,
+          disable_spell_friendly_fire: true,
+        },
+      },
+    })
+
+    const multiplier = wrapper.get('[data-testid="unit-model-multiplier"]')
+    expect(multiplier.element.value).toBe('1.5')
+    expect(multiplier.attributes('min')).toBe('0.5')
+    expect(multiplier.attributes('max')).toBe('5')
+    expect(multiplier.attributes('step')).toBe('0.1')
+
+    await multiplier.setValue('2.75')
+    await wrapper.get('[data-testid="disable-unit-friendly-fire"]').setValue(true)
+    await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(false)
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.emitted('save')[0][0]).toEqual({
+      unit_model_multiplier: 2.75,
+      disable_unit_friendly_fire: true,
+      disable_spell_friendly_fire: false,
+    })
+    expect(wrapper.text()).toContain('不会修改原始 Pack')
+    expect(wrapper.text()).toContain('增益、治疗和友军光环')
+  })
+
+  it('clamps the multiplier to the supported 0.5–5 range', async () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: { unit_model_multiplier: 0.1 },
+      },
+    })
+
+    const multiplier = wrapper.get('[data-testid="unit-model-multiplier"]')
+    expect(multiplier.element.value).toBe('0.5')
+
+    await multiplier.setValue('50')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0].unit_model_multiplier).toBe(5)
+
+    await multiplier.setValue('0.1')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[1][0].unit_model_multiplier).toBe(0.5)
+  })
+
+  it('emits the current draft from the Generate patch button without submitting the form', async () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: {
+          unit_model_multiplier: 1.5,
+          disable_unit_friendly_fire: false,
+          disable_spell_friendly_fire: false,
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="unit-model-multiplier"]').setValue('2.5')
+    await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(true)
+    await wrapper.get('[data-testid="generate-game-data-patch"]').trigger('click')
+
+    expect(wrapper.emitted('generate')[0][0]).toEqual({
+      unit_model_multiplier: 2.5,
+      disable_unit_friendly_fire: false,
+      disable_spell_friendly_fire: true,
+    })
+    expect(wrapper.emitted('save')).toBeUndefined()
+  })
+
+  it('keeps all footer buttons in one right-side action row above the patch reminder', () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+      },
+    })
+
+    const footerContent = wrapper.get('[data-testid="game-data-footer-content"]')
+    const actionRow = footerContent.get('[data-testid="game-data-footer-actions"]')
+    const buttons = actionRow.findAll('button')
+    expect(buttons).toHaveLength(3)
+    expect(buttons[0].attributes('data-testid')).toBe('generate-game-data-patch')
+    expect(buttons[1].text()).toBe('取消')
+    expect(buttons[2].attributes('type')).toBe('submit')
+
+    const reminder = footerContent.get('[data-testid="game-data-regeneration-warning"]')
+    expect(actionRow.element.nextElementSibling).toBe(reminder.element)
+    expect(reminder.text()).toContain('新增或删除')
+    expect(reminder.text()).toContain('兵模数量')
+    expect(reminder.text()).toContain('友伤')
+    expect(reminder.text()).toContain('重新生成补丁')
+  })
+
+  it('resets the draft from persisted settings whenever it reopens', async () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: { unit_model_multiplier: 3 },
+      },
+    })
+    await wrapper.get('[data-testid="unit-model-multiplier"]').setValue('9')
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({
+      open: true,
+      settings: { unit_model_multiplier: 1.25 },
+    })
+
+    expect(wrapper.get('[data-testid="unit-model-multiplier"]').element.value).toBe('1.25')
+  })
+
+  it('disables unsubscribed features and names the Workshop MODs', () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: {
+          unit_model_multiplier: 2,
+          disable_unit_friendly_fire: true,
+          disable_spell_friendly_fire: true,
+        },
+        unitSizeSubscribed: false,
+        friendlyFireSubscribed: false,
+        unitSizeModName: 'Dynamic Unit Size',
+        friendlyFireModName: 'Dynamic No Friendly Fire',
+      },
+    })
+
+    expect(wrapper.get('[data-testid="unit-model-multiplier"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="disable-unit-friendly-fire"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="disable-spell-friendly-fire"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="unit-size-requirement"]').text()).toContain('尚未订阅')
+    expect(wrapper.get('[data-testid="unit-size-requirement"]').text()).toContain('Dynamic Unit Size')
+    expect(wrapper.get('[data-testid="friendly-fire-requirement"]').text()).toContain('尚未订阅')
+    expect(wrapper.get('[data-testid="friendly-fire-requirement"]').text()).toContain('Dynamic No Friendly Fire')
+    expect(wrapper.text()).not.toContain('.pack')
+    expect(wrapper.get('button[type="submit"]').attributes()).toHaveProperty('disabled')
+  })
+})

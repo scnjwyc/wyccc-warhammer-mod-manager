@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WMM · Low consumption mode</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, "Microsoft YaHei", "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: #eee5dc; background: #080707; }
+      main { width: min(560px, calc(100vw - 48px)); padding: 42px; text-align: center; border: 1px solid #3a2929; border-radius: 18px; background: #100d0d; box-shadow: 0 22px 70px #0009; }
+      .mark { width: 68px; height: 68px; margin: 0 auto 22px; display: grid; place-items: center; border-radius: 16px; color: #fff; background: #761f27; font: 800 34px/1 Georgia, serif; }
+      h1 { margin: 0 0 14px; font-size: 24px; }
+      p { margin: 0 auto 28px; max-width: 440px; color: #bcaeaa; line-height: 1.75; }
+      button { min-width: 140px; padding: 11px 20px; color: #eee5dc; border: 1px solid #604044; border-radius: 9px; background: #25191a; cursor: pointer; }
+      button:hover { background: #342123; }
+      .pulse { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #70b77e; box-shadow: 0 0 0 6px #70b77e18; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark">W</div>
+      <h1><span class="pulse"></span><span id="title">游戏运行中</span></h1>
+      <p id="detail">WMM 已进入低消耗模式。MOD 扫描、目录监听和主界面渲染均已暂停；游戏退出后会自动恢复。</p>
+      <button id="exit" type="button">退出低消耗模式</button>
+    </main>
+    <script>
+      const copy = {
+        'en': ['Game is running', 'WMM is in low-consumption mode. MOD scanning, directory monitoring, and the full interface are paused. The manager will restore automatically after the game exits.', 'Exit low-consumption mode'],
+        'ko': ['게임 실행 중', 'WMM이 저소비 모드로 전환되었습니다. MOD 검색, 폴더 감시 및 전체 인터페이스 렌더링이 일시 중지되며 게임 종료 후 자동으로 복원됩니다.', '저소비 모드 종료'],
+        'ru': ['Игра запущена', 'WMM работает в режиме низкого потребления. Сканирование MOD, наблюдение за папками и основной интерфейс приостановлены до выхода из игры.', 'Выйти из режима низкого потребления'],
+        'ja': ['ゲーム実行中', 'WMM は低消費モードです。MOD スキャン、フォルダー監視、メイン画面の描画を停止し、ゲーム終了後に自動復帰します。', '低消費モードを終了'],
+        'zh': ['游戏运行中', 'WMM 已进入低消耗模式。MOD 扫描、目录监听和主界面渲染均已暂停；游戏退出后会自动恢复。', '退出低消耗模式'],
+      }
+      const pageUrl = new URL(window.location.href)
+      const fragmentParams = new URLSearchParams(pageUrl.hash.slice(1))
+      const requestedLanguage = pageUrl.searchParams.get('lang') || fragmentParams.get('lang') || navigator.language || 'en'
+      const language = requestedLanguage.slice(0, 2).toLowerCase()
+      const strings = copy[language] || copy.en
+      document.documentElement.lang = language
+      document.getElementById('title').textContent = strings[0]
+      document.getElementById('detail').textContent = strings[1]
+      document.getElementById('exit').textContent = strings[2]
+      document.getElementById('exit').addEventListener('click', async () => {
+        try { await window.pywebview.api.call('exit_low_consumption_mode', [], {}) } catch {}
+      })
+    </script>
+  </body>
+</html>

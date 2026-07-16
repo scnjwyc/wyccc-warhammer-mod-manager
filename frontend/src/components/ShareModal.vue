@@ -8,7 +8,7 @@ const props = defineProps({
   busy: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'export', 'import'])
+const emit = defineEmits(['close', 'export', 'import', 'import-official'])
 const value = ref('')
 
 watch(
@@ -44,6 +44,9 @@ const copyValue = async () => {
           :placeholder="t('share.placeholder')"
         ></textarea>
         <div class="button-row">
+          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('import-official')">
+            {{ t('share.importOfficial') }}
+          </button>
           <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('export')">
             {{ t('share.generate') }}
           </button>

@@ -40,6 +40,58 @@ describe('anchored mod selection', () => {
     expect(store.selectedId).toBe('d')
   })
 
+  it('selects every id supplied by the focused visible list', async () => {
+    const store = useAppStore()
+    store.mods = ['a', 'b', 'c'].map(id => ({ id, pack_name: `${id}.pack` }))
+
+    await store.selectAllMods(['c', 'a', 'missing'])
+
+    expect(store.selectedIds).toEqual(['c', 'a'])
+    expect(store.selectedId).toBe('c')
+    expect(store.selectionAnchorId).toBe('c')
+  })
+
+  it('enables and compares save mods by pack name without subscribing', async () => {
+    const store = useAppStore()
+    store.mods = [
+      { id: 'data:first', pack_name: 'first.pack', source: 'data', sources: ['data'] },
+      { id: 'steam:second', pack_name: 'second.pack', source: 'workshop', sources: ['workshop'] },
+      { id: 'steam:extra', pack_name: 'extra.pack', source: 'workshop', sources: ['workshop'] },
+    ]
+    store.activeIds = ['steam:extra']
+    store.recordCurrentPlaysetChange = vi.fn()
+    invokeMock.mockResolvedValue({
+      save: { name: 'campaign.save' },
+      pack_names: ['SECOND.PACK', 'missing.pack', 'first.pack'],
+    })
+
+    const comparison = await store.compareSaveMods('campaign.save')
+    expect(comparison.saveOnly.map(item => item.packName)).toEqual(['SECOND.PACK', 'missing.pack', 'first.pack'])
+    expect(comparison.currentOnly.map(item => item.packName)).toEqual(['extra.pack'])
+    expect(comparison.shared).toEqual([])
+
+    const enabled = await store.enableModsFromSave('campaign.save')
+    expect(store.activeIds).toEqual(['steam:second', 'data:first'])
+    expect(enabled.missingPackNames).toEqual(['missing.pack'])
+    expect(store.recordCurrentPlaysetChange).toHaveBeenCalledTimes(1)
+    expect(invokeMock).toHaveBeenCalledWith('get_save_mods', 'campaign.save')
+    expect(invokeMock).not.toHaveBeenCalledWith('subscribe_workshop_items', expect.anything())
+  })
+
+  it('copies selected primary MOD paths as a deduplicated newline list', async () => {
+    const store = useAppStore()
+    store.mods = [
+      { id: 'a', path: 'X:/data/a.pack' },
+      { id: 'b', path: 'X:/data/b.pack' },
+      { id: 'duplicate', path: 'X:/data/a.pack' },
+    ]
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue() } })
+
+    await store.copyModPaths(['b', 'a', 'duplicate'])
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('X:/data/b.pack\nX:/data/a.pack')
+  })
+
   it('moves a multi-selection as one ordered block', () => {
     const store = useAppStore()
     store.activeIds = ['a', 'b', 'c', 'd', 'e']

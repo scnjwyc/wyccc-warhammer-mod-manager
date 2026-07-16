@@ -47,6 +47,13 @@ describe('deliberately small product scope', () => {
     expect(stylesSource).not.toContain('flex-basis: 350px')
   })
 
+  it('allows native text selection for the mod name and pack filename', () => {
+    const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
+
+    expect(stylesSource).toMatch(/\.selectable-detail-text\s*\{[^}]*-webkit-user-select:\s*text/s)
+    expect(stylesSource).toMatch(/\.selectable-detail-text\s*\{[^}]*user-select:\s*text/s)
+  })
+
   it('doubles the expanded Workshop description viewport height', () => {
     const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
     expect(stylesSource).toMatch(/\.description-text\s*\{[^}]*max-height:\s*360px/s)
@@ -119,5 +126,16 @@ describe('deliberately small product scope', () => {
     expect(appSource).toContain('<WarningModal')
     expect(appSource).not.toContain('class="warning-area"')
     expect(stylesSource).toMatch(/\.panel-warning-button\s*\{[^}]*left:\s*50%[^}]*transform:\s*translateX\(-50%\)/s)
+  })
+
+  it('exposes game data modification from the left footer', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+
+    expect(appSource).toContain("import GameDataModificationModal")
+    expect(appSource).toContain('data-testid="game-data-modification-button"')
+    expect(appSource).toContain("t('app.gameDataModification')")
+    expect(appSource).toContain('<GameDataModificationModal')
+    expect(appSource).toContain('gameDataGeneratedSignature')
+    expect(appSource).toContain('@generate="generateGameDataPatch"')
   })
 })

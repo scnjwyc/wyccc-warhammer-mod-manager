@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import struct
 import sys
 import tempfile
@@ -8,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import backend.start_options as start_options
+from backend.game_data import GameDataBuildResult, GameDataEntry
 from backend.start_options import (
     EMPTY_MOVIE,
     INTRO_MOVIES,
@@ -20,6 +23,9 @@ from backend.start_options import (
     read_pack_entries,
     write_pfh5_pack,
 )
+
+UNIT_SIZE_FEATURE_WORKSHOP_ID = "3765783838"
+FRIENDLY_FIRE_FEATURE_WORKSHOP_ID = "3765783977"
 
 
 def _string_u8(value: str) -> bytes:
@@ -58,6 +64,170 @@ def _permission_table(rows: list[bytes]) -> bytes:
 
 
 class StartOptionsPackTests(unittest.TestCase):
+    def test_game_data_generation_has_a_dedicated_builder(self) -> None:
+        self.assertNotIn(
+            "subscribed_workshop_ids",
+            inspect.signature(build_runtime_options_pack).parameters,
+        )
+        self.assertTrue(callable(getattr(start_options, "build_game_data_patch", None)))
+        self.assertEqual(
+            getattr(start_options, "GAME_DATA_PATCH_NAME", ""),
+            "!!!!wyccc_game_data_patch.pack",
+        )
+
+    def test_runtime_builder_does_not_generate_game_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "data").mkdir()
+
+            with patch("backend.start_options.build_game_data_entries") as builder:
+                result = build_runtime_options_pack(
+                    root / "runtime",
+                    str(root / "data"),
+                    {},
+                    [],
+                    {
+                        "unit_model_multiplier": 2.0,
+                        "disable_unit_friendly_fire": True,
+                        "disable_spell_friendly_fire": True,
+                    },
+                )
+
+            builder.assert_not_called()
+            self.assertEqual(result["path"], "")
+            self.assertEqual(result["options"], [])
+
+    def test_disabled_game_data_settings_remove_the_existing_patch(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output_dir = root / "runtime"
+            output_dir.mkdir()
+            output_path = output_dir / "!!!!wyccc_game_data_patch.pack"
+            output_path.write_bytes(b"old patch")
+
+            with patch("backend.start_options.build_game_data_entries") as builder:
+                result = build_game_data_patch(
+                    output_dir,
+                    str(root / "data"),
+                    {},
+                    [],
+                    {
+                        "unit_model_multiplier": 1.0,
+                        "disable_unit_friendly_fire": False,
+                        "disable_spell_friendly_fire": False,
+                    },
+                )
+
+            builder.assert_not_called()
+            self.assertEqual(result["path"], "")
+            self.assertFalse(output_path.exists())
+
+    def test_each_subscription_unlocks_only_its_own_game_data_settings(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            write_pfh5_pack(
+                data / "db.pack",
+                [PackEntry("db\\main_units_tables\\data__", b"source-table")],
+            )
+            built = GameDataBuildResult(
+                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patched"),),
+                {"unit_model_multiplier": 2.0},
+            )
+
+            for workshop_id, expected in (
+                (
+                    UNIT_SIZE_FEATURE_WORKSHOP_ID,
+                    {
+                        "unit_model_multiplier": 2.0,
+                        "disable_unit_friendly_fire": False,
+                        "disable_spell_friendly_fire": False,
+                    },
+                ),
+                (
+                    FRIENDLY_FIRE_FEATURE_WORKSHOP_ID,
+                    {
+                        "unit_model_multiplier": 1.0,
+                        "disable_unit_friendly_fire": True,
+                        "disable_spell_friendly_fire": True,
+                    },
+                ),
+            ):
+                with self.subTest(workshop_id=workshop_id):
+                    with patch("backend.start_options.build_game_data_entries", return_value=built) as builder:
+                        result = build_game_data_patch(
+                            root / f"runtime-{workshop_id}",
+                            str(data),
+                            {},
+                            [],
+                            {
+                                "unit_model_multiplier": 2.0,
+                                "disable_unit_friendly_fire": True,
+                                "disable_spell_friendly_fire": True,
+                            },
+                            subscribed_workshop_ids=(workshop_id,),
+                        )
+
+                    self.assertTrue(builder.called)
+                    self.assertEqual(builder.call_args.args[1], expected)
+                    expected_options = [
+                        key
+                        for key, value in expected.items()
+                        if (key == "unit_model_multiplier" and value != 1.0)
+                        or (key != "unit_model_multiplier" and value)
+                    ]
+                    self.assertEqual(result["options"], expected_options)
+
+    def test_game_data_entries_are_read_from_db_pack_and_composed_into_runtime_pack(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            write_pfh5_pack(
+                data / "db.pack",
+                [PackEntry("db\\main_units_tables\\data__", b"source-table")],
+            )
+            built = GameDataBuildResult(
+                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patched-table"),),
+                {"unit_rows_scaled": 1, "unit_model_multiplier": 2.0},
+            )
+
+            with patch("backend.start_options.build_game_data_entries", return_value=built) as builder:
+                result = build_game_data_patch(
+                    root / "runtime",
+                    str(data),
+                    {},
+                    [],
+                    {"unit_model_multiplier": 2.0},
+                    subscribed_workshop_ids=(UNIT_SIZE_FEATURE_WORKSHOP_ID,),
+                )
+
+            self.assertTrue(builder.called)
+            self.assertEqual(Path(result["path"]).name, "!!!!wyccc_game_data_patch.pack")
+            sources = builder.call_args.args[0]
+            self.assertEqual([source.name for source in sources], ["db.pack"])
+            self.assertEqual([entry.name for entry in sources[0].entries], ["db\\main_units_tables\\data__"])
+            output = {entry.name: entry.payload for entry in read_pack_entries(Path(result["path"]))}
+            self.assertEqual(
+                output["db\\main_units_tables\\!!!!wyccc_game_data_v0007"],
+                b"patched-table",
+            )
+            self.assertIn("unit_model_multiplier", result["options"])
+            self.assertEqual(result["game_data"]["unit_rows_scaled"], 1)
+
     def test_ca_zstandard_payload_uses_prefixed_output_size(self) -> None:
         calls: list[tuple[bytes, int]] = []
 

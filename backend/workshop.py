@@ -26,7 +26,7 @@ DETAILS_ENDPOINT = (
 )
 PROFILE_ENDPOINT = "https://steamcommunity.com/profiles/{steam_id}?xml=1"
 
-CACHE_SCHEMA_VERSION = 5
+CACHE_SCHEMA_VERSION = 6
 ENGLISH_STEAM_LANGUAGE = "english"
 STEAM_LANGUAGE_BY_INTERFACE = {
     "zh-CN": "schinese",
@@ -299,7 +299,20 @@ class WorkshopMetadataService:
                 items[workshop_id]["dependencies_last_error_at"] = now
             return
 
+        failed_ids = [workshop_id for workshop_id in pending if workshop_id not in dependencies]
+        if failed_ids:
+            self.last_refresh_warning = DEPENDENCY_CACHE_WARNING
+            logger.warning(
+                "Workshop dependency refresh retained cache for %s item(s): %s",
+                len(failed_ids),
+                ", ".join(failed_ids[:10]),
+            )
+            for workshop_id in failed_ids:
+                items[workshop_id]["dependencies_last_error_at"] = now
+
         for workshop_id in pending:
+            if workshop_id not in dependencies:
+                continue
             record = items[workshop_id]
             record["required_workshop_items"] = dependencies.get(workshop_id, [])
             record["dependencies_fetched_at"] = now

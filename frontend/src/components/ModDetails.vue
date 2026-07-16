@@ -82,9 +82,9 @@ const generateWithAi = async () => {
         <div class="details-gradient"></div>
         <div class="details-title">
           <span class="eyebrow">{{ formatSources(mod) }}</span>
-          <h1>{{ mod.effective_name }}</h1>
+          <h1 class="selectable-detail-text" data-testid="mod-display-name">{{ mod.effective_name }}</h1>
           <p
-            class="details-source-name"
+            class="details-source-name selectable-detail-text"
             :class="{ 'has-original-name': mod.alias && mod.display_name }"
             :title="mod.alias && mod.display_name
               ? `${mod.pack_name} · ${t('common.originalName', { name: mod.display_name })}`

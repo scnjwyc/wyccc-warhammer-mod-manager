@@ -1,11 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { localizedPlaysetName, t } from './languages'
-import { useAppStore } from './store'
+import { gameDataSettingsSignature, useAppStore } from './store'
+import DeleteModsModal from './components/DeleteModsModal.vue'
+import GameDataModificationModal from './components/GameDataModificationModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModList from './components/ModList.vue'
+import OfficialProfileImportModal from './components/OfficialProfileImportModal.vue'
 import SaveGamesModal from './components/SaveGamesModal.vue'
+import SaveModsComparisonModal from './components/SaveModsComparisonModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import ShareModal from './components/ShareModal.vue'
 import SortMenu from './components/SortMenu.vue'
@@ -16,11 +20,19 @@ import WarningModal from './components/WarningModal.vue'
 import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 
 const store = useAppStore()
+const showGameDataModification = ref(false)
+const gameDataGeneratedSignature = ref('')
 const showSettings = ref(false)
 const showShare = ref(false)
 const showTypeManager = ref(false)
 const showWarnings = ref(false)
 const showSaveGames = ref(false)
+const showSaveModsComparison = ref(false)
+const saveModsComparison = ref(null)
+const showOfficialProfileImport = ref(false)
+const officialProfilePreview = ref(null)
+const showDeleteMods = ref(false)
+const deleteModsPreview = ref(null)
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
@@ -30,10 +42,13 @@ let updateTimer = 0
 
 const contextMod = computed(() => store.modMap.get(contextMenu.modId) || null)
 const contextModActive = computed(() => !!contextMod.value && store.activeIds.includes(contextMod.value.id))
+const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
+const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
 const statusDisplay = computed(() => {
   if (store.busy) return { text: store.busy, kind: 'busy', spinning: true }
   if (store.workshopRefreshing) return { text: t('status.refreshingWorkshop'), kind: 'refresh', spinning: true }
+  if (store.liveModRefreshing) return { text: t('status.refreshingModList'), kind: 'refresh', spinning: true }
   if (store.orderSaving) return { text: t('status.savingOrder'), kind: 'saving', spinning: true }
   if (store.orderSaveError || store.dirty) return { text: t('status.saveFailed'), kind: 'error', spinning: false }
   if (store.runtime.running) return { text: t('status.gameRunning'), kind: 'running', spinning: false }
@@ -67,6 +82,25 @@ const saveSettings = async changes => {
   if (store.pathHealth.game_ready) {
     await store.scan(false)
     if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
+  }
+}
+
+const saveGameDataSettings = async changes => {
+  await store.saveGameDataSettings(changes, gameDataGeneratedSignature.value)
+  showGameDataModification.value = false
+}
+
+const generateGameDataPatch = async changes => {
+  const data = await store.generateGameDataPatch(changes)
+  gameDataGeneratedSignature.value = gameDataSettingsSignature(data.settings)
+}
+
+const openGameDataModification = async () => {
+  gameDataGeneratedSignature.value = ''
+  try {
+    await store.refreshGameDataFeatures()
+  } finally {
+    showGameDataModification.value = true
   }
 }
 
@@ -212,6 +246,11 @@ const contextSelectionCount = computed(() => (
 
 const enableSelected = modId => store.enableMany(selectedActionIds(modId))
 const disableSelected = modId => store.disableMany(selectedActionIds(modId))
+const toggleSingleMod = modId => (
+  store.activeIds.includes(modId)
+    ? store.disableMany([modId])
+    : store.enableMany([modId])
+)
 const handleListDrop = payload => store.handleModDrop(payload)
 
 const closeModContextMenu = () => {
@@ -264,7 +303,7 @@ const handleContextAction = async ({ action, value, mod }) => {
         ? t('app.selectedModsSubject', { count: targets.length })
         : t('app.singleModSubject', { name: mod.effective_name })
       if (!window.confirm(t('app.confirmUnsubscribe', { subject }))) return
-      for (const modId of targets) await store.unsubscribeWorkshop(modId)
+      await store.unsubscribeWorkshopMany(targets)
     } else if (action === 'force-update') {
       for (const modId of actionIds) {
         if (store.modMap.get(modId)?.workshop_id) await store.forceUpdateWorkshop(modId)
@@ -282,6 +321,11 @@ const handleContextAction = async ({ action, value, mod }) => {
       workshopPublish.mode = mode
       workshopPublish.queue = targets
       workshopPublish.modId = targets[0]
+    } else if (action === 'copy-path') {
+      await store.copyModPaths(actionIds)
+    } else if (action === 'delete-file') {
+      deleteModsPreview.value = await store.previewDeleteModFiles(actionIds)
+      showDeleteMods.value = true
     } else if (action === 'open-folder') {
       for (const modId of actionIds) await store.openModFolder(modId)
     } else if (action === 'open-rpfm') {
@@ -338,6 +382,13 @@ const closeWorkshopPublish = () => {
   workshopPublish.open = false
   workshopPublish.queue = []
   workshopPublish.modId = ''
+}
+
+const confirmDeleteMods = async token => {
+  try {
+    await store.deleteModFiles(token)
+    showDeleteMods.value = false
+  } catch { /* shared toast */ }
 }
 
 const submitWorkshopPublish = async publishData => {
@@ -415,9 +466,44 @@ const launchSave = async saveName => {
   } catch { /* shared toast */ }
 }
 
+const enableSaveMods = async saveName => {
+  try {
+    await store.enableModsFromSave(saveName)
+    showSaveGames.value = false
+  } catch { /* shared toast */ }
+}
+
+const compareSaveMods = async saveName => {
+  try {
+    saveModsComparison.value = await store.compareSaveMods(saveName)
+    showSaveModsComparison.value = true
+  } catch { /* shared toast */ }
+}
+
+const beginOfficialProfileImport = async () => {
+  try {
+    const selected = await store.selectOfficialProfile()
+    if (!selected.path) return
+    officialProfilePreview.value = await store.previewOfficialProfile(selected.path)
+    showShare.value = false
+    showOfficialProfileImport.value = true
+  } catch { /* shared toast */ }
+}
+
+const importOfficialProfile = async ({ mode, subscribeMissing }) => {
+  const preview = officialProfilePreview.value
+  if (!preview) return
+  try {
+    const workshopIds = [...new Set((preview.unsubscribed || []).map(item => item.workshop_id))]
+    if (subscribeMissing && workshopIds.length) await store.subscribeWorkshopItems(workshopIds)
+    await store.importOfficialProfile(preview.profile.path, mode)
+    showOfficialProfileImport.value = false
+  } catch { /* shared toast */ }
+}
+
 onMounted(() => {
   initialize()
-  runtimeTimer = window.setInterval(() => store.refreshRuntime(), 4000)
+  runtimeTimer = window.setInterval(() => store.refreshRuntime(), 1000)
 })
 
 onBeforeUnmount(() => {
@@ -548,8 +634,10 @@ onBeforeUnmount(() => {
         :visual-sorted="store.sortMode !== 'priority'"
         @select="store.selectMod"
         @enable="enableSelected"
+        @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
         @context-menu="openModContextMenu"
+        @select-all="store.selectAllMods"
       />
 
       <ModList
@@ -565,9 +653,11 @@ onBeforeUnmount(() => {
         :warning-count="store.warningCount"
         @select="store.selectMod"
         @disable="disableSelected"
+        @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
         @move="store.move"
         @context-menu="openModContextMenu"
+        @select-all="store.selectAllMods"
         @show-warnings="showWarnings = true"
       />
     </main>
@@ -577,11 +667,20 @@ onBeforeUnmount(() => {
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
           {{ t('app.rescan') }}
         </button>
-        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(true)">
+        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.refreshWorkshopInBackground">
           {{ t('app.refreshWorkshop') }}
         </button>
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || !store.pathHealth.game_ready" @click="store.openGameFolder">
           {{ t('app.openGameFolder') }}
+        </button>
+        <button
+          type="button"
+          class="secondary-button sync-data-button"
+          :disabled="!!store.busy || store.runtime.running"
+          data-testid="game-data-modification-button"
+          @click="openGameDataModification"
+        >
+          {{ t('app.gameDataModification') }}
         </button>
         <button
           type="button"
@@ -639,6 +738,19 @@ onBeforeUnmount(() => {
       @show-changelog="openChangelog"
     />
 
+    <GameDataModificationModal
+      :open="showGameDataModification"
+      :settings="store.settings"
+      :busy="store.busy"
+      :unit-size-subscribed="!!unitSizeFeature.subscribed"
+      :friendly-fire-subscribed="!!friendlyFireFeature.subscribed"
+      :unit-size-mod-name="unitSizeFeature.title"
+      :friendly-fire-mod-name="friendlyFireFeature.title"
+      @close="showGameDataModification = false"
+      @generate="generateGameDataPatch"
+      @save="saveGameDataSettings"
+    />
+
     <UpdateModal
       :open="updateDialog.open"
       :mode="updateDialog.mode"
@@ -660,6 +772,14 @@ onBeforeUnmount(() => {
       @close="showSaveGames = false"
       @refresh="store.loadSaveGames"
       @load="launchSave"
+      @enable-mods="enableSaveMods"
+      @compare-mods="compareSaveMods"
+    />
+
+    <SaveModsComparisonModal
+      :open="showSaveModsComparison"
+      :comparison="saveModsComparison"
+      @close="showSaveModsComparison = false"
     />
 
     <WarningModal
@@ -678,6 +798,15 @@ onBeforeUnmount(() => {
       @close="showShare = false"
       @export="exportShare"
       @import="importShare"
+      @import-official="beginOfficialProfileImport"
+    />
+
+    <OfficialProfileImportModal
+      :open="showOfficialProfileImport"
+      :preview="officialProfilePreview"
+      :busy="store.busy"
+      @close="showOfficialProfileImport = false"
+      @import="importOfficialProfile"
     />
 
     <TypeManagerModal
@@ -707,8 +836,17 @@ onBeforeUnmount(() => {
       :active="contextModActive"
       :types="store.modTypes"
       :selection-count="contextSelectionCount"
+      :game-running="store.runtime.running"
       @close="closeModContextMenu"
       @action="handleContextAction"
+    />
+
+    <DeleteModsModal
+      :open="showDeleteMods"
+      :preview="deleteModsPreview"
+      :busy="store.busy"
+      @close="showDeleteMods = false"
+      @confirm="confirmDeleteMods"
     />
 
     <transition name="toast">

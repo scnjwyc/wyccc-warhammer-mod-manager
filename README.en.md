@@ -4,12 +4,13 @@
 
 A lightweight mod manager for Total War: WARHAMMER III.
 
-The current version is `0.5.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `0.6.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 
 - Easy to set up and ready to use without complicated configuration.
 - Manage enabled and disabled mods at a glance. Supports Ctrl multi-selection, Shift range selection, batch drag-and-drop sorting, and direct movement between both lists.
+- Ctrl+A selects the current list, or only visible search results while searching. Low-overhead filesystem events keep Data and Workshop additions/removals in sync and can be disabled in Settings.
 - Automatic sorting helps new users avoid having to manage load order manually.
 - Playset-based mod lists, similar to Paradox games, let you save different mod combinations. Every enable, disable, or sorting action immediately updates the active playset.
 - Quickly search, filter, and organize mods, and save aliases, notes, and custom categories. AI can also generate mod aliases and summaries automatically.
@@ -17,6 +18,11 @@ The current version is `0.5.0`. It brings mods, playsets, the Steam Workshop, an
 - Share or import playsets. You can send your current mod list to friends for multiplayer, and they can import it and automatically subscribe to missing mods.
 - Automatically checks for missing dependencies and mod version issues. Unnecessary warnings can be ignored per mod, such as false missing-dependency warnings for translation mods.
 - Launch the game directly, continue the most recent campaign, or load a selected save from the save list.
+- Compare the MODs used by a save and enable them in one action.
+- Import presets from the official game launcher to quickly create a new playset or replace the current one.
+- Dynamically adjust unit sizes and disable unit and spell friendly fire, with compatibility across all MODs and game updates!
+- Copy MOD paths or safely move MOD files to the Recycle Bin from the context menu. Unsubscribing also cleans the matching Workshop folder, and these file operations are blocked while the game runs.
+- Automatically switches to a static low-consumption page while the game runs, pausing scanning and directory monitoring until the game exits.
 - Automatically checks for new versions and lets you view release notes, download updates, and install them from within the application.
 - Built-in support for Simplified Chinese, English, Korean, Russian, and Japanese.
 

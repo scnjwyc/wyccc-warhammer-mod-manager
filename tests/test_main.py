@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 from backend.changelog import get_all_changelogs
 from backend.constants import APP_NAME, APP_VERSION
 from backend.update_service import is_newer_version
+from main import ensure_single_instance
 from main import main as run_app
 from main import resolve_runtime_data_dir, run_desktop
 from scripts import build as build_script
@@ -27,13 +28,44 @@ from scripts.build import (
 
 class PackagedRuntimeTests(unittest.TestCase):
     def test_desktop_window_starts_maximized(self) -> None:
-        fake_webview = SimpleNamespace(create_window=Mock(), start=Mock())
+        fake_window = Mock()
+        fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
         with patch.dict(sys.modules, {"webview": fake_webview}):
             result = run_desktop(object(), "file:///index.html")
 
         self.assertEqual(result, 0)
         self.assertEqual(fake_webview.create_window.call_args.args[0], "Wyccc's Mod Manager")
         self.assertTrue(fake_webview.create_window.call_args.kwargs["maximized"])
+
+    def test_game_running_starts_on_the_static_low_consumption_page(self) -> None:
+        fake_window = Mock()
+        fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
+        api = Mock()
+        with patch.dict(sys.modules, {"webview": fake_webview}):
+            result = run_desktop(
+                api,
+                "file:///index.html",
+                idle_url="file:///idle.html",
+                initial_game_running=True,
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(fake_webview.create_window.call_args.args[1], "file:///idle.html")
+        api.set_game_running.assert_called_with(True, force=True)
+        api.bind_low_consumption_exit.assert_called_once()
+        self.assertTrue(callable(api.bind_low_consumption_exit.call_args.args[0]))
+
+    def test_second_launch_signals_the_existing_window_without_showing_an_error(self) -> None:
+        with (
+            patch("main.os.name", "nt"),
+            patch("main._create_instance_mutex", return_value=(123, True)),
+            patch("main._close_handle") as close_handle,
+            patch("main._signal_existing_instance", return_value=True) as signal,
+        ):
+            self.assertFalse(ensure_single_instance())
+
+        close_handle.assert_called_once_with(123)
+        signal.assert_called_once_with()
 
     def test_windows_release_branding_and_default_output_directory(self) -> None:
         self.assertEqual(APP_NAME, "Wyccc's Mod Manager")
@@ -56,37 +88,35 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.5.0")
+        self.assertEqual(APP_VERSION, "0.6.0")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("filevers=(0, 5, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.5.0')", version_info)
+        self.assertIn("filevers=(0, 6, 0, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.6.0')", version_info)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertEqual(update_manifest["version"], APP_VERSION)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
+        self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = changelog[0]
-        self.assertEqual(manifest_release["version"], APP_VERSION)
         self.assertEqual(update_manifest["published_at"], manifest_release["date"])
         self.assertEqual(update_manifest["changelog"], manifest_release["entries"])
         self.assertTrue(update_manifest["download"]["url"].startswith("https://"))
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:4]],
-            ["0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+            [release["version"] for release in changelog[:5]],
+            ["0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
         )
-        self.assertIn("创意工坊", str(changelog[0]))
-        self.assertIn("系统语言", str(changelog[0]))
-        self.assertIn("时间比较方向", str(changelog[0]))
-        self.assertIn("只检查已启用 MOD", str(changelog[0]))
-        self.assertIn("正在使用缓存", str(changelog[0]))
-        self.assertIn("RimCrow", str(changelog[0]))
+        self.assertIn("低消耗模式", str(changelog[0]))
+        self.assertIn("即时 MOD 增删检测", str(changelog[0]))
+        self.assertIn("官方 MOD 启动器", str(changelog[0]))
+        self.assertIn("Windows 回收站", str(changelog[0]))
         for donation_term in ("捐赠", "二维码", "收款码", "打赏"):
             self.assertNotIn(donation_term, str(changelog[0]))
-        self.assertIn("Data", str(changelog[1]))
-        self.assertIn("Gitee", str(changelog[2]))
-        self.assertNotIn("Gitee", str(changelog[3]))
+        self.assertIn("Data", str(changelog[2]))
+        self.assertIn("Gitee", str(changelog[3]))
+        self.assertNotIn("Gitee", str(changelog[4]))
 
     def test_changelog_is_available_in_every_built_in_language(self) -> None:
         languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP")
@@ -94,22 +124,91 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:4]],
-                ["0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+                [release["version"] for release in releases[:5]],
+                ["0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
             )
+            self.assertEqual(len(releases[0]["entries"]), 4)
+            self.assertIn("Dynamic Unit Size", str(releases[0]))
+            self.assertIn("Dynamic No Friendly Fire", str(releases[0]))
+            self.assertNotIn("wyccc_dynamic_unit_size.pack", str(releases[0]))
+            self.assertNotIn("wyccc_dynamic_no_friendly_fire.pack", str(releases[0]))
         titles = {
             language: releases[0]["entries"][0]["title"]
             for language, releases in localized.items()
         }
         self.assertEqual(len(set(titles.values())), len(languages))
-        self.assertIn("Built-in languages", str(localized["en-US"]))
-        self.assertIn("내장 다국어", str(localized["ko-KR"]))
-        self.assertIn("Встроенные языки", str(localized["ru-RU"]))
-        self.assertIn("内蔵多言語", str(localized["ja-JP"]))
-        self.assertIn("Warning detection and messaging fixes", str(localized["en-US"]))
-        self.assertIn("경고 감지 및 안내 수정", str(localized["ko-KR"]))
-        self.assertIn("Исправления проверки и сообщений", str(localized["ru-RU"]))
-        self.assertIn("警告判定と案内の修正", str(localized["ja-JP"]))
+        self.assertIn("low-consumption mode", str(localized["en-US"]))
+        self.assertIn("游戏数据修改", str(localized["zh-CN"]))
+        self.assertIn("订阅", str(localized["zh-CN"]))
+        self.assertIn("恢复缺失的工坊 MOD 文件", str(localized["zh-CN"]))
+        self.assertIn("Game data modification", str(localized["en-US"]))
+        self.assertIn("저소비 모드", str(localized["ko-KR"]))
+        self.assertIn("режим низкого потребления", str(localized["ru-RU"]))
+        self.assertIn("低消費モード", str(localized["ja-JP"]))
+        expected_multiplier_ranges = {
+            "zh-CN": "0.5–5 倍",
+            "en-US": "0.5× to 5×",
+            "ko-KR": "0.5~5배",
+            "ru-RU": "от 0,5 до 5 раз",
+            "ja-JP": "0.5～5 倍",
+        }
+        for language, expected_range in expected_multiplier_ranges.items():
+            self.assertIn(expected_range, str(localized[language][0]), language)
+        expected_patch_generation = {
+            "zh-CN": "一键生成补丁",
+            "en-US": "generate the patch",
+            "ko-KR": "패치를 생성",
+            "ru-RU": "создать патч",
+            "ja-JP": "パッチを生成",
+        }
+        for language, expected_text in expected_patch_generation.items():
+            self.assertIn(expected_text, str(localized[language][0]), language)
+        expected_automatic_updates = {
+            "zh-CN": "保存更改时也会自动更新",
+            "en-US": "automatic updates when changes are saved",
+            "ko-KR": "변경 사항을 저장하면 자동으로 업데이트",
+            "ru-RU": "автоматически обновляется при сохранении изменений",
+            "ja-JP": "変更を保存すると自動的に更新",
+        }
+        for language, expected_text in expected_automatic_updates.items():
+            self.assertIn(expected_text, str(localized[language][0]), language)
+
+    def test_060_changelog_is_concise_and_describes_user_benefits(self) -> None:
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP")
+        implementation_terms = (
+            "webview2",
+            "warhammer3.exe",
+            "getqueryugcchildren",
+            "steamworks",
+            "modprofiles",
+            ".twmods",
+            "runtime db",
+            "运行时 db",
+            "런타임 db",
+            "рабочая бд",
+            "実行時 db",
+            "backend",
+            "бэкенд",
+        )
+
+        for language in languages:
+            release = get_all_changelogs(language)[0]
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3, 3, 4, 4])
+            visible_copy = " ".join(
+                [entry["title"] for entry in release["entries"]]
+                + [
+                    change["text"]
+                    for entry in release["entries"]
+                    for change in entry["changes"]
+                ]
+            )
+            folded = visible_copy.casefold()
+            for term in implementation_terms:
+                self.assertNotIn(term.casefold(), folded, f"{language}: {term}")
+            for entry in release["entries"]:
+                self.assertLessEqual(len(entry["title"]), 60, language)
+                for change in entry["changes"]:
+                    self.assertLessEqual(len(change["text"]), 180, language)
 
     def test_desktop_mode_requires_pywebview(self) -> None:
         with patch.dict(sys.modules, {"webview": None}):
@@ -152,13 +251,20 @@ class PackagedRuntimeTests(unittest.TestCase):
             frontend = root / "frontend"
             packaging = root / "packaging"
             steam_runtime = root / "steam_runtime"
+            backend = root / "backend"
             output = root / "release"
             (frontend / "dist").mkdir(parents=True)
             packaging.mkdir()
+            backend.mkdir()
             (steam_runtime / "steamworks" / "dist" / "win64").mkdir(parents=True)
+            (steam_runtime / "steamworks_dependencies" / "dist" / "win64").mkdir(
+                parents=True
+            )
             (frontend / "dist" / "index.html").write_text("fixture", encoding="utf-8")
             (packaging / "wmm.ico").write_bytes(b"icon")
             (packaging / "version_info.txt").write_text("fixture", encoding="utf-8")
+            schema_path = backend / "wh3_db_schema.json"
+            schema_path.write_text("{}", encoding="utf-8")
             (steam_runtime / "workshop_bridge.js").write_text("fixture", encoding="utf-8")
             native_binding = (
                 steam_runtime
@@ -168,6 +274,9 @@ class PackagedRuntimeTests(unittest.TestCase):
                 / "steamworksjs.win32-x64-msvc.node"
             )
             native_binding.write_bytes(b"fixture")
+            dependency_runtime = steam_runtime / "steamworks_dependencies" / "dist" / "win64"
+            (dependency_runtime / "steamworksjs.win32-x64-msvc.node").write_bytes(b"fixture")
+            (dependency_runtime / "steam_api64.dll").write_bytes(b"fixture")
             node = root / "node.exe"
             node.write_bytes(b"fixture")
             commands: list[list[str]] = []
@@ -203,6 +312,8 @@ class PackagedRuntimeTests(unittest.TestCase):
                 pyinstaller_command[pyinstaller_command.index("--name") + 1],
                 "WycccModManager",
             )
+            separator = ";" if os.name == "nt" else ":"
+            self.assertIn(f"{schema_path}{separator}backend", pyinstaller_command)
 
 
 if __name__ == "__main__":

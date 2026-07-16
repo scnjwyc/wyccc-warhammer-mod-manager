@@ -28,3 +28,6 @@ Current SHA-256 values:
 Although the historical filename contains `msvc`, Node loads the module through
 the stable N-API ABI; the current binary is the GNU-target build documented
 above.
+
+The dependency-query build is intentionally isolated from this localized-update
+build. Its provenance and hashes are documented in `../steamworks_dependencies/README.md`.
