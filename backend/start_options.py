@@ -16,7 +16,10 @@ from .game_data import (
     GameDataEntry,
     build_game_data_entries,
 )
-from .game_data_settings import normalize_unit_scale_multiplier
+from .game_data_settings import (
+    normalize_single_entity_unit_mode,
+    normalize_unit_scale_multiplier,
+)
 from .models import ModAsset
 
 
@@ -309,7 +312,7 @@ def write_pfh5_pack(path: Path, entries: Iterable[PackEntry]) -> Path:
 def _effective_game_data_settings(
     settings: dict[str, Any],
     subscribed_workshop_ids: Iterable[str],
-) -> dict[str, int | bool]:
+) -> dict[str, int | bool | str]:
     subscribed_ids = {
         str(workshop_id).strip()
         for workshop_id in subscribed_workshop_ids
@@ -326,6 +329,13 @@ def _effective_game_data_settings(
     )
     return {
         "unit_model_multiplier": unit_multiplier if unit_size_available else 1,
+        "single_entity_unit_mode": (
+            normalize_single_entity_unit_mode(
+                settings.get("single_entity_unit_mode", "scale")
+            )
+            if unit_size_available
+            else "scale"
+        ),
         "scale_lord_hero_health": (
             bool(settings.get("scale_lord_hero_health")) if unit_size_available else False
         ),
@@ -338,7 +348,7 @@ def _effective_game_data_settings(
     }
 
 
-def _game_data_enabled(settings: dict[str, int | bool]) -> bool:
+def _game_data_enabled(settings: dict[str, int | bool | str]) -> bool:
     return (
         not math.isclose(
             float(settings["unit_model_multiplier"]),
@@ -351,7 +361,7 @@ def _game_data_enabled(settings: dict[str, int | bool]) -> bool:
     )
 
 
-def _enabled_game_data_options(settings: dict[str, int | bool]) -> list[str]:
+def _enabled_game_data_options(settings: dict[str, int | bool | str]) -> list[str]:
     options: list[str] = []
     if not math.isclose(
         float(settings["unit_model_multiplier"]),
@@ -360,6 +370,8 @@ def _enabled_game_data_options(settings: dict[str, int | bool]) -> list[str]:
         abs_tol=1e-9,
     ):
         options.append("unit_model_multiplier")
+        if settings["single_entity_unit_mode"] == "health":
+            options.append("single_entity_unit_mode")
         if settings["scale_lord_hero_health"]:
             options.append("scale_lord_hero_health")
     if settings["disable_unit_friendly_fire"]:
@@ -376,7 +388,9 @@ def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
             "unit_rows_scaled",
             "land_rows_scaled",
             "lord_hero_health_rows_scaled",
+            "single_entity_health_rows_scaled",
             "unit_friendly_fire_rows_changed",
+            "unit_friendly_fire_kv_rules_changed",
             "spell_friendly_fire_rows_changed",
         )
     )

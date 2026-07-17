@@ -41,6 +41,7 @@ STEAM_LANGUAGE_BY_INTERFACE = {
     "ko-KR": "koreana",
     "ru-RU": "russian",
     "ja-JP": "japanese",
+    "es-ES": "spanish",
 }
 INTERFACE_LANGUAGE_BY_STEAM = {
     steam_language: interface_language

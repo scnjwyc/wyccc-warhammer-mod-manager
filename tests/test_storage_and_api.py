@@ -612,7 +612,7 @@ class ApiContractTests(unittest.TestCase):
             [],
         )
 
-    def test_game_data_settings_rpc_only_updates_the_four_supported_values(self) -> None:
+    def test_game_data_settings_rpc_only_updates_supported_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / "state")
             original_language = api.settings_service.get()["language"]
@@ -621,6 +621,7 @@ class ApiContractTests(unittest.TestCase):
                 "save_game_data_settings",
                 [{
                     "unit_model_multiplier": 2.5,
+                    "single_entity_unit_mode": "health",
                     "scale_lord_hero_health": True,
                     "disable_unit_friendly_fire": True,
                     "disable_spell_friendly_fire": True,
@@ -630,6 +631,10 @@ class ApiContractTests(unittest.TestCase):
 
             self.assertTrue(result["ok"])
             self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 3)
+            self.assertEqual(
+                result["data"]["settings"]["single_entity_unit_mode"],
+                "health",
+            )
             self.assertTrue(result["data"]["settings"]["scale_lord_hero_health"])
             self.assertTrue(result["data"]["settings"]["disable_unit_friendly_fire"])
             self.assertTrue(result["data"]["settings"]["disable_spell_friendly_fire"])
@@ -991,8 +996,8 @@ class ApiContractTests(unittest.TestCase):
             (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
             write_pack(data / "data.pack")
             write_pack(data / "my_own_mod.pack")
-            preview = root / "preview.jpg"
-            preview.write_bytes(b"preview fixture")
+            cover = data / "my_own_mod.png"
+            cover.write_bytes(b"cover fixture")
 
             api = API(root / "state")
             saved = api.call(
@@ -1017,6 +1022,10 @@ class ApiContractTests(unittest.TestCase):
             def fake_publish(**kwargs: object) -> dict[str, object]:
                 content_path = Path(str(kwargs["content_path"]))
                 self.assertTrue((content_path / "my_own_mod.pack").is_file())
+                staged_cover = content_path / "my_own_mod.png"
+                self.assertTrue(staged_cover.is_file())
+                self.assertEqual(Path(str(kwargs["preview_path"])), staged_cover)
+                self.assertEqual(staged_cover.read_bytes(), b"cover fixture")
                 bridge_calls.append(dict(kwargs))
                 return {
                     "operation": "upload" if not kwargs["workshop_id"] else "update",
@@ -1033,7 +1042,6 @@ class ApiContractTests(unittest.TestCase):
                 "description": "Description",
                 "change_note": "",
                 "language": "zh-CN",
-                "preview_path": str(preview),
                 "category": "units",
                 "visibility": 0,
             }
@@ -1057,6 +1065,105 @@ class ApiContractTests(unittest.TestCase):
                 api.state_repository.list_user_mod_data()[mod["id"]]["published_workshop_id"],
                 "456789",
             )
+
+    def test_workshop_publish_requires_a_same_name_png_cover(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            write_pack(data / "my_own_mod.pack")
+            unrelated_preview = root / "preview.jpg"
+            unrelated_preview.write_bytes(b"unrelated preview")
+
+            api = API(root / "state")
+            self.assertTrue(
+                api.call(
+                    "save_settings",
+                    [
+                        {
+                            "game_path": str(game),
+                            "workshop_path": "",
+                            "scan_data": True,
+                            "scan_modding": False,
+                            "scan_workshop": False,
+                            "scan_merged": False,
+                            "fetch_workshop_metadata": False,
+                        }
+                    ],
+                )["ok"]
+            )
+            mod = api.call("scan_mods", [False])["data"]["mods"][0]
+
+            rejected = api.call(
+                "publish_workshop_item",
+                [
+                    mod["id"],
+                    {
+                        "mode": "upload",
+                        "title": "My Own Mod",
+                        "language": "en-US",
+                        "preview_path": str(unrelated_preview),
+                        "category": "units",
+                        "visibility": 0,
+                    },
+                ],
+            )
+
+            self.assertFalse(rejected["ok"])
+
+    def test_workshop_publish_rejects_an_oversized_same_name_png_cover(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            write_pack(data / "my_own_mod.pack")
+            (data / "my_own_mod.png").write_bytes(b"x" * (1_024 * 1_024 + 1))
+            unrelated_preview = root / "preview.jpg"
+            unrelated_preview.write_bytes(b"small unrelated preview")
+
+            api = API(root / "state")
+            self.assertTrue(
+                api.call(
+                    "save_settings",
+                    [
+                        {
+                            "game_path": str(game),
+                            "workshop_path": "",
+                            "scan_data": True,
+                            "scan_modding": False,
+                            "scan_workshop": False,
+                            "scan_merged": False,
+                            "fetch_workshop_metadata": False,
+                        }
+                    ],
+                )["ok"]
+            )
+            mod = api.call("scan_mods", [False])["data"]["mods"][0]
+
+            rejected = api.call(
+                "publish_workshop_item",
+                [
+                    mod["id"],
+                    {
+                        "mode": "upload",
+                        "title": "My Own Mod",
+                        "language": "en-US",
+                        "preview_path": str(unrelated_preview),
+                        "category": "units",
+                        "visibility": 0,
+                    },
+                ],
+            )
+
+            self.assertFalse(rejected["ok"])
 
     def test_context_menu_file_and_steam_operations_use_the_selected_pack(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

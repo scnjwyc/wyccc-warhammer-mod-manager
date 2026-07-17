@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.game_data_patch_state import (
+    GAME_DATA_BUILDER_VERSION,
     GAME_DATA_PATCH_MANIFEST_NAME,
     build_game_data_inputs,
     ensure_game_data_patch,
@@ -22,6 +23,9 @@ UNIT_SIZE_WORKSHOP_ID = "3765783838"
 
 
 class GameDataPatchStateTests(unittest.TestCase):
+    def test_builder_version_invalidates_pre_single_entity_mode_patches(self) -> None:
+        self.assertEqual(GAME_DATA_BUILDER_VERSION, 5)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -40,6 +44,7 @@ class GameDataPatchStateTests(unittest.TestCase):
         self.active_ids = ["first", "second"]
         self.settings = {
             "unit_model_multiplier": 2,
+            "single_entity_unit_mode": "scale",
             "scale_lord_hero_health": False,
             "disable_unit_friendly_fire": False,
             "disable_spell_friendly_fire": False,
@@ -102,10 +107,15 @@ class GameDataPatchStateTests(unittest.TestCase):
         base_digest = fingerprint_game_data_inputs(base)
 
         changed_settings = dict(self.settings, unit_model_multiplier=3)
+        changed_single_entity_mode = dict(
+            self.settings,
+            single_entity_unit_mode="health",
+        )
         changed_health_setting = dict(self.settings, scale_lord_hero_health=True)
         changed_subscription = {UNIT_SIZE_WORKSHOP_ID: False}
         variants = [
             self._inputs(settings=changed_settings),
+            self._inputs(settings=changed_single_entity_mode),
             self._inputs(settings=changed_health_setting),
             self._inputs(playset_id="campaign"),
             self._inputs(active_ids=list(reversed(self.active_ids))),
@@ -159,6 +169,7 @@ class GameDataPatchStateTests(unittest.TestCase):
         stale_path.write_bytes(b"stale")
         disabled = {
             "unit_model_multiplier": 1,
+            "single_entity_unit_mode": "scale",
             "scale_lord_hero_health": False,
             "disable_unit_friendly_fire": False,
             "disable_spell_friendly_fire": False,

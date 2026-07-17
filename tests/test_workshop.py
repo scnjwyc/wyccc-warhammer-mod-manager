@@ -410,6 +410,7 @@ class WorkshopMetadataTests(unittest.TestCase):
             "ko-KR": "koreana",
             "ru-RU": "russian",
             "ja-JP": "japanese",
+            "es-ES": "spanish",
         }
         localized = {
             steam_language: {

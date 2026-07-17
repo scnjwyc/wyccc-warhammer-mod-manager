@@ -7,8 +7,20 @@ from typing import Any
 
 
 _PACK_NAME_RE = re.compile(r'^[^<>:"/\\|?*\x00-\x1f]{1,260}\.pack$', re.IGNORECASE)
-_PACK_SUFFIX = b".pack\0"
+_PACK_SUFFIX = b".pack"
 _MAX_PACK_TOKEN_BYTES = 1024
+_LENGTH_PREFIX_BYTES = 4
+
+
+def _has_legacy_pack_terminator(content: bytes, token_end: int) -> bool:
+    return token_end < len(content) and content[token_end] == 0
+
+
+def _has_matching_length_prefix(content: bytes, token_start: int, token_end: int) -> bool:
+    if token_start < _LENGTH_PREFIX_BYTES:
+        return False
+    length_prefix = content[token_start - _LENGTH_PREFIX_BYTES:token_start]
+    return int.from_bytes(length_prefix, "little") == token_end - token_start
 
 
 def default_save_directory() -> Path:
@@ -103,6 +115,11 @@ class SaveGameService:
             ) + 1
             raw_token = content[token_start:token_end]
             cursor = token_end + 1
+            if not (
+                _has_legacy_pack_terminator(content, token_end)
+                or _has_matching_length_prefix(content, token_start, token_end)
+            ):
+                continue
             token = raw_token.decode("utf-8", errors="replace").strip()
             pack_name = Path(token.replace("\\", "/")).name
             key = pack_name.casefold()

@@ -87,11 +87,35 @@ logger = logging.getLogger(__name__)
 GAME_DATA_SETTING_KEYS = frozenset(
     {
         "unit_model_multiplier",
+        "single_entity_unit_mode",
         "scale_lord_hero_health",
         "disable_unit_friendly_fire",
         "disable_spell_friendly_fire",
     }
 )
+MAX_WORKSHOP_COVER_BYTES = 1_024 * 1_024
+
+
+def _require_workshop_cover(source_pack: Path) -> Path:
+    cover_path = source_pack.with_suffix(".png")
+    if not cover_path.is_file():
+        raise ValueError(
+            f"MOD 封面必须与 Pack 同目录且同名：{cover_path.name}"
+        )
+    try:
+        cover_size = cover_path.stat().st_size
+    except OSError as exc:
+        raise ValueError(f"无法读取 MOD 封面：{cover_path}") from exc
+    if cover_size > MAX_WORKSHOP_COVER_BYTES:
+        raise ValueError("MOD 封面图不能超过 1 MB")
+    return cover_path
+
+
+def _stage_workshop_upload_file(source: Path, target: Path) -> None:
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
 
 
 class API:
@@ -1429,14 +1453,6 @@ class API:
         if len(description) > 8_000 or len(change_note) > 8_000:
             raise ValueError("Workshop 描述或更新日志过长")
 
-        preview_path = Path(str(publish_data.get("preview_path") or "").strip())
-        if not preview_path.is_file():
-            raise ValueError("请选择有效的 Workshop 预览图")
-        if preview_path.suffix.casefold() not in {".png", ".jpg", ".jpeg"}:
-            raise ValueError("Workshop 预览图仅支持 PNG 或 JPEG")
-        if preview_path.stat().st_size > 1_024 * 1_024:
-            raise ValueError("Workshop 预览图不能超过 1 MB")
-
         category = str(publish_data.get("category") or "graphical").strip().casefold()
         allowed_categories = {
             "graphical", "campaign", "units", "battle", "ui",
@@ -1451,6 +1467,7 @@ class API:
         source_pack = Path(asset.path)
         if not source_pack.is_file() or source_pack.suffix.casefold() != ".pack":
             raise ValueError("待发布的 Pack 文件不存在")
+        cover_path = _require_workshop_cover(source_pack)
         upload_root = self.data_dir / "workshop_uploads"
         upload_root.mkdir(parents=True, exist_ok=True)
         try:
@@ -1458,13 +1475,12 @@ class API:
                 content_path = Path(temporary) / "content"
                 content_path.mkdir()
                 staged_pack = content_path / asset.pack_name
-                try:
-                    os.link(source_pack, staged_pack)
-                except OSError:
-                    shutil.copy2(source_pack, staged_pack)
+                staged_cover = content_path / cover_path.name
+                _stage_workshop_upload_file(source_pack, staged_pack)
+                _stage_workshop_upload_file(cover_path, staged_cover)
                 result = publish_workshop_item(
                     content_path=content_path,
-                    preview_path=preview_path,
+                    preview_path=staged_cover,
                     title=title,
                     description=description,
                     change_note=change_note,

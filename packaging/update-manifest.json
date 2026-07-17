@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "published_at": "2026-07-17",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.6.5/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "870baee861060fe489a827243dbaf3b96780c5a088ea4ef6be3c55ba38144789",
-    "size": 61909293
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.7.0/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "e3ab31441d6d6d4c70dba50356650c84d21662984779a23a97aaa05fe036bd28",
+    "size": 61934661
   },
   "changelog": [
     {
@@ -14,37 +14,36 @@
       "changes": [
         {
           "type": "feature",
-          "text": "启动游戏时会自动校验游戏数据补丁；设置、播放集、启用的 MOD 或游戏数据变化后会自动重新生成。"
+          "text": "新增单体单位调整规则设置，可在血量与规模之间切换；血量模式仅放大血量而不放大规模。"
         },
         {
-          "type": "feature",
-          "text": "单位规模倍率现为 1–5 倍整数滑条，并可选择同步调整领主与英雄血量。"
+          "type": "fix",
+          "text": "修复单位规模倍率滑条刻度与实际倍率不一致的问题。"
         },
         {
-          "type": "improvement",
-          "text": "游戏数据修改窗口现在打开更快。"
+          "type": "fix",
+          "text": "修复部分 MOD 的单位规模或领主与英雄血量未按倍率生效的问题。"
         }
       ]
     },
     {
-      "title": "创意工坊体验",
-      "changes": [
-        {
-          "type": "improvement",
-          "text": "提高作者昵称获取成功率；临时获取失败时会保留已有昵称。"
-        },
-        {
-          "type": "feature",
-          "text": "MOD 右键菜单新增浏览器与 Steam 客户端两个创意工坊跳转入口。"
-        }
-      ]
-    },
-    {
-      "title": "游戏启动",
+      "title": "功能修复与调整",
       "changes": [
         {
           "type": "fix",
-          "text": "修复“跳过开场动画”未完整生效的问题。"
+          "text": "修复低消耗模式切换时偶发异常的问题。"
+        },
+        {
+          "type": "feature",
+          "text": "发布 MOD 时会将同名 PNG 封面与 Pack 一同上传，封面最大 1 MB。"
+        },
+        {
+          "type": "fix",
+          "text": "修复“启用存档中的 MOD”无法读取当前存档 MOD 列表的问题。"
+        },
+        {
+          "type": "feature",
+          "text": "新增西班牙语支持。"
         }
       ]
     }

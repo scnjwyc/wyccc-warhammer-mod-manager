@@ -16,8 +16,11 @@ const emit = defineEmits(['close', 'save'])
 const UNIT_MODEL_MULTIPLIER_MIN = 1
 const UNIT_MODEL_MULTIPLIER_MAX = 5
 const UNIT_MODEL_MULTIPLIER_STEPS = [1, 2, 3, 4, 5]
+const SINGLE_ENTITY_UNIT_MODE_HEALTH = 'health'
+const SINGLE_ENTITY_UNIT_MODE_SCALE = 'scale'
 const draft = reactive({
   unit_model_multiplier: 1,
+  single_entity_unit_mode: SINGLE_ENTITY_UNIT_MODE_SCALE,
   scale_lord_hero_health: false,
   disable_unit_friendly_fire: false,
   disable_spell_friendly_fire: false,
@@ -33,16 +36,32 @@ const normalizeMultiplier = value => {
   return Math.round(clamped)
 }
 
+const normalizeSingleEntityUnitMode = value => (
+  String(value || '').trim().toLowerCase() === SINGLE_ENTITY_UNIT_MODE_HEALTH
+    ? SINGLE_ENTITY_UNIT_MODE_HEALTH
+    : SINGLE_ENTITY_UNIT_MODE_SCALE
+)
+
 const unitSizeAvailable = computed(() => props.unitSizeSubscribed)
 const friendlyFireAvailable = computed(() => props.friendlyFireSubscribed)
 const requirementMessage = modName => t('gameData.requiredModNotSubscribed', { mod: modName })
 
 const resetDraft = () => {
   draft.unit_model_multiplier = normalizeMultiplier(props.settings.unit_model_multiplier ?? 1)
+  draft.single_entity_unit_mode = normalizeSingleEntityUnitMode(props.settings.single_entity_unit_mode)
   draft.scale_lord_hero_health = !!props.settings.scale_lord_hero_health
   draft.disable_unit_friendly_fire = !!props.settings.disable_unit_friendly_fire
   draft.disable_spell_friendly_fire = !!props.settings.disable_spell_friendly_fire
 }
+
+const singleEntityUnitModeValue = computed({
+  get: () => (draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_HEALTH ? 0 : 1),
+  set: value => {
+    draft.single_entity_unit_mode = Number(value) === 0
+      ? SINGLE_ENTITY_UNIT_MODE_HEALTH
+      : SINGLE_ENTITY_UNIT_MODE_SCALE
+  },
+})
 
 watch(
   () => props.open,
@@ -62,6 +81,7 @@ watch(
 
 const currentSettings = () => ({
   unit_model_multiplier: normalizeMultiplier(draft.unit_model_multiplier),
+  single_entity_unit_mode: normalizeSingleEntityUnitMode(draft.single_entity_unit_mode),
   scale_lord_hero_health: !!draft.scale_lord_hero_health,
   disable_unit_friendly_fire: !!draft.disable_unit_friendly_fire,
   disable_spell_friendly_fire: !!draft.disable_spell_friendly_fire,
@@ -115,6 +135,29 @@ const submit = () => {
             <div class="unit-scale-ticks" data-testid="unit-scale-ticks" aria-hidden="true">
               <span v-for="step in UNIT_MODEL_MULTIPLIER_STEPS" :key="step">{{ step }}</span>
             </div>
+          </div>
+          <div class="single-entity-mode-control">
+            <div class="single-entity-mode-row">
+              <strong>{{ t('gameData.singleEntityUnitMode') }}</strong>
+              <div class="single-entity-mode-slider">
+                <input
+                  v-model.number="singleEntityUnitModeValue"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="1"
+                  :disabled="!!busy || !unitSizeAvailable"
+                  :aria-label="t('gameData.singleEntityUnitMode')"
+                  :aria-valuetext="singleEntityUnitModeValue === 0 ? t('gameData.singleEntityHealth') : t('gameData.singleEntityScale')"
+                  data-testid="single-entity-unit-mode"
+                />
+                <div class="single-entity-mode-labels" aria-hidden="true">
+                  <span>{{ t('gameData.singleEntityHealth') }}</span>
+                  <span>{{ t('gameData.singleEntityScale') }}</span>
+                </div>
+              </div>
+            </div>
+            <small>{{ t('gameData.singleEntityUnitModeHelp') }}</small>
           </div>
           <label class="switch-row character-health-toggle">
             <input
@@ -276,10 +319,54 @@ const submit = () => {
   text-align: center;
 }
 
-.character-health-toggle {
-  min-height: 62px;
+.single-entity-mode-control {
+  display: grid;
+  gap: 5px;
   padding-top: 12px;
   border-top: 1px solid #302522;
+}
+
+.single-entity-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.single-entity-mode-row strong {
+  color: #ead9ca;
+  font-size: 13px;
+}
+
+.single-entity-mode-slider {
+  display: grid;
+  width: min(190px, 52%);
+  gap: 3px;
+}
+
+.single-entity-mode-slider input {
+  width: 100%;
+  margin: 0;
+  accent-color: #b87a3c;
+}
+
+.single-entity-mode-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #75675f;
+  font-size: 10px;
+}
+
+.single-entity-mode-control small {
+  color: #8d7f77;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.character-health-toggle {
+  min-height: 62px;
+  padding-top: 0;
+  border-top: 0;
   border-bottom: 0;
 }
 
@@ -353,6 +440,16 @@ const submit = () => {
 @media (max-width: 620px) {
   .unit-scale-slider-row {
     gap: 9px;
+  }
+
+  .single-entity-mode-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .single-entity-mode-slider {
+    width: 100%;
   }
 
   .game-data-modal > .game-data-footer {

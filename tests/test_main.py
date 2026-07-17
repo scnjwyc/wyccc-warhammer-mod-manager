@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from backend.changelog import get_all_changelogs
+from backend.changelog import CHANGELOG_STRUCTURE, CHANGELOG_TEXT, get_all_changelogs
 from backend.constants import APP_NAME, APP_VERSION
 from backend.update_service import is_newer_version
 from main import ensure_single_instance
@@ -27,6 +27,18 @@ from scripts.build import (
 
 
 class PackagedRuntimeTests(unittest.TestCase):
+    def test_every_changelog_catalog_defines_all_referenced_keys(self) -> None:
+        referenced_keys = {
+            key
+            for release in CHANGELOG_STRUCTURE
+            for title_key, changes in release["entries"]
+            for key in (title_key, *(text_key for _change_type, text_key in changes))
+        }
+
+        for language, catalog in CHANGELOG_TEXT.items():
+            with self.subTest(language=language):
+                self.assertSetEqual(referenced_keys - set(catalog), set())
+
     def test_desktop_window_starts_maximized(self) -> None:
         fake_window = Mock()
         fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
@@ -91,30 +103,34 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.6.5")
+        self.assertEqual(APP_VERSION, "0.7.0")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.6.5'", frontend_store)
-        self.assertIn("filevers=(0, 6, 5, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.6.5')", version_info)
-        self.assertIn("`0.6.5`", readme)
-        self.assertIn("`0.6.5`", readme_en)
+        self.assertIn("appVersion: '0.7.0'", frontend_store)
+        self.assertIn("filevers=(0, 7, 0, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.7.0')", version_info)
+        self.assertIn("`0.7.0`", readme)
+        self.assertIn("`0.7.0`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertEqual(update_manifest["version"], APP_VERSION)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
-        manifest_release = changelog[0]
+        manifest_release = next(
+            release for release in changelog
+            if release["version"] == update_manifest["version"]
+        )
         self.assertEqual(update_manifest["published_at"], manifest_release["date"])
         self.assertEqual(update_manifest["changelog"], manifest_release["entries"])
         self.assertTrue(update_manifest["download"]["url"].startswith("https://"))
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:6]],
-            ["0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+            [release["version"] for release in changelog[:7]],
+            ["0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
         )
-        previous_release = changelog[1]
+        self.assertEqual(changelog[1]["version"], "0.6.5")
+        previous_release = changelog[2]
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
         self.assertIn("即时 MOD 增删检测", str(previous_release))
@@ -122,25 +138,26 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("Windows 回收站", str(previous_release))
         for donation_term in ("捐赠", "二维码", "收款码", "打赏"):
             self.assertNotIn(donation_term, str(changelog[0]))
-        self.assertIn("Data", str(changelog[3]))
-        self.assertIn("Gitee", str(changelog[4]))
-        self.assertNotIn("Gitee", str(changelog[5]))
+        self.assertIn("Data", str(changelog[4]))
+        self.assertIn("Gitee", str(changelog[5]))
+        self.assertNotIn("Gitee", str(changelog[6]))
 
     def test_changelog_is_available_in_every_built_in_language(self) -> None:
-        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP")
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
         localized = {language: get_all_changelogs(language) for language in languages}
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:6]],
-                ["0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+                [release["version"] for release in releases[:7]],
+                ["0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 3)
-            self.assertEqual(len(releases[1]["entries"]), 4)
-            self.assertIn("Dynamic Unit Size", str(releases[1]))
-            self.assertIn("Dynamic No Friendly Fire", str(releases[1]))
-            self.assertNotIn("wyccc_dynamic_unit_size.pack", str(releases[1]))
-            self.assertNotIn("wyccc_dynamic_no_friendly_fire.pack", str(releases[1]))
+            self.assertEqual(len(releases[0]["entries"]), 2)
+            self.assertEqual(len(releases[1]["entries"]), 3)
+            self.assertEqual(len(releases[2]["entries"]), 4)
+            self.assertIn("Dynamic Unit Size", str(releases[2]))
+            self.assertIn("Dynamic No Friendly Fire", str(releases[2]))
+            self.assertNotIn("wyccc_dynamic_unit_size.pack", str(releases[2]))
+            self.assertNotIn("wyccc_dynamic_no_friendly_fire.pack", str(releases[2]))
         titles = {
             language: releases[0]["entries"][0]["title"]
             for language, releases in localized.items()
@@ -154,36 +171,40 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("저소비 모드", str(localized["ko-KR"]))
         self.assertIn("режим низкого потребления", str(localized["ru-RU"]))
         self.assertIn("低消費モード", str(localized["ja-JP"]))
+        self.assertIn("modo de bajo consumo", str(localized["es-ES"]))
         expected_multiplier_ranges = {
             "zh-CN": "0.5–5 倍",
             "en-US": "0.5× to 5×",
             "ko-KR": "0.5~5배",
             "ru-RU": "от 0,5 до 5 раз",
             "ja-JP": "0.5～5 倍",
+            "es-ES": "de 0,5× a 5×",
         }
         for language, expected_range in expected_multiplier_ranges.items():
-            self.assertIn(expected_range, str(localized[language][1]), language)
+            self.assertIn(expected_range, str(localized[language][2]), language)
         expected_patch_generation = {
             "zh-CN": "一键生成补丁",
             "en-US": "generate the patch",
             "ko-KR": "패치를 생성",
             "ru-RU": "создать патч",
             "ja-JP": "パッチを生成",
+            "es-ES": "generar el parche",
         }
         for language, expected_text in expected_patch_generation.items():
-            self.assertIn(expected_text, str(localized[language][1]), language)
+            self.assertIn(expected_text, str(localized[language][2]), language)
         expected_automatic_updates = {
             "zh-CN": "保存更改时也会自动更新",
             "en-US": "automatic updates when changes are saved",
             "ko-KR": "변경 사항을 저장하면 자동으로 업데이트",
             "ru-RU": "автоматически обновляется при сохранении изменений",
             "ja-JP": "変更を保存すると自動的に更新",
+            "es-ES": "se actualiza automáticamente al guardar los cambios",
         }
         for language, expected_text in expected_automatic_updates.items():
-            self.assertIn(expected_text, str(localized[language][1]), language)
+            self.assertIn(expected_text, str(localized[language][2]), language)
 
     def test_060_changelog_is_concise_and_describes_user_benefits(self) -> None:
-        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP")
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
         implementation_terms = (
             "webview2",
             "warhammer3.exe",
@@ -201,7 +222,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
 
         for language in languages:
-            release = get_all_changelogs(language)[1]
+            release = get_all_changelogs(language)[2]
             self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3, 3, 4, 4])
             visible_copy = " ".join(
                 [entry["title"] for entry in release["entries"]]
@@ -220,7 +241,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                     self.assertLessEqual(len(change["text"]), 180, language)
 
     def test_065_changelog_is_concise_and_contains_only_user_visible_changes(self) -> None:
-        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP")
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
         implementation_terms = (
             "fingerprint",
             "sha-256",
@@ -239,7 +260,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
 
         for language in languages:
-            release = get_all_changelogs(language)[0]
+            release = get_all_changelogs(language)[1]
             self.assertEqual(release["version"], "0.6.5")
             self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3, 2, 1])
             visible_copy = " ".join(
@@ -258,7 +279,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                 for change in entry["changes"]:
                     self.assertLessEqual(len(change["text"]), 160, language)
 
-        chinese = str(get_all_changelogs("zh-CN")[0])
+        chinese = str(get_all_changelogs("zh-CN")[1])
         self.assertIn("自动校验", chinese)
         self.assertIn("1–5", chinese)
         self.assertIn("领主与英雄血量", chinese)
@@ -266,6 +287,59 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("浏览器", chinese)
         self.assertIn("Steam 客户端", chinese)
         self.assertIn("跳过开场动画", chinese)
+
+    def test_070_changelog_is_concise_and_contains_only_user_visible_changes(self) -> None:
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
+        implementation_terms = (
+            "fingerprint",
+            "sha-256",
+            "length prefix",
+            "nul",
+            "http",
+            "steamworks",
+            "parser",
+            "hash",
+            "指纹",
+            "哈希",
+            "长度前缀",
+            "字段",
+        )
+
+        for language in languages:
+            release = get_all_changelogs(language)[0]
+            self.assertEqual(release["version"], "0.7.0")
+            self.assertEqual(
+                [len(entry["changes"]) for entry in release["entries"]],
+                [3, 4],
+            )
+            visible_copy = " ".join(
+                [entry["title"] for entry in release["entries"]]
+                + [
+                    change["text"]
+                    for entry in release["entries"]
+                    for change in entry["changes"]
+                ]
+            )
+            folded = visible_copy.casefold()
+            for term in implementation_terms:
+                self.assertNotIn(term.casefold(), folded, f"{language}: {term}")
+            for entry in release["entries"]:
+                self.assertLessEqual(len(entry["title"]), 60, language)
+                for change in entry["changes"]:
+                    self.assertLessEqual(len(change["text"]), 160, language)
+
+        chinese = str(get_all_changelogs("zh-CN")[0])
+        self.assertIn("单体单位调整规则", chinese)
+        self.assertIn("低消耗模式切换", chinese)
+        self.assertIn("单位规模倍率滑条刻度", chinese)
+        self.assertIn("部分 MOD 的单位规模或领主与英雄血量", chinese)
+        self.assertIn("同名 PNG 封面", chinese)
+        self.assertIn("启用存档中的 MOD", chinese)
+        self.assertIn("西班牙语", chinese)
+        self.assertNotIn("桌面生成 data 文件夹", chinese)
+
+        spanish = str(get_all_changelogs("es-ES")[0])
+        self.assertIn("compatibilidad con español", spanish)
 
     def test_agents_requires_concise_function_focused_changelogs(self) -> None:
         agents = (

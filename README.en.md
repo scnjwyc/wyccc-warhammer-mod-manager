@@ -4,7 +4,7 @@
 
 A lightweight mod manager for Total War: WARHAMMER III.
 
-The current version is `0.6.5`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `0.7.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 
@@ -20,11 +20,11 @@ The current version is `0.6.5`. It brings mods, playsets, the Steam Workshop, an
 - Launch the game directly, continue the most recent campaign, or load a selected save from the save list.
 - Compare the MODs used by a save and enable them in one action.
 - Import presets from the official game launcher to quickly create a new playset or replace the current one.
-- Dynamically adjust unit sizes and disable unit and spell friendly fire, with compatibility across all MODs and game updates!
+- Dynamically adjust unit sizes; regular single-entity monsters can adjust by health or scale, and unit and spell friendly fire can be disabled, with compatibility across all MODs and game updates!
 - Copy MOD paths or safely move MOD files to the Recycle Bin from the context menu. Unsubscribing also cleans the matching Workshop folder, and these file operations are blocked while the game runs.
 - Automatically switches to a static low-consumption page while the game runs, pausing scanning and directory monitoring until the game exits.
 - Automatically checks for new versions and lets you view release notes, download updates, and install them from within the application.
-- Built-in support for Simplified Chinese, English, Korean, Russian, and Japanese.
+- Built-in support for Simplified Chinese, English, Korean, Russian, Japanese, and Spanish.
 
 ## Interface and Architecture
 

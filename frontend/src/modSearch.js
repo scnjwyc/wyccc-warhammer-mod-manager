@@ -3,13 +3,13 @@ import { currentLocale, t } from './languages'
 const normalize = value => String(value ?? '').trim().toLocaleLowerCase()
 
 const fieldDefinitions = [
-  { key: 'name', labelKey: 'search.fieldName', aliases: ['名称', '模组', '이름', '모드', 'название', 'имя', '名前', 'mod'], defaultSearch: true },
-  { key: 'file', labelKey: 'search.fieldFile', aliases: ['文件', '包名', '파일', 'имя файла', 'файл', 'ファイル', 'pack'], defaultSearch: true },
-  { key: 'author', labelKey: 'search.fieldAuthor', aliases: ['作者名', '작성자', 'автор', '作者'], defaultSearch: true, suggest: true },
-  { key: 'type', labelKey: 'search.fieldType', aliases: ['类型', '유형', 'тип', '種類', 'mod_type'], suggest: true },
-  { key: 'source', labelKey: 'search.fieldSource', aliases: ['来源', '位置', '출처', 'источник', 'ソース'], suggest: true },
-  { key: 'workshop', labelKey: 'search.fieldWorkshop', aliases: ['工坊', '创意工坊', '창작마당', 'мастерская', 'ワークショップ', 'workshop_id'], defaultSearch: true },
-  { key: 'creator', labelKey: 'search.fieldCreator', aliases: ['作者id', '작성자id', 'id автора', '作者id', 'creator_id'], defaultSearch: true },
+  { key: 'name', labelKey: 'search.fieldName', aliases: ['名称', '模组', '이름', '모드', 'название', 'имя', '名前', 'nombre', 'mod'], defaultSearch: true },
+  { key: 'file', labelKey: 'search.fieldFile', aliases: ['文件', '包名', '파일', 'имя файла', 'файл', 'ファイル', 'archivo', 'pack'], defaultSearch: true },
+  { key: 'author', labelKey: 'search.fieldAuthor', aliases: ['作者名', '작성자', 'автор', '作者', 'autor'], defaultSearch: true, suggest: true },
+  { key: 'type', labelKey: 'search.fieldType', aliases: ['类型', '유형', 'тип', '種類', 'tipo', 'mod_type'], suggest: true },
+  { key: 'source', labelKey: 'search.fieldSource', aliases: ['来源', '位置', '출처', 'источник', 'ソース', 'origen'], suggest: true },
+  { key: 'workshop', labelKey: 'search.fieldWorkshop', aliases: ['工坊', '创意工坊', '창작마당', 'мастерская', 'ワークショップ', 'taller', 'workshop_id'], defaultSearch: true },
+  { key: 'creator', labelKey: 'search.fieldCreator', aliases: ['作者id', '작성자id', 'id автора', '作者id', 'id de creador', 'creador', 'creator_id'], defaultSearch: true },
 ]
 
 const localizedSyntax = {
@@ -18,6 +18,7 @@ const localizedSyntax = {
   'ko-KR': { name: '이름', file: '파일', author: '작성자', type: '유형', source: '출처', workshop: '창작마당', creator: '작성자ID' },
   'ru-RU': { name: 'название', file: 'файл', author: 'автор', type: 'тип', source: 'источник', workshop: 'мастерская', creator: 'ID автора' },
   'ja-JP': { name: '名前', file: 'ファイル', author: '作者', type: '種類', source: 'ソース', workshop: 'ワークショップ', creator: '作者ID' },
+  'es-ES': { name: 'nombre', file: 'archivo', author: 'autor', type: 'tipo', source: 'origen', workshop: 'workshop', creator: 'creador' },
 }
 
 const fieldSyntax = field => localizedSyntax[currentLocale()]?.[field.key] || field.key

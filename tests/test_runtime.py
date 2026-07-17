@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import os
 import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from backend.api import API
+from backend.launcher import _windows_process_entries
 from backend.models import GamePaths
-from backend.runtime import RuntimeCoordinator, descendant_process_ids, localized_idle_url
+from backend.runtime import (
+    RuntimeCoordinator,
+    _windows_parent_processes,
+    descendant_process_ids,
+    localized_idle_url,
+)
 
 
 class RuntimeCoordinatorTests(unittest.TestCase):
@@ -26,6 +33,14 @@ class RuntimeCoordinatorTests(unittest.TestCase):
             descendant_process_ids(10, {11: 10, 12: 11, 13: 10, 99: 98}),
             [11, 13, 12],
         )
+
+    @unittest.skipUnless(os.name == "nt", "Windows process snapshot APIs are required")
+    def test_parent_process_enumeration_remains_compatible_after_game_process_scan(self) -> None:
+        _windows_process_entries()
+
+        parents = _windows_parent_processes()
+
+        self.assertIn(os.getpid(), parents)
 
     def test_transitions_load_idle_and_app_pages_and_toggle_runtime_services(self) -> None:
         window = Mock()
@@ -59,7 +74,7 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         )
         trim.assert_called_once_with()
 
-    def test_manual_exit_restores_the_app_until_the_current_game_session_ends(self) -> None:
+    def test_manual_exit_marks_the_session_without_navigating_during_the_rpc(self) -> None:
         window = Mock()
         api = Mock()
         coordinator = RuntimeCoordinator(
@@ -78,7 +93,6 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         self.assertEqual(
             window.load_url.call_args_list,
             [
-                unittest.mock.call("file:///index.html"),
                 unittest.mock.call("file:///idle.html"),
             ],
         )

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from backend.ai_service import generate_mod_user_data
 from backend.models import ModAsset
+from backend.warhammer_translation import build_mod_translation_prompts
 
 
 class _Response:
@@ -182,6 +183,15 @@ class AiServiceTests(unittest.TestCase):
                 self.asset,
                 {"ai_enabled": True, "ai_base_url": "http://localhost:1234/v1", "ai_model": ""},
             )
+
+    def test_generation_prompt_supports_spanish_as_a_target_language(self) -> None:
+        system_prompt, user_prompt = build_mod_translation_prompts(
+            self.asset,
+            target_language="es-ES",
+        )
+
+        self.assertIn("目标语言是：西班牙语（es-ES）", system_prompt)
+        self.assertIn("目标语言：西班牙语（es-ES）", user_prompt)
 
 
 if __name__ == "__main__":

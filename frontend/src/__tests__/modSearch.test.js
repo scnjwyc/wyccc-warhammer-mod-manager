@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getSearchSuggestions,
   insertByDefaultLoadOrder,
   matchesSearchTokens,
   parseSearchToken,
   sortDisplayedMods,
 } from '../modSearch'
+import { applyInterfaceLanguage } from '../languages'
 
 const typeMap = {
   language: '语言包',
@@ -52,6 +54,19 @@ describe('RimCrow-style multi-condition MOD search', () => {
     })
     expect(parseSearchToken('震旦')).toMatchObject({ type: 'text', value: '震旦' })
     expect(parseSearchToken('type:')).toBeNull()
+  })
+
+  it('parses and suggests Spanish search syntax', () => {
+    applyInterfaceLanguage('es-ES')
+
+    expect(parseSearchToken('nombre:Empire')).toMatchObject({
+      type: 'rule',
+      key: 'name',
+      value: 'Empire',
+    })
+    expect(getSearchSuggestions('')[0].value).toBe('nombre:')
+
+    applyInterfaceLanguage('zh-CN')
   })
 
   it('supports multiple type-aware conditions with AND, OR and exclusion', () => {

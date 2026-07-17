@@ -47,10 +47,10 @@ describe('Workshop publish confirmation', () => {
     })
     const submit = wrapper.get('.primary-button')
     expect(submit.attributes('disabled')).toBeDefined()
-    const inputs = wrapper.findAll('input')
-    await inputs.find(input => input.attributes('type') === 'text' && !input.attributes('readonly'))
-      .setValue('My Workshop Mod')
-    await wrapper.get('.path-input-row input').setValue('G:/preview.png')
+    expect(wrapper.get('[data-testid="publish-cover-path"]').element.value)
+      .toBe('G:/game/data/my_own_mod.png')
+    expect(wrapper.find('.path-input-row').exists()).toBe(false)
+    await wrapper.get('input[type="text"][maxlength="128"]').setValue('My Workshop Mod')
     await wrapper.get('.publish-confirmation input').setValue(true)
     expect(submit.attributes('disabled')).toBeUndefined()
     await submit.trigger('click')
@@ -58,10 +58,10 @@ describe('Workshop publish confirmation', () => {
       mode: 'upload',
       title: 'My Workshop Mod',
       language: 'en-US',
-      preview_path: 'G:/preview.png',
       category: 'graphical',
       visibility: 0,
     })
+    expect(wrapper.emitted('submit')[0][0]).not.toHaveProperty('preview_path')
   })
 
   it('defaults to English when only English description exists and reloads selected languages', async () => {

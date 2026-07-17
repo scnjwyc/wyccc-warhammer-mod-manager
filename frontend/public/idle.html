@@ -42,7 +42,12 @@
       document.getElementById('detail').textContent = strings[1]
       document.getElementById('exit').textContent = strings[2]
       document.getElementById('exit').addEventListener('click', async () => {
-        try { await window.pywebview.api.call('exit_low_consumption_mode', [], {}) } catch {}
+        try {
+          const result = await window.pywebview.api.call('exit_low_consumption_mode', [], {})
+          if (result?.ok && result.data?.restored) {
+            window.location.replace(new URL('index.html', window.location.href).href)
+          }
+        } catch {}
       })
     </script>
   </body>

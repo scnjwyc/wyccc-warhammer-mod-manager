@@ -8,7 +8,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .game_data_settings import normalize_unit_scale_multiplier
+from .game_data_settings import (
+    normalize_single_entity_unit_mode,
+    normalize_unit_scale_multiplier,
+)
 from .json_store import AtomicJsonStore
 from .models import ModAsset
 from .start_options import (
@@ -19,7 +22,7 @@ from .start_options import (
 
 GAME_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_game_data_patch.json"
 FINGERPRINT_SCHEMA_VERSION = 1
-GAME_DATA_BUILDER_VERSION = 2
+GAME_DATA_BUILDER_VERSION = 5
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -28,10 +31,13 @@ def _coerce_bool(value: Any) -> bool:
     return bool(value)
 
 
-def _normalized_settings(settings: Mapping[str, Any]) -> dict[str, int | bool]:
+def _normalized_settings(settings: Mapping[str, Any]) -> dict[str, int | bool | str]:
     return {
         "unit_model_multiplier": normalize_unit_scale_multiplier(
             settings.get("unit_model_multiplier", 1)
+        ),
+        "single_entity_unit_mode": normalize_single_entity_unit_mode(
+            settings.get("single_entity_unit_mode", "scale")
         ),
         "scale_lord_hero_health": _coerce_bool(
             settings.get("scale_lord_hero_health", False)

@@ -21,6 +21,7 @@ describe('game data modification modal', () => {
       'ko-KR': ['1배', '꺼집니다'],
       'ru-RU': ['1×', 'отключает'],
       'ja-JP': ['1倍', '無効'],
+      'es-ES': ['1×', 'desactiva'],
     }
 
     for (const [language, terms] of Object.entries(expected)) {
@@ -37,12 +38,13 @@ describe('game data modification modal', () => {
     }
   })
 
-  it('uses a 1-5 integer slider and emits all four game data settings', async () => {
+  it('uses a 1-5 integer slider and emits all five game data settings', async () => {
     const wrapper = mount(GameDataModificationModal, {
       props: {
         open: true,
         settings: {
           unit_model_multiplier: 2,
+          single_entity_unit_mode: 'scale',
           scale_lord_hero_health: false,
           disable_unit_friendly_fire: false,
           disable_spell_friendly_fire: true,
@@ -61,7 +63,17 @@ describe('game data modification modal', () => {
     expect(wrapper.get('[data-testid="unit-scale-ticks"]').text()).toContain('5')
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').element.checked).toBe(false)
 
+    const singleEntityMode = wrapper.get('[data-testid="single-entity-unit-mode"]')
+    expect(singleEntityMode.attributes('type')).toBe('range')
+    expect(singleEntityMode.attributes('min')).toBe('0')
+    expect(singleEntityMode.attributes('max')).toBe('1')
+    expect(singleEntityMode.attributes('step')).toBe('1')
+    expect(singleEntityMode.element.value).toBe('1')
+    expect(wrapper.text()).toContain('血量')
+    expect(wrapper.text()).toContain('规模')
+
     await multiplier.setValue('4')
+    await singleEntityMode.setValue('0')
     await wrapper.get('[data-testid="scale-lord-hero-health"]').setValue(true)
     await wrapper.get('[data-testid="disable-unit-friendly-fire"]').setValue(true)
     await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(false)
@@ -69,6 +81,7 @@ describe('game data modification modal', () => {
 
     expect(wrapper.emitted('save')[0][0]).toEqual({
       unit_model_multiplier: 4,
+      single_entity_unit_mode: 'health',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -151,10 +164,15 @@ describe('game data modification modal', () => {
     await wrapper.setProps({ open: false })
     await wrapper.setProps({
       open: true,
-      settings: { unit_model_multiplier: 2.5, scale_lord_hero_health: true },
+      settings: {
+        unit_model_multiplier: 2.5,
+        single_entity_unit_mode: 'health',
+        scale_lord_hero_health: true,
+      },
     })
 
     expect(wrapper.get('[data-testid="unit-model-multiplier"]').element.value).toBe('3')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode"]').element.value).toBe('0')
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').element.checked).toBe(true)
   })
 
@@ -164,6 +182,7 @@ describe('game data modification modal', () => {
         open: true,
         settings: {
           unit_model_multiplier: 2,
+          single_entity_unit_mode: 'health',
           scale_lord_hero_health: true,
           disable_unit_friendly_fire: true,
           disable_spell_friendly_fire: true,
@@ -176,6 +195,7 @@ describe('game data modification modal', () => {
     })
 
     expect(wrapper.get('[data-testid="unit-model-multiplier"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="disable-unit-friendly-fire"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="disable-spell-friendly-fire"]').attributes()).toHaveProperty('disabled')

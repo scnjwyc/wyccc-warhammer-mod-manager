@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
 import { LANGUAGE_OPTIONS, languageLabel, normalizeLanguage, t } from '../languages'
 import { useAppStore } from '../store'
@@ -18,7 +18,6 @@ const draft = reactive({
   description: '',
   change_note: '',
   language: 'en-US',
-  preview_path: '',
   category: 'graphical',
   visibility: 0,
   confirmed: false,
@@ -26,6 +25,7 @@ const draft = reactive({
 const languageLoading = ref(false)
 const languageMessage = ref('')
 let languageRequestId = 0
+const coverPath = computed(() => String(props.mod?.path || '').replace(/\.pack$/i, '.png'))
 
 const categories = [
   ['graphical', 'publish.categoryGraphical'],
@@ -49,7 +49,6 @@ watch(
     draft.language = props.mode === 'update'
       ? normalizeLanguage(store.settings.language)
       : 'en-US'
-    draft.preview_path = props.mod.preview_path || ''
     draft.category = 'graphical'
     draft.visibility = 0
     draft.confirmed = false
@@ -94,20 +93,14 @@ async function loadWorkshopLanguage(language, allowEnglishDefault = false) {
   }
 }
 
-const browsePreview = async () => {
-  const result = await store.selectDirectory('preview')
-  if (result.path) draft.preview_path = result.path
-}
-
 const submit = () => {
-  if (!draft.confirmed || !draft.title.trim() || !draft.preview_path.trim()) return
+  if (!draft.confirmed || !draft.title.trim()) return
   emit('submit', {
     mode: props.mode,
     title: draft.title.trim(),
     description: draft.description,
     change_note: draft.change_note,
     language: draft.language,
-    preview_path: draft.preview_path.trim(),
     category: draft.category,
     visibility: Number(draft.visibility),
   })
@@ -160,10 +153,8 @@ const submit = () => {
         </label>
         <label class="field-label">
           <span>{{ t('publish.preview') }}</span>
-          <div class="path-input-row">
-            <input v-model="draft.preview_path" type="text" />
-            <button type="button" class="secondary-button" @click="browsePreview">{{ t('common.browse') }}</button>
-          </div>
+          <input :value="coverPath" type="text" readonly data-testid="publish-cover-path" />
+          <small class="field-help">{{ t('publish.coverHelp') }}</small>
         </label>
         <div class="publish-grid">
           <label class="field-label">
@@ -198,7 +189,7 @@ const submit = () => {
         <button
           type="button"
           class="primary-button"
-          :disabled="!!busy || !draft.confirmed || !draft.title.trim() || !draft.preview_path.trim()"
+          :disabled="!!busy || !draft.confirmed || !draft.title.trim()"
           @click="submit"
         >
           {{ busy || (mode === 'upload' ? t('publish.createUpload') : t('publish.submitUpdate')) }}

@@ -24,6 +24,7 @@ TARGET_LANGUAGE_NAMES = {
     "ko-KR": "韩语（ko-KR）",
     "ru-RU": "俄语（ru-RU）",
     "ja-JP": "日语（ja-JP）",
+    "es-ES": "西班牙语（es-ES）",
 }
 _TARGET_LANGUAGE_PLACEHOLDER = "__TARGET_LANGUAGE__"
 

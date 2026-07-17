@@ -27,6 +27,29 @@ class SaveGameTests(unittest.TestCase):
         self.assertEqual(result["save"]["name"], "campaign.save")
         self.assertEqual(result["pack_names"], ["first.pack", "second.pack"])
 
+    def test_extracts_length_prefixed_mod_pack_names_without_nul_terminators(self) -> None:
+        def length_prefixed(name: bytes) -> bytes:
+            return len(name).to_bytes(4, "little") + name
+
+        with tempfile.TemporaryDirectory() as temporary:
+            save_dir = Path(temporary)
+            save = save_dir / "campaign.save"
+            save.write_bytes(
+                b"header\0ignored.pack\x1a\0\0\0"
+                + length_prefixed(b"data.pack")
+                + b"\x1a\0\0\0"
+                + length_prefixed(b"first.pack")
+                + b"\x1a\0\0\0"
+                + length_prefixed(b"SECOND.PACK")
+                + b"\x1a\0\0\0"
+                + length_prefixed(b"first.pack")
+            )
+            service = SaveGameService(save_dir)
+
+            result = service.pack_names("campaign.save", {"data.pack"})
+
+        self.assertEqual(result["pack_names"], ["first.pack", "SECOND.PACK"])
+
     def test_lists_only_save_files_newest_first_and_rejects_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             save_dir = Path(temporary)

@@ -40,7 +40,7 @@ const enqueuePlaysetWrite = task => {
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.6.5',
+    appVersion: '0.7.0',
     settings: {},
     paths: {},
     pathHealth: {},

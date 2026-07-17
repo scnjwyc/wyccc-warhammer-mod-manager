@@ -79,8 +79,18 @@ def _windows_parent_processes() -> dict[int, int]:
             ("szExeFile", wintypes.WCHAR * 260),
         ]
 
-    kernel32 = ctypes.windll.kernel32
+    # Do not reuse ctypes.windll.kernel32 here. Game detection configures the
+    # cached Process32* functions with its own PROCESSENTRY32W type; a fresh
+    # DLL instance keeps this snapshot enumeration independent.
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry32W))
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry32W))
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
     snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
     if snapshot in (None, 0, ctypes.c_void_p(-1).value):
         return {}
@@ -184,13 +194,6 @@ class RuntimeCoordinator:
             if self._manual_exit_for_current_session:
                 return True
             self._manual_exit_for_current_session = True
-        try:
-            self.window.load_url(self.app_url)
-        except Exception:
-            with self._state_lock:
-                self._manual_exit_for_current_session = False
-            logger.exception("Unable to exit WMM low-consumption mode")
-            return False
         return True
 
     def _run(self) -> None:

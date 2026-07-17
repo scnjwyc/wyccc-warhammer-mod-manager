@@ -7,7 +7,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .game_data_settings import normalize_unit_scale_multiplier
+from .game_data_settings import (
+    normalize_single_entity_unit_mode,
+    normalize_unit_scale_multiplier,
+)
 
 
 SCHEMA_PATH = Path(__file__).with_name("wh3_db_schema.json")
@@ -28,31 +31,44 @@ def _load_schemas() -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
 
 
 # This is a focused subset of the locally verified WH3 schema.  Every known
-# version of the five touched tables is retained so older enabled mods can be
+# version of the six required tables is retained so older enabled mods can be
 # resolved without replacing their rows with vanilla data.
 TABLE_SCHEMAS = _load_schemas()
 TABLE_ORDER = (
+    "_kv_rules_tables",
     "main_units_tables",
     "land_units_tables",
+    "battle_entities_tables",
     "projectiles_tables",
     "projectiles_explosions_tables",
     "battle_vortexs_tables",
 )
 TABLE_PREFIXES = tuple(f"db\\{table_name}\\" for table_name in TABLE_ORDER)
 CURRENT_TABLE_VERSIONS = {
+    "_kv_rules_tables": 0,
     "main_units_tables": 7,
     "land_units_tables": 54,
+    "battle_entities_tables": 39,
     "projectiles_tables": 53,
     "projectiles_explosions_tables": 19,
     "battle_vortexs_tables": 19,
 }
 TABLE_KEY_FIELDS = {
+    "_kv_rules_tables": "key",
     "main_units_tables": "unit",
     "land_units_tables": "key",
+    "battle_entities_tables": "key",
     "projectiles_tables": "key",
     "projectiles_explosions_tables": "key",
     "battle_vortexs_tables": "vortex_key",
 }
+
+NON_SPELL_FRIENDLY_FIRE_KV_RULES = (
+    ("projectile_friendly_fire_man_height_coefficient", 0.6),
+    ("projectile_friendly_fire_man_radius_coefficient", 1.2),
+    ("projectile_friendly_fire_ignore_allies_height_coefficient", 0.6),
+    ("projectile_friendly_fire_ignore_allies_radius_coefficient", 1.2),
+)
 
 
 @dataclass(frozen=True)
@@ -325,12 +341,53 @@ def _collect_effective_rows(
     return effective
 
 
+def _clamped_i32(value: int | float) -> int:
+    return max(-(2**31), min(2**31 - 1, math.ceil(value)))
+
+
 def _scaled_i32(value: Any, multiplier: float, minimum: int | None = None) -> int:
     numeric = int(value or 0)
     scaled = numeric * multiplier
     if minimum is not None:
         scaled = max(scaled, minimum)
-    return max(-(2**31), min(2**31 - 1, math.ceil(scaled)))
+    return _clamped_i32(scaled)
+
+
+def _leading_priority_markers(internal_name: str) -> int:
+    return len(internal_name) - len(internal_name.lstrip("!"))
+
+
+def _generated_internal_name(
+    candidates: Mapping[str, _Candidate],
+    version: int,
+) -> str:
+    priority_markers = (
+        max(
+            (
+                _leading_priority_markers(candidate.internal_name)
+                for candidate in candidates.values()
+            ),
+            default=0,
+        )
+        + 1
+    )
+    internal_name = (
+        f"{'!' * priority_markers}wyccc_game_data_v{version:04d}"
+    )
+    blockers = sorted(
+        {
+            candidate.internal_name
+            for candidate in candidates.values()
+            if _compare_internal_names(internal_name, candidate.internal_name) >= 0
+        },
+        key=str.casefold,
+    )
+    if blockers:
+        raise ValueError(
+            "无法生成优先级高于启用 MOD 的游戏数据表："
+            + ", ".join(blockers[:3])
+        )
+    return internal_name
 
 
 def _serialize_effective_table(
@@ -356,11 +413,40 @@ def _serialize_effective_table(
         )
         entries.append(
             GameDataEntry(
-                f"db\\{table_name}\\!!!!wyccc_game_data_v{version:04d}",
+                (
+                    f"db\\{table_name}\\"
+                    f"{_generated_internal_name(candidates, version)}"
+                ),
                 payload,
             )
         )
     return entries
+
+
+def _serialize_non_spell_friendly_fire_kv_rules(
+    candidates: Mapping[str, _Candidate],
+) -> GameDataEntry:
+    rows = []
+    for key, value in NON_SPELL_FRIENDLY_FIRE_KV_RULES:
+        encoded_key = key.encode("ascii")
+        rows.append(
+            struct.pack("<H", len(encoded_key))
+            + encoded_key
+            + struct.pack("<f", value)
+        )
+    payload = b"".join(
+        (
+            b"\xfc\xfd\xfe\xff",
+            struct.pack("<i", 0),
+            b"\1",
+            struct.pack("<i", len(rows)),
+            *rows,
+        )
+    )
+    return GameDataEntry(
+        "db\\_kv_rules_tables\\" + _generated_internal_name(candidates, 0),
+        payload,
+    )
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -382,6 +468,26 @@ def _classifications_for_reference(
     return result
 
 
+def _is_engine_backed(land_values: Mapping[str, Any]) -> bool:
+    return bool(str(land_values.get("engine") or "").strip()) or int(
+        land_values.get("num_engines") or 0
+    ) > 0
+
+
+def _scaled_total_health_bonus(
+    land_values: Mapping[str, Any],
+    entity_values: Mapping[str, Any],
+    multiplier: float,
+) -> int:
+    entity_hit_points = int(entity_values.get("hit_points") or 0)
+    bonus_hit_points = int(land_values.get("bonus_hit_points") or 0)
+    scaled_total_hit_points = _scaled_i32(
+        entity_hit_points + bonus_hit_points,
+        multiplier,
+    )
+    return _clamped_i32(scaled_total_hit_points - entity_hit_points)
+
+
 def build_game_data_entries(
     sources: Sequence[DbSource],
     settings: Mapping[str, Any],
@@ -392,6 +498,12 @@ def build_game_data_entries(
     scale_lord_hero_health = _coerce_bool(
         settings.get("scale_lord_hero_health", False)
     )
+    single_entity_health_mode = (
+        normalize_single_entity_unit_mode(
+            settings.get("single_entity_unit_mode", "scale")
+        )
+        == "health"
+    )
     disable_unit = _coerce_bool(settings.get("disable_unit_friendly_fire", False))
     disable_spell = _coerce_bool(settings.get("disable_spell_friendly_fire", False))
     scale_units = not math.isclose(multiplier, 1.0, rel_tol=0.0, abs_tol=1e-9)
@@ -401,25 +513,38 @@ def build_game_data_entries(
         "unit_rows_scaled": 0,
         "land_rows_scaled": 0,
         "lord_hero_health_rows_scaled": 0,
+        "single_entity_health_rows_scaled": 0,
         "unit_friendly_fire_rows_changed": 0,
+        "unit_friendly_fire_kv_rules_changed": 0,
         "spell_friendly_fire_rows_changed": 0,
+        "source_table_priority_markers": 0,
+        "patch_table_priority_markers": 0,
     }
     needed_tables: set[str] = set()
+    output_tables: set[str] = set()
     if scale_units:
         needed_tables.update({"main_units_tables", "land_units_tables"})
+        output_tables.update({"main_units_tables", "land_units_tables"})
+        if scale_lord_hero_health or single_entity_health_mode:
+            needed_tables.add("battle_entities_tables")
     if disable_unit or disable_spell:
-        needed_tables.update(
-            {
-                "projectiles_tables",
-                "projectiles_explosions_tables",
-                "battle_vortexs_tables",
-            }
-        )
+        friendly_fire_tables = {
+            "projectiles_tables",
+            "projectiles_explosions_tables",
+            "battle_vortexs_tables",
+        }
+        needed_tables.update(friendly_fire_tables)
+        output_tables.update(friendly_fire_tables)
+    if disable_unit:
+        needed_tables.add("_kv_rules_tables")
+        output_tables.add("_kv_rules_tables")
     if not needed_tables:
         return GameDataBuildResult((), stats)
 
     effective = _collect_effective_rows(sources, needed_tables)
     for table_name in needed_tables:
+        if table_name == "_kv_rules_tables":
+            continue
         if not effective[table_name]:
             raise ValueError(f"未能从当前游戏和启用 MOD 中读取 {table_name}")
 
@@ -429,6 +554,25 @@ def build_game_data_entries(
     if scale_units:
         target_land_units: set[str] = set()
         character_land_units: set[str] = set()
+        single_entity_health_main_units: set[str] = set()
+        single_entity_health_land_units: set[str] = set()
+        for key, candidate in effective["main_units_tables"].items():
+            values = candidate.row.values
+            caste = str(values.get("caste") or "").casefold()
+            land_unit = str(values.get("land_unit") or "")
+            if (
+                single_entity_health_mode
+                and caste not in {"lord", "hero"}
+                and land_unit
+                and int(values.get("num_men") or 0) == 1
+                and bool(values.get("is_monstrous"))
+            ):
+                land_candidate = effective["land_units_tables"].get(land_unit)
+                if land_candidate is not None and not _is_engine_backed(
+                    land_candidate.row.values
+                ):
+                    single_entity_health_main_units.add(key)
+                    single_entity_health_land_units.add(land_unit)
         for key, candidate in effective["main_units_tables"].items():
             values = candidate.row.values
             caste = str(values.get("caste") or "").casefold()
@@ -438,13 +582,27 @@ def build_game_data_entries(
                 if scale_lord_hero_health and land_unit:
                     character_land_units.add(land_unit)
             else:
-                if land_unit:
+                if land_unit and key not in single_entity_health_main_units:
                     target_land_units.add(land_unit)
-                new_count = _scaled_i32(values.get("num_men"), multiplier, minimum=1)
-                row = _patch_i32(row, "num_men", new_count)
-                if new_count != int(values.get("num_men") or 0):
-                    stats["unit_rows_scaled"] = int(stats["unit_rows_scaled"]) + 1
+                if key not in single_entity_health_main_units:
+                    new_count = _scaled_i32(
+                        values.get("num_men"),
+                        multiplier,
+                        minimum=1,
+                    )
+                    row = _patch_i32(row, "num_men", new_count)
+                    if new_count != int(values.get("num_men") or 0):
+                        stats["unit_rows_scaled"] = int(stats["unit_rows_scaled"]) + 1
             patched_by_table["main_units_tables"][key] = row
+
+        missing_character_land_units = sorted(
+            key for key in character_land_units if key not in effective["land_units_tables"]
+        )
+        if missing_character_land_units:
+            raise ValueError(
+                "领主或英雄引用了不存在的 land_units 记录："
+                + ", ".join(missing_character_land_units[:5])
+            )
 
         for key, candidate in effective["land_units_tables"].items():
             row = candidate.row
@@ -459,16 +617,33 @@ def build_game_data_entries(
                     or new_engines != int(values.get("num_engines") or 0)
                 ):
                     stats["land_rows_scaled"] = int(stats["land_rows_scaled"]) + 1
-            if key in character_land_units:
-                new_bonus_hit_points = _scaled_i32(
-                    values.get("bonus_hit_points"),
+            if key in character_land_units or key in single_entity_health_land_units:
+                entity_key = str(values.get("man_entity") or "")
+                entity = effective["battle_entities_tables"].get(entity_key)
+                if entity is None:
+                    unit_kind = (
+                        "领主或英雄"
+                        if key in character_land_units
+                        else "单体巨兽"
+                    )
+                    raise ValueError(
+                        f"{unit_kind} {key} 引用了不存在的 battle_entity："
+                        f"{entity_key or '<empty>'}"
+                    )
+                bonus_hit_points = int(values.get("bonus_hit_points") or 0)
+                new_bonus_hit_points = _scaled_total_health_bonus(
+                    values,
+                    entity.row.values,
                     multiplier,
                 )
                 row = _patch_i32(row, "bonus_hit_points", new_bonus_hit_points)
-                if new_bonus_hit_points != int(values.get("bonus_hit_points") or 0):
-                    stats["lord_hero_health_rows_scaled"] = (
-                        int(stats["lord_hero_health_rows_scaled"]) + 1
+                if new_bonus_hit_points != bonus_hit_points:
+                    stat_key = (
+                        "lord_hero_health_rows_scaled"
+                        if key in character_land_units
+                        else "single_entity_health_rows_scaled"
                     )
+                    stats[stat_key] = int(stats[stat_key]) + 1
             patched_by_table["land_units_tables"][key] = row
 
     if disable_unit or disable_spell:
@@ -529,15 +704,43 @@ def build_game_data_entries(
                             stats[stat_key] = int(stats[stat_key]) + 1
                 patched_by_table[table_name][key] = row
 
+    if disable_unit:
+        stats["unit_friendly_fire_kv_rules_changed"] = len(
+            NON_SPELL_FRIENDLY_FIRE_KV_RULES
+        )
+
     entries: list[GameDataEntry] = []
     for table_name in TABLE_ORDER:
-        if table_name not in needed_tables:
+        if table_name not in output_tables:
             continue
-        entries.extend(
-            _serialize_effective_table(
+        table_candidates = effective[table_name]
+        if table_name == "_kv_rules_tables":
+            table_entries = [_serialize_non_spell_friendly_fire_kv_rules(table_candidates)]
+        else:
+            table_entries = _serialize_effective_table(
                 table_name,
-                effective[table_name],
+                table_candidates,
                 patched_by_table[table_name],
             )
+        entries.extend(table_entries)
+        stats["source_table_priority_markers"] = max(
+            int(stats["source_table_priority_markers"]),
+            max(
+                (
+                    _leading_priority_markers(candidate.internal_name)
+                    for candidate in table_candidates.values()
+                ),
+                default=0,
+            ),
+        )
+        stats["patch_table_priority_markers"] = max(
+            int(stats["patch_table_priority_markers"]),
+            max(
+                (
+                    _leading_priority_markers(entry.name.rsplit("\\", 1)[-1])
+                    for entry in table_entries
+                ),
+                default=0,
+            ),
         )
     return GameDataBuildResult(tuple(entries), stats)

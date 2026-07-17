@@ -16,7 +16,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 const sourceRoot = resolve(here, '..')
-const languageCodes = ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP']
+const languageCodes = ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP', 'es-ES']
 
 const sourceFiles = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
   const path = resolve(directory, entry.name)
@@ -40,7 +40,7 @@ describe('built-in interface languages', () => {
     expect(t('update.changelog')).toBe('Changelog')
   })
 
-  it('provides all five variants for every UI translation key', () => {
+  it('provides all six variants for every UI translation key', () => {
     expect(translationKeys.length).toBeGreaterThan(250)
     expect(translationKeys.every(hasTranslation)).toBe(true)
   })
@@ -83,6 +83,11 @@ describe('built-in interface languages', () => {
         'official.missing': 'ローカルに未インストール',
         'saves.compareCurrentOnly': '現在有効、セーブには含まれない',
       },
+      'es-ES': {
+        'language.esES': 'Español',
+        'app.gameDataModification': 'Modificación de datos del juego',
+        'app.settings': 'Configuración',
+      },
     }
 
     for (const [language, labels] of Object.entries(expected)) {
@@ -98,6 +103,7 @@ describe('built-in interface languages', () => {
       'ko-KR': '1–5',
       'ru-RU': '1–5',
       'ja-JP': '1～5',
+      'es-ES': '1–5',
     }
 
     for (const [language, expectedRange] of Object.entries(expectedRanges)) {
@@ -105,6 +111,10 @@ describe('built-in interface languages', () => {
       expect(t('gameData.unitMultiplierHelp'), language).toContain(expectedRange)
       expect(t('gameData.scaleLordHeroHealth'), language).not.toBe('gameData.scaleLordHeroHealth')
       expect(t('gameData.scaleLordHeroHealthHelp'), language).not.toBe('gameData.scaleLordHeroHealthHelp')
+      expect(t('gameData.singleEntityUnitMode'), language).not.toBe('gameData.singleEntityUnitMode')
+      expect(t('gameData.singleEntityUnitModeHelp'), language).not.toBe('gameData.singleEntityUnitModeHelp')
+      expect(t('gameData.singleEntityHealth'), language).not.toBe('gameData.singleEntityHealth')
+      expect(t('gameData.singleEntityScale'), language).not.toBe('gameData.singleEntityScale')
     }
     applyInterfaceLanguage('zh-CN')
     expect(t('gameData.unitMultiplier')).toBe('单位规模倍率')
@@ -117,6 +127,7 @@ describe('built-in interface languages', () => {
       'ko-KR': ['이 관리자로 게임을 실행할 때', '플레이 세트 또는 순서', '원본 Pack', 'db.pack', '자동으로 다시 생성'],
       'ru-RU': ['запуске игры через этот менеджер', 'набора или порядка', 'исходных Pack', 'db.pack', 'автоматически пересоздаётся'],
       'ja-JP': ['このマネージャーからゲームを起動する際', 'プレイセットまたは順序', '元の Pack', 'db.pack', '自動的に再生成'],
+      'es-ES': ['al iniciar el juego desde este gestor', 'conjunto u orden', 'Packs de origen', 'db.pack', 'se regenera automáticamente'],
     }
 
     for (const [language, terms] of Object.entries(expected)) {
@@ -128,13 +139,13 @@ describe('built-in interface languages', () => {
 
   it('switches visible text instead of only changing the document language', () => {
     const labels = new Map()
-    for (const language of ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP']) {
+    for (const language of ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP', 'es-ES']) {
       applyInterfaceLanguage(language)
       labels.set(language, t('update.changelog'))
       expect(document.documentElement.lang).toBe(language)
       expect(t('app.activeMods')).not.toBe('app.activeMods')
     }
-    expect(new Set(labels.values()).size).toBe(5)
+    expect(new Set(labels.values()).size).toBe(6)
   })
 
   it('describes a force update as waiting for and completing the download', () => {
@@ -157,6 +168,7 @@ describe('built-in interface languages', () => {
       'ko-KR': /[\u3400-\u9fff\u3040-\u30ff\u0400-\u04ff]/u,
       'ru-RU': /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/u,
       'ja-JP': /[\uac00-\ud7af\u0400-\u04ff]/u,
+      'es-ES': /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff]/u,
     }
 
     for (const [language, forbidden] of Object.entries(forbiddenByLanguage)) {

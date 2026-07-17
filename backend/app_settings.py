@@ -12,7 +12,10 @@ from .constants import (
     LEGACY_APP_SLUGS,
     WH3_APP_ID,
 )
-from .game_data_settings import normalize_unit_scale_multiplier
+from .game_data_settings import (
+    normalize_single_entity_unit_mode,
+    normalize_unit_scale_multiplier,
+)
 from .json_store import AtomicJsonStore
 from .models import GamePaths
 from .steam_paths import discover_wh3_paths
@@ -20,13 +23,14 @@ from .steam_paths import discover_wh3_paths
 
 DEFAULT_LANGUAGE = "en-US"
 LEGACY_DEFAULT_LANGUAGE = "zh-CN"
-SUPPORTED_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP"})
+SUPPORTED_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES"})
 SYSTEM_LANGUAGE_MAP = {
     "zh": "zh-CN",
     "en": "en-US",
     "ko": "ko-KR",
     "ru": "ru-RU",
     "ja": "ja-JP",
+    "es": "es-ES",
 }
 
 
@@ -92,7 +96,7 @@ def default_data_dir() -> Path:
 
 def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     return {
-        "schema_version": 10,
+        "schema_version": 11,
         "language": language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE,
         "game_path": "",
         "workshop_path": "",
@@ -108,6 +112,7 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "enable_script_logging": False,
         "skip_intro_movies": False,
         "unit_model_multiplier": 1,
+        "single_entity_unit_mode": "scale",
         "scale_lord_hero_health": False,
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
@@ -148,9 +153,9 @@ class SettingsService:
             payload["language"] = LEGACY_DEFAULT_LANGUAGE
         if stored_version < 2:
             payload["fetch_workshop_metadata"] = True
-        payload["schema_version"] = 10
+        payload["schema_version"] = 11
         normalized = self._normalize(payload)
-        if is_first_launch or stored_version < 10 or language_was_missing:
+        if is_first_launch or stored_version < 11 or language_was_missing:
             self.store.save(normalized)
         return normalized
 
@@ -270,8 +275,11 @@ class SettingsService:
         result["unit_model_multiplier"] = normalize_unit_scale_multiplier(
             result.get("unit_model_multiplier", 1)
         )
+        result["single_entity_unit_mode"] = normalize_single_entity_unit_mode(
+            result.get("single_entity_unit_mode", "scale")
+        )
         result["theme"] = str(result.get("theme") or "crimson")
         language = str(result.get("language") or DEFAULT_LANGUAGE).strip()
         result["language"] = language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
-        result["schema_version"] = 10
+        result["schema_version"] = 11
         return result

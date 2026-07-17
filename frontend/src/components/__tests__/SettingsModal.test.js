@@ -14,7 +14,7 @@ import {
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
 describe('language settings', () => {
-  it('offers and saves all five supported language selections', async () => {
+  it('offers and saves all six supported language selections', async () => {
     const wrapper = mount(SettingsModal, {
       props: {
         open: true,
@@ -30,10 +30,10 @@ describe('language settings', () => {
     )
     expect(select.element.value).toBe('ko-KR')
 
-    await select.setValue('ru-RU')
+    await select.setValue('es-ES')
     await wrapper.get('.primary-button').trigger('click')
 
-    expect(wrapper.emitted('save')[0][0].language).toBe('ru-RU')
+    expect(wrapper.emitted('save')[0][0].language).toBe('es-ES')
   })
 
   it('saves AI, outdated checks and all three game launch options', async () => {

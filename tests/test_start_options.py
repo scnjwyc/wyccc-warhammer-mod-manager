@@ -172,6 +172,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     UNIT_SIZE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 2.0,
+                        "single_entity_unit_mode": "health",
                         "scale_lord_hero_health": True,
                         "disable_unit_friendly_fire": False,
                         "disable_spell_friendly_fire": False,
@@ -181,6 +182,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     FRIENDLY_FIRE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 1.0,
+                        "single_entity_unit_mode": "scale",
                         "scale_lord_hero_health": False,
                         "disable_unit_friendly_fire": True,
                         "disable_spell_friendly_fire": True,
@@ -196,6 +198,7 @@ class StartOptionsPackTests(unittest.TestCase):
                             [],
                             {
                                 "unit_model_multiplier": 2.0,
+                                "single_entity_unit_mode": "health",
                                 "scale_lord_hero_health": True,
                                 "disable_unit_friendly_fire": True,
                                 "disable_spell_friendly_fire": True,
@@ -209,7 +212,11 @@ class StartOptionsPackTests(unittest.TestCase):
                         key
                         for key, value in expected.items()
                         if (key == "unit_model_multiplier" and value != 1.0)
-                        or (key != "unit_model_multiplier" and value)
+                        or (key == "single_entity_unit_mode" and value == "health")
+                        or (
+                            key not in {"unit_model_multiplier", "single_entity_unit_mode"}
+                            and value
+                        )
                     ]
                     self.assertEqual(result["options"], expected_options)
 
@@ -253,6 +260,51 @@ class StartOptionsPackTests(unittest.TestCase):
             )
             self.assertIn("unit_model_multiplier", result["options"])
             self.assertEqual(result["game_data"]["unit_rows_scaled"], 1)
+
+    def test_kv_rule_only_game_data_change_writes_a_patch(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            write_pfh5_pack(
+                data / "db.pack",
+                [PackEntry("db\\_kv_rules_tables\\data__", b"source-table")],
+            )
+            built = GameDataBuildResult(
+                (
+                    GameDataEntry(
+                        "db\\_kv_rules_tables\\!!!!wyccc_game_data_v0000",
+                        b"patched-kv-rules",
+                    ),
+                ),
+                {"unit_friendly_fire_kv_rules_changed": 4},
+            )
+
+            with patch("backend.start_options.build_game_data_entries", return_value=built):
+                result = build_game_data_patch(
+                    root / "runtime",
+                    str(data),
+                    {},
+                    [],
+                    {
+                        "unit_model_multiplier": 1.0,
+                        "disable_unit_friendly_fire": True,
+                        "disable_spell_friendly_fire": False,
+                    },
+                    subscribed_workshop_ids=(FRIENDLY_FIRE_FEATURE_WORKSHOP_ID,),
+                )
+
+            self.assertTrue(result["path"])
+            self.assertEqual(result["entry_count"], 1)
+            output = {entry.name: entry.payload for entry in read_pack_entries(Path(result["path"]))}
+            self.assertEqual(
+                output["db\\_kv_rules_tables\\!!!!wyccc_game_data_v0000"],
+                b"patched-kv-rules",
+            )
 
     def test_game_data_builder_reports_zero_modification_without_writing_a_pack(self) -> None:
         build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
