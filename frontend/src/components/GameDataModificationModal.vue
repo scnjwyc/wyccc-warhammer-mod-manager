@@ -268,20 +268,12 @@ const submit = () => {
 }
 
 .unit-scale-ticks {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  justify-content: space-between;
   margin-right: 66px;
   color: #75675f;
   font-size: 10px;
   text-align: center;
-}
-
-.unit-scale-ticks span:first-child {
-  text-align: left;
-}
-
-.unit-scale-ticks span:last-child {
-  text-align: right;
 }
 
 .character-health-toggle {

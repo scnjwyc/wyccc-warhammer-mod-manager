@@ -1,8 +1,15 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import GameDataModificationModal from '../GameDataModificationModal.vue'
 import { applyInterfaceLanguage } from '../../languages'
+
+const componentSource = readFileSync(
+  resolve(process.cwd(), 'src/components/GameDataModificationModal.vue'),
+  'utf8',
+)
 
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
@@ -68,6 +75,14 @@ describe('game data modification modal', () => {
     })
     expect(wrapper.text()).toContain('不会修改原始 Pack')
     expect(wrapper.text()).toContain('增益、治疗和友军光环')
+  })
+
+  it('spaces five tick labels across four equal slider intervals', () => {
+    const tickRule = componentSource.match(/\.unit-scale-ticks\s*\{([^}]*)\}/)?.[1] ?? ''
+
+    expect(tickRule).toContain('display: flex')
+    expect(tickRule).toContain('justify-content: space-between')
+    expect(tickRule).not.toContain('grid-template-columns')
   })
 
   it('normalizes legacy decimal multipliers to the nearest supported integer', async () => {
