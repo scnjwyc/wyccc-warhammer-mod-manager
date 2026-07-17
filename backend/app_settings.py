@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import locale
-import math
 import os
 from pathlib import Path
 from typing import Any
@@ -11,10 +10,9 @@ from .constants import (
     APP_VERSION,
     DEFAULT_UPDATE_MANIFEST_URL,
     LEGACY_APP_SLUGS,
-    UNIT_MODEL_MULTIPLIER_MAX,
-    UNIT_MODEL_MULTIPLIER_MIN,
     WH3_APP_ID,
 )
+from .game_data_settings import normalize_unit_scale_multiplier
 from .json_store import AtomicJsonStore
 from .models import GamePaths
 from .steam_paths import discover_wh3_paths
@@ -94,7 +92,7 @@ def default_data_dir() -> Path:
 
 def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
     return {
-        "schema_version": 9,
+        "schema_version": 10,
         "language": language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE,
         "game_path": "",
         "workshop_path": "",
@@ -109,7 +107,8 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "custom_battle_all_units_as_lords": False,
         "enable_script_logging": False,
         "skip_intro_movies": False,
-        "unit_model_multiplier": 1.0,
+        "unit_model_multiplier": 1,
+        "scale_lord_hero_health": False,
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
         "check_updates_automatically": True,
@@ -149,9 +148,9 @@ class SettingsService:
             payload["language"] = LEGACY_DEFAULT_LANGUAGE
         if stored_version < 2:
             payload["fetch_workshop_metadata"] = True
-        payload["schema_version"] = 9
+        payload["schema_version"] = 10
         normalized = self._normalize(payload)
-        if is_first_launch or stored_version < 9 or language_was_missing:
+        if is_first_launch or stored_version < 10 or language_was_missing:
             self.store.save(normalized)
         return normalized
 
@@ -247,6 +246,7 @@ class SettingsService:
             "custom_battle_all_units_as_lords",
             "enable_script_logging",
             "skip_intro_movies",
+            "scale_lord_hero_health",
             "disable_unit_friendly_fire",
             "disable_spell_friendly_fire",
             "check_updates_automatically",
@@ -267,18 +267,11 @@ class SettingsService:
         except (TypeError, ValueError):
             temperature = 0.3
         result["ai_temperature"] = max(0.0, min(2.0, temperature))
-        try:
-            unit_multiplier = float(result.get("unit_model_multiplier", 1.0))
-        except (TypeError, ValueError):
-            unit_multiplier = 1.0
-        if not math.isfinite(unit_multiplier):
-            unit_multiplier = 1.0
-        result["unit_model_multiplier"] = max(
-            UNIT_MODEL_MULTIPLIER_MIN,
-            min(UNIT_MODEL_MULTIPLIER_MAX, unit_multiplier),
+        result["unit_model_multiplier"] = normalize_unit_scale_multiplier(
+            result.get("unit_model_multiplier", 1)
         )
         result["theme"] = str(result.get("theme") or "crimson")
         language = str(result.get("language") or DEFAULT_LANGUAGE).strip()
         result["language"] = language if language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
-        result["schema_version"] = 9
+        result["schema_version"] = 10
         return result

@@ -31,18 +31,6 @@ const defaultGameDataFeatures = () => ({
   },
 })
 
-export const gameDataSettingsSignature = settings => {
-  const numeric = Number(settings?.unit_model_multiplier ?? 1)
-  const multiplier = Number.isFinite(numeric)
-    ? Math.max(0.5, Math.min(5, numeric))
-    : 1
-  return JSON.stringify([
-    multiplier,
-    Boolean(settings?.disable_unit_friendly_fire),
-    Boolean(settings?.disable_spell_friendly_fire),
-  ])
-}
-
 const enqueuePlaysetWrite = task => {
   const pending = playsetWriteQueue.catch(() => {}).then(task)
   playsetWriteQueue = pending
@@ -52,7 +40,7 @@ const enqueuePlaysetWrite = task => {
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.6.0',
+    appVersion: '0.6.5',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -829,21 +817,7 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
-    async generateGameDataPatch(changes) {
-      return this.withBusy(t('busy.generateGameDataPatch'), async () => {
-        await this.flushPlaysetUpdates()
-        const data = await invoke('generate_game_data_patch', changes, [...this.activeIds])
-        this.settings = data.settings
-        this.notify(t('toast.gameDataPatchGenerated'))
-        return data
-      })
-    },
-    async saveGameDataSettings(changes, generatedSignature = '') {
-      const draftSignature = gameDataSettingsSignature(changes)
-      const settingsChanged = draftSignature !== gameDataSettingsSignature(this.settings)
-      if (settingsChanged && draftSignature !== generatedSignature) {
-        return this.generateGameDataPatch(changes)
-      }
+    async saveGameDataSettings(changes) {
       return this.withBusy(t('busy.saveGameData'), async () => {
         const data = await invoke('save_game_data_settings', changes)
         this.settings = data.settings
@@ -1216,6 +1190,9 @@ export const useAppStore = defineStore('app', {
     },
     async openWorkshop(modId) {
       await invoke('open_workshop_page', modId)
+    },
+    async openWorkshopClient(modId) {
+      await invoke('open_workshop_client', modId)
     },
     async openExternalUrl(url) {
       return invoke('open_external_url', url)

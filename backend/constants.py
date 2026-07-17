@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.5"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
@@ -47,8 +47,8 @@ GAME_DATA_FEATURE_WORKSHOP_ITEMS = {
         "pack_name": "wyccc_dynamic_no_friendly_fire.pack",
     },
 }
-UNIT_MODEL_MULTIPLIER_MIN = 0.5
-UNIT_MODEL_MULTIPLIER_MAX = 5.0
+UNIT_MODEL_MULTIPLIER_MIN = 1
+UNIT_MODEL_MULTIPLIER_MAX = 5
 INTERNAL_FEATURE_WORKSHOP_IDS = frozenset(
     item["workshop_id"] for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
 )

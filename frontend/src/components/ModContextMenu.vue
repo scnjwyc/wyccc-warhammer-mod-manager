@@ -17,7 +17,7 @@ const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = 500
+  const height = props.mod?.workshop_id ? 540 : 500
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -121,6 +121,29 @@ const run = (action, value = null, close = true) => {
         </div>
       </div>
 
+      <button
+        v-if="hasWorkshop"
+        type="button"
+        class="context-menu-item"
+        role="menuitem"
+        data-testid="context-open-workshop-browser"
+        @click="run('open-workshop-browser')"
+      >
+        <span class="context-menu-icon">↗</span>
+        <span>{{ batchLabel(t('context.openWorkshopBrowser')) }}</span>
+      </button>
+      <button
+        v-if="hasWorkshop"
+        type="button"
+        class="context-menu-item"
+        role="menuitem"
+        data-testid="context-open-workshop-client"
+        @click="run('open-workshop-client')"
+      >
+        <span class="context-menu-icon steam-icon">S</span>
+        <span>{{ batchLabel(t('context.openWorkshopClient')) }}</span>
+      </button>
+
       <div
         class="context-menu-parent"
         :class="{ disabled: !hasSteamActions }"
@@ -132,9 +155,6 @@ const run = (action, value = null, close = true) => {
         <span v-if="hasSteamActions" class="context-menu-arrow">›</span>
         <span v-else class="context-menu-unavailable">{{ t('common.unavailable') }}</span>
         <div v-if="hasSteamActions" class="context-submenu" role="menu">
-          <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('open-workshop')">
-            <span class="context-menu-icon">↗</span><span>{{ batchLabel(t('context.visitWorkshop')) }}</span>
-          </button>
           <button
             v-if="hasWorkshop"
             type="button"

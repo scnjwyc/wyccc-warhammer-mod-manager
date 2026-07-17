@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 from .json_store import AtomicJsonStore
+from .steam_friends import (
+    SteamFriendsError,
+    query_steam_persona_names,
+)
 from .steamworks_bridge import (
     SteamworksBridgeError,
     query_workshop_dependencies,
@@ -26,7 +33,7 @@ DETAILS_ENDPOINT = (
 )
 PROFILE_ENDPOINT = "https://steamcommunity.com/profiles/{steam_id}?xml=1"
 
-CACHE_SCHEMA_VERSION = 6
+CACHE_SCHEMA_VERSION = 7
 ENGLISH_STEAM_LANGUAGE = "english"
 STEAM_LANGUAGE_BY_INTERFACE = {
     "zh-CN": "schinese",
@@ -41,12 +48,24 @@ INTERFACE_LANGUAGE_BY_STEAM = {
 }
 
 AUTHOR_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-AUTHOR_FAILURE_RETRY_MS = 6 * 60 * 60 * 1000
+AUTHOR_FAILURE_RETRY_MS = 30 * 60 * 1000
+AUTHOR_HTTP_MAX_WORKERS = 2
+AUTHOR_HTTP_TIMEOUT_SECONDS = 5.0
+AUTHOR_HTTP_MAX_ATTEMPTS = 3
+AUTHOR_HTTP_BACKOFF_SECONDS = (0.5, 1.0)
+AUTHOR_HTTP_DEADLINE_SECONDS = 90.0
 LOCALIZED_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 LOCALIZED_FAILURE_RETRY_MS = 6 * 60 * 60 * 1000
 DEPENDENCY_CACHE_WARNING = (
     "Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态"
 )
+
+
+class AuthorProfileError(RuntimeError):
+    def __init__(self, code: str, message: str, retryable: bool = False):
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
 
 
 def _default_cache() -> dict[str, Any]:
@@ -486,22 +505,157 @@ class WorkshopMetadataService:
             }
 
     @staticmethod
-    def _fetch_author_profile(steam_id: str) -> dict[str, Any]:
+    def _classify_author_profile_error(exc: Exception, steam_id: str) -> AuthorProfileError:
+        if isinstance(exc, AuthorProfileError):
+            return exc
+        if isinstance(exc, urllib.error.HTTPError):
+            code = int(exc.code)
+            if code == 429:
+                return AuthorProfileError(
+                    "rate_limited",
+                    f"Steam profile request was rate limited: {steam_id}",
+                    retryable=True,
+                )
+            if 500 <= code <= 599:
+                return AuthorProfileError(
+                    "http_5xx",
+                    f"Steam profile service returned HTTP {code}: {steam_id}",
+                    retryable=True,
+                )
+            return AuthorProfileError(
+                f"http_{code}",
+                f"Steam profile request returned HTTP {code}: {steam_id}",
+            )
+        if isinstance(exc, urllib.error.URLError):
+            reason = exc.reason
+            if isinstance(reason, (TimeoutError, socket.timeout)):
+                return AuthorProfileError(
+                    "timeout",
+                    f"Steam profile request timed out: {steam_id}",
+                    retryable=True,
+                )
+            return AuthorProfileError(
+                "network",
+                f"Steam profile network request failed: {steam_id}: {reason}",
+                retryable=True,
+            )
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return AuthorProfileError(
+                "timeout",
+                f"Steam profile request timed out: {steam_id}",
+                retryable=True,
+            )
+        if isinstance(exc, ET.ParseError):
+            return AuthorProfileError(
+                "invalid_xml",
+                f"Steam profile returned invalid XML: {steam_id}",
+            )
+        if isinstance(exc, OSError):
+            return AuthorProfileError(
+                "network",
+                f"Steam profile request failed: {steam_id}: {exc}",
+                retryable=True,
+            )
+        return AuthorProfileError(
+            "unexpected",
+            f"Steam profile request failed unexpectedly: {steam_id}: {exc}",
+        )
+
+    @classmethod
+    def _fetch_author_profile(
+        cls,
+        steam_id: str,
+        deadline: float | None = None,
+    ) -> dict[str, Any]:
         request = urllib.request.Request(
             PROFILE_ENDPOINT.format(steam_id=urllib.parse.quote(steam_id)),
             headers={"User-Agent": "WycccModManager/0.1"},
         )
-        with urllib.request.urlopen(request, timeout=10) as response:
-            root = ET.fromstring(response.read())
-        name = str(root.findtext("steamID") or "").strip()
-        if not name:
-            raise ValueError(f"Steam profile did not expose a persona name: {steam_id}")
+        for attempt in range(AUTHOR_HTTP_MAX_ATTEMPTS):
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AuthorProfileError(
+                        "deadline",
+                        f"Author refresh deadline reached: {steam_id}",
+                    )
+                timeout = min(AUTHOR_HTTP_TIMEOUT_SECONDS, max(0.1, remaining))
+            else:
+                timeout = AUTHOR_HTTP_TIMEOUT_SECONDS
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    root = ET.fromstring(response.read())
+                name = str(root.findtext("steamID") or "").strip()
+                if not name:
+                    raise AuthorProfileError(
+                        "missing_name",
+                        f"Steam profile did not expose a persona name: {steam_id}",
+                    )
+                return {
+                    "steam_id": steam_id,
+                    "name": name,
+                    "profile_url": f"https://steamcommunity.com/profiles/{steam_id}/",
+                    "avatar": str(root.findtext("avatarFull") or "").strip(),
+                    "fetched_at": int(time.time() * 1000),
+                }
+            except Exception as exc:
+                classified = cls._classify_author_profile_error(exc, steam_id)
+                if not classified.retryable or attempt + 1 >= AUTHOR_HTTP_MAX_ATTEMPTS:
+                    raise classified from exc
+                delay = AUTHOR_HTTP_BACKOFF_SECONDS[attempt]
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise AuthorProfileError(
+                            "deadline",
+                            f"Author refresh deadline reached: {steam_id}",
+                        ) from exc
+                    delay = min(delay, remaining)
+                time.sleep(delay)
+        raise AuthorProfileError("unexpected", f"Author refresh failed: {steam_id}")
+
+    @staticmethod
+    def _successful_author_record(
+        steam_id: str,
+        name: str,
+        avatar: str,
+        now: int,
+        cached: Any,
+    ) -> dict[str, Any]:
+        existing = dict(cached) if isinstance(cached, dict) else {}
         return {
+            **existing,
             "steam_id": steam_id,
-            "name": name,
+            "name": str(name).strip(),
             "profile_url": f"https://steamcommunity.com/profiles/{steam_id}/",
-            "avatar": str(root.findtext("avatarFull") or "").strip(),
-            "fetched_at": int(time.time() * 1000),
+            "avatar": str(avatar or existing.get("avatar") or "").strip(),
+            "fetched_at": now,
+            "last_attempt_at": now,
+            "last_error_at": 0,
+            "last_error_code": "",
+        }
+
+    @staticmethod
+    def _failed_author_record(
+        steam_id: str,
+        cached: Any,
+        now: int,
+        error: AuthorProfileError,
+    ) -> dict[str, Any]:
+        existing = dict(cached) if isinstance(cached, dict) else {}
+        return {
+            **existing,
+            "steam_id": steam_id,
+            "name": str(existing.get("name") or ""),
+            "profile_url": str(
+                existing.get("profile_url")
+                or f"https://steamcommunity.com/profiles/{steam_id}/"
+            ),
+            "avatar": str(existing.get("avatar") or ""),
+            "fetched_at": int(existing.get("fetched_at") or 0),
+            "last_attempt_at": now,
+            "last_error_at": now,
+            "last_error_code": error.code,
         }
 
     def _refresh_author_profiles(
@@ -510,40 +664,125 @@ class WorkshopMetadataService:
         creator_ids: list[str],
     ) -> None:
         now = int(time.time() * 1000)
+        normalized_ids = list(dict.fromkeys(item for item in creator_ids if item.isdigit()))
         pending: list[str] = []
-        for steam_id in dict.fromkeys(item for item in creator_ids if item.isdigit()):
+        cached_count = 0
+        for steam_id in normalized_ids:
             cached = authors.get(steam_id)
             if isinstance(cached, dict):
                 fetched_at = int(cached.get("fetched_at") or 0)
-                max_age = (
-                    AUTHOR_CACHE_MAX_AGE_MS
-                    if cached.get("name")
-                    else AUTHOR_FAILURE_RETRY_MS
-                )
-                if fetched_at > 0 and now - fetched_at <= max_age:
+                last_error_at = int(cached.get("last_error_at") or 0)
+                last_attempt_at = int(cached.get("last_attempt_at") or 0)
+                if not cached.get("name") and not last_error_at and not last_attempt_at:
+                    last_error_at = fetched_at
+                if (
+                    cached.get("name")
+                    and fetched_at > 0
+                    and now - fetched_at <= AUTHOR_CACHE_MAX_AGE_MS
+                ):
+                    cached_count += 1
+                    continue
+                failure_at = max(last_error_at, last_attempt_at)
+                if failure_at > 0 and now - failure_at <= AUTHOR_FAILURE_RETRY_MS:
+                    cached_count += 1
                     continue
             pending.append(steam_id)
         if not pending:
+            logger.info(
+                "Workshop author refresh total=%s cached=%s pending=0 success=0 failed=0 steam_success=0 http_success=0 retained=0 errors=none",
+                len(normalized_ids),
+                cached_count,
+            )
             return
 
-        workers = min(8, len(pending))
-        with ThreadPoolExecutor(
-            max_workers=workers,
-            thread_name_prefix="steam-author",
-        ) as executor:
-            futures = {
-                executor.submit(self._fetch_author_profile, steam_id): steam_id
+        steam_success = 0
+        http_success = 0
+        retained = 0
+        failures: dict[str, AuthorProfileError] = {}
+        try:
+            steam_result = query_steam_persona_names(pending)
+        except SteamFriendsError as exc:
+            logger.warning(
+                "Steam Friends author refresh failed code=%s detail=%s",
+                exc.code,
+                exc,
+            )
+            unresolved = list(pending)
+        else:
+            for steam_id in pending:
+                name = str(steam_result.names.get(steam_id) or "").strip()
+                if not name:
+                    continue
+                cached = authors.get(steam_id)
+                authors[steam_id] = self._successful_author_record(
+                    steam_id,
+                    name,
+                    str(cached.get("avatar") or "") if isinstance(cached, dict) else "",
+                    now,
+                    cached,
+                )
+                steam_success += 1
+            unresolved = [
+                steam_id
                 for steam_id in pending
-            }
-            for future in as_completed(futures):
-                steam_id = futures[future]
-                try:
-                    authors[steam_id] = future.result()
-                except Exception:
-                    authors[steam_id] = {
-                        "steam_id": steam_id,
-                        "name": "",
-                        "profile_url": f"https://steamcommunity.com/profiles/{steam_id}/",
-                        "avatar": "",
-                        "fetched_at": int(time.time() * 1000),
-                    }
+                if not str(steam_result.names.get(steam_id) or "").strip()
+            ]
+
+        if unresolved:
+            deadline = time.monotonic() + AUTHOR_HTTP_DEADLINE_SECONDS
+            workers = min(AUTHOR_HTTP_MAX_WORKERS, len(unresolved))
+            with ThreadPoolExecutor(
+                max_workers=workers,
+                thread_name_prefix="steam-author",
+            ) as executor:
+                futures = {
+                    executor.submit(self._fetch_author_profile, steam_id, deadline): steam_id
+                    for steam_id in unresolved
+                }
+                for future in as_completed(futures):
+                    steam_id = futures[future]
+                    try:
+                        profile = future.result()
+                    except AuthorProfileError as exc:
+                        failures[steam_id] = exc
+                    except Exception as exc:
+                        failures[steam_id] = AuthorProfileError(
+                            "unexpected",
+                            f"Author refresh failed unexpectedly: {steam_id}: {exc}",
+                        )
+                    else:
+                        authors[steam_id] = self._successful_author_record(
+                            steam_id,
+                            str(profile.get("name") or ""),
+                            str(profile.get("avatar") or ""),
+                            int(profile.get("fetched_at") or now),
+                            authors.get(steam_id),
+                        )
+                        http_success += 1
+
+        error_counts: Counter[str] = Counter()
+        for steam_id, error in failures.items():
+            cached = authors.get(steam_id)
+            if isinstance(cached, dict) and (cached.get("name") or cached.get("avatar")):
+                retained += 1
+            authors[steam_id] = self._failed_author_record(steam_id, cached, now, error)
+            error_counts[error.code] += 1
+
+        failed = len(failures)
+        success = steam_success + http_success
+        error_summary = ",".join(
+            f"{code}={count}" for code, count in sorted(error_counts.items())
+        ) or "none"
+        log_method = logger.warning if failed else logger.info
+        log_method(
+            "Workshop author refresh total=%s cached=%s pending=%s success=%s failed=%s steam_success=%s http_success=%s retained=%s errors=%s",
+            len(normalized_ids),
+            cached_count,
+            len(pending),
+            success,
+            failed,
+            steam_success,
+            http_success,
+            retained,
+            error_summary,
+        )

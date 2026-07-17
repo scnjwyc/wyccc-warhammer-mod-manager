@@ -32,7 +32,7 @@ describe('ModContextMenu', () => {
 
     for (const label of [
       '停用', '修改类型', '类型管理', '指定加载顺序', '列表顶部', '列表底部',
-      '访问创意工坊', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
+      '跳转到创意工坊(浏览器)', '跳转到创意工坊(客户端)', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
       '复制 MOD 路径', '删除 MOD 文件', '复制模组到 Data 文件夹',
       '忽略问题', '忽略 MOD 过期', '忽略缺失依赖',
     ]) {
@@ -76,7 +76,7 @@ describe('ModContextMenu', () => {
       '忽略问题（3项）', '忽略 MOD 过期（3项）', '忽略缺失依赖（3项）',
       '打开文件目录（3项）', '从列表中隐藏（3项）', '复制模组到 Data 文件夹（3项）',
       'UI（3项）', '指定加载顺序（3项）', '列表顶部（3项）', '列表底部（3项）',
-      '访问创意工坊（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
+      '跳转到创意工坊(浏览器)（3项）', '跳转到创意工坊(客户端)（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
     ]) {
       expect(wrapper.text()).toContain(label)
     }
@@ -102,6 +102,41 @@ describe('ModContextMenu', () => {
 
     expect(buttonByText(wrapper, '复制模组到 Data 文件夹').attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain('已在 Data')
+  })
+
+  it('places browser and client Workshop actions together at the top level', async () => {
+    const wrapper = mount(ModContextMenu, {
+      props: { open: true, x: 100, y: 100, mod, active: true, types },
+    })
+
+    const nav = wrapper.get('nav')
+    const browser = buttonByText(wrapper, '跳转到创意工坊(浏览器)')
+    const client = buttonByText(wrapper, '跳转到创意工坊(客户端)')
+    const steamMenu = wrapper.get('[data-testid="context-steam-menu"]')
+    expect(browser.element.parentElement).toBe(nav.element)
+    expect(client.element.parentElement).toBe(nav.element)
+    expect(client.element.previousElementSibling).toBe(browser.element)
+    expect(steamMenu.element.previousElementSibling).toBe(client.element)
+    expect(steamMenu.text()).not.toContain('跳转到创意工坊')
+
+    await browser.trigger('click')
+    await client.trigger('click')
+    expect(wrapper.emitted('action')[0][0].action).toBe('open-workshop-browser')
+    expect(wrapper.emitted('action')[1][0].action).toBe('open-workshop-client')
+  })
+
+  it('keeps the expanded top-level menu above the viewport bottom', () => {
+    const originalHeight = window.innerHeight
+    Object.defineProperty(window, 'innerHeight', { value: 760, configurable: true })
+    try {
+      const wrapper = mount(ModContextMenu, {
+        props: { open: true, x: 100, y: 740, mod, active: true, types },
+      })
+
+      expect(wrapper.get('nav').attributes('style')).toContain('top: 212px')
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { value: originalHeight, configurable: true })
+    }
   })
 
   it('visibly labels unavailable parent actions', () => {

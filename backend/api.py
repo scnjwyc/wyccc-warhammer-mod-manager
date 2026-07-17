@@ -42,6 +42,11 @@ from .file_operations import (
     execute_delete_preview,
     workshop_item_directory,
 )
+from .game_data_patch_state import (
+    ensure_game_data_patch,
+    game_data_settings_requested,
+    load_manifest_subscription_state,
+)
 from .launcher import is_game_running, launch_game
 from .load_order import LoadOrderService, current_order_path, file_token
 from .models import ModAsset
@@ -60,7 +65,6 @@ from .storage import StateRepository
 from .start_options import (
     GAME_DATA_PATCH_NAME,
     RUNTIME_PACK_NAME,
-    build_game_data_patch,
     build_runtime_options_pack,
 )
 from .steamworks_bridge import (
@@ -83,6 +87,7 @@ logger = logging.getLogger(__name__)
 GAME_DATA_SETTING_KEYS = frozenset(
     {
         "unit_model_multiplier",
+        "scale_lord_hero_health",
         "disable_unit_friendly_fire",
         "disable_spell_friendly_fire",
     }
@@ -116,6 +121,7 @@ class API:
         self._game_executable_cache: str | None = None
         self._game_data_subscription_lock = threading.Lock()
         self._game_data_subscription_cache: dict[str, dict[str, Any]] = {}
+        self._game_data_subscription_cache_known = False
         self._game_data_patch_lock = threading.Lock()
         self._internal_feature_mod_ids: set[str] = set()
         self.mod_monitor = ModChangeMonitor(self._record_mod_change)
@@ -127,7 +133,6 @@ class API:
             "detect_paths": self._detect_paths,
             "save_settings": self._save_settings,
             "save_game_data_settings": self._save_game_data_settings,
-            "generate_game_data_patch": self._generate_game_data_patch,
             "get_game_data_feature_status": self._get_game_data_feature_status,
             "check_for_updates": self._check_for_updates,
             "download_update": self._download_update,
@@ -176,6 +181,7 @@ class API:
             "open_workshop_folder": self._open_workshop_folder,
             "open_game_folder": self._open_game_folder,
             "open_workshop_page": self._open_workshop_page,
+            "open_workshop_client": self._open_workshop_client,
             "open_external_url": self._open_external_url,
             "preview_delete_mod_files": self._preview_delete_mod_files,
             "delete_mod_files": self._delete_mod_files,
@@ -292,6 +298,7 @@ class API:
             for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
         ]
         warning = ""
+        live_success = False
         language = steam_language_for_interface(self.interface_language())
         try:
             statuses = query_workshop_subscription_status(
@@ -302,6 +309,7 @@ class API:
         except SteamworksBridgeError as exc:
             warning = f"无法刷新游戏数据功能的 Workshop 订阅状态：{exc}"
         else:
+            live_success = True
             status_by_id = {
                 str(item.get("workshop_id") or ""): item
                 for item in statuses
@@ -319,12 +327,14 @@ class API:
                     }
                     for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
                 }
+                self._game_data_subscription_cache_known = True
 
         with self._game_data_subscription_lock:
             cached = {
                 workshop_id: dict(status)
                 for workshop_id, status in self._game_data_subscription_cache.items()
             }
+            known = self._game_data_subscription_cache_known
         return {
             "items": {
                 key: {
@@ -339,6 +349,8 @@ class API:
                 for key, item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.items()
             },
             "warning": warning,
+            "known": known,
+            "source": "live" if live_success else ("memory" if known else "unavailable"),
         }
 
     def _check_for_updates(
@@ -411,50 +423,48 @@ class API:
             raise ValueError("游戏数据设置必须是对象")
         return {key: value for key, value in changes.items() if key in GAME_DATA_SETTING_KEYS}
 
-    def _generate_game_data_patch(
+    def _resolve_game_data_subscription_state(
         self,
-        changes: dict[str, Any],
-        ordered_mod_ids: list[str],
-    ) -> dict[str, Any]:
-        if self.detect_game_running():
-            self.set_game_running(True, force=True)
-            raise ValueError("游戏运行时无法生成游戏数据补丁")
-        if not self._game_data_patch_lock.acquire(blocking=False):
-            raise ValueError("游戏正在启动或游戏数据补丁正在生成")
-        try:
-            if self.detect_game_running():
-                self.set_game_running(True, force=True)
-                raise ValueError("游戏运行时无法生成游戏数据补丁")
-            filtered = self._game_data_setting_changes(changes)
-            candidate = self.settings_service.normalize_changes(filtered)
-            paths = self.settings_service.resolve_game_paths()
-            if not self._path_health(
-                paths.game_path,
-                paths.data_path,
-                paths.workshop_path,
-            )["game_ready"]:
-                raise ValueError("生成游戏数据补丁前需要先设置有效的游戏目录")
-            feature_status = self._get_game_data_feature_status()
-            subscribed_feature_ids = tuple(
-                str(item.get("workshop_id") or "")
-                for item in feature_status["items"].values()
-                if item.get("subscribed")
-            )
-            patch_result = build_game_data_patch(
-                self.data_dir / "runtime",
-                paths.data_path,
-                self._assets,
-                self._canonicalize_mod_ids(ordered_mod_ids),
-                candidate,
-                subscribed_workshop_ids=subscribed_feature_ids,
-            )
-            self.settings_service.save(filtered)
-            return {
-                "settings": self.settings_service.get_public(),
-                "patch": patch_result,
+        settings: dict[str, Any],
+    ) -> dict[str, bool]:
+        feature_status = self._get_game_data_feature_status()
+        warning = str(feature_status.get("warning") or "")
+        requested = game_data_settings_requested(settings)
+        known = bool(feature_status.get("known"))
+        if known:
+            subscription_state = {
+                str(item.get("workshop_id") or ""): bool(item.get("subscribed"))
+                for item in feature_status.get("items", {}).values()
+                if str(item.get("workshop_id") or "")
             }
-        finally:
-            self._game_data_patch_lock.release()
+            if warning:
+                logger.warning(
+                    "Game data patch status=subscription_error source=%s requested=%s detail=%s",
+                    feature_status.get("source") or "memory",
+                    str(requested).lower(),
+                    warning,
+                )
+            return subscription_state
+
+        manifest_state = load_manifest_subscription_state(self.data_dir / "runtime")
+        if manifest_state is not None:
+            logger.warning(
+                "Game data patch status=subscription_error source=manifest requested=%s detail=%s",
+                str(requested).lower(),
+                warning or "subscription state unavailable",
+            )
+            return manifest_state
+        if requested:
+            logger.error(
+                "Game data patch status=subscription_error source=unavailable requested=true detail=%s",
+                warning or "subscription state unavailable",
+            )
+            raise ValueError("无法确认游戏数据功能的 Workshop 订阅状态，已取消启动")
+        logger.warning(
+            "Game data patch status=subscription_error source=unavailable requested=false action=zero_modification detail=%s",
+            warning or "subscription state unavailable",
+        )
+        return {}
 
     @staticmethod
     def _select_directory(kind: str) -> dict[str, str]:
@@ -745,20 +755,43 @@ class API:
             selected_save = self.save_games.require(save_name) if save_name else None
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
             paths = self.settings_service.resolve_game_paths()
+            settings = self.settings_service.get()
+            subscription_state = self._resolve_game_data_subscription_state(settings)
+            try:
+                game_data_patch = ensure_game_data_patch(
+                    output_dir=self.data_dir / "runtime",
+                    data_path=paths.data_path,
+                    assets=self._assets,
+                    active_ids=saved["plan"]["ordered_mod_ids"],
+                    playset_id=self.state_repository.get_current_playset_id(),
+                    settings=settings,
+                    subscription_state=subscription_state,
+                )
+            except Exception:
+                logger.exception("Game data patch status=generation_failed")
+                raise
+            logger.info(
+                "Game data patch status=%s fingerprint=%s changed_inputs=%s entries=%s game_data=%s",
+                game_data_patch["status"],
+                str(game_data_patch.get("fingerprint") or "")[:12],
+                ",".join(game_data_patch.get("changed_inputs", [])) or "none",
+                game_data_patch.get("entry_count", 0),
+                game_data_patch.get("game_data", {}),
+            )
             runtime = build_runtime_options_pack(
                 self.data_dir / "runtime",
                 paths.data_path,
                 self._assets,
                 saved["plan"]["ordered_mod_ids"],
-                self.settings_service.get(),
+                settings,
             )
             launch_plan = saved["plan"]
             launch_path = saved["plan"]["target_path"]
 
             internal_assets: dict[str, ModAsset] = {}
             internal_ids: list[str] = []
-            game_data_path = self.data_dir / "runtime" / GAME_DATA_PATCH_NAME
-            if game_data_path.is_file():
+            game_data_path = Path(str(game_data_patch.get("path") or ""))
+            if game_data_patch.get("path") and game_data_path.is_file():
                 game_data_id = "runtime:game-data-patch"
                 internal_assets[game_data_id] = ModAsset(
                     id=game_data_id,
@@ -805,6 +838,7 @@ class API:
             return {
                 **saved,
                 "process": process,
+                "game_data_patch": game_data_patch,
                 "runtime_options": runtime,
                 "launch_plan": launch_plan,
                 "save": selected_save,
@@ -1220,6 +1254,13 @@ class API:
         webbrowser.open(
             f"https://steamcommunity.com/sharedfiles/filedetails/?id={asset.workshop_id}"
         )
+        return {"opened": True}
+
+    def _open_workshop_client(self, mod_id: str) -> dict[str, bool]:
+        asset = self._require_asset(mod_id)
+        if not asset.workshop_id:
+            raise ValueError("该 MOD 不是 Workshop 项目")
+        self._open_uri(f"steam://url/CommunityFilePage/{asset.workshop_id}")
         return {"opened": True}
 
     @staticmethod
@@ -1702,6 +1743,20 @@ class API:
             subprocess.Popen(command)
         else:
             raise ValueError("当前系统不支持打开路径")
+
+    @staticmethod
+    def _open_uri(uri: str) -> None:
+        normalized = str(uri or "").strip()
+        parsed = urlparse(normalized)
+        if parsed.scheme.casefold() != "steam" or not parsed.netloc:
+            raise ValueError("只允许打开有效的 Steam 链接")
+        if os.name == "nt":
+            os.startfile(normalized)
+        elif os.name == "posix":
+            command = ["open", normalized] if os.uname().sysname == "Darwin" else ["xdg-open", normalized]
+            subprocess.Popen(command)
+        else:
+            raise ValueError("当前系统不支持打开 Steam 链接")
 
     @staticmethod
     def _reveal_file(path: Path) -> None:

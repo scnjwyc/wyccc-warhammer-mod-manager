@@ -135,7 +135,31 @@ describe('deliberately small product scope', () => {
     expect(appSource).toContain('data-testid="game-data-modification-button"')
     expect(appSource).toContain("t('app.gameDataModification')")
     expect(appSource).toContain('<GameDataModificationModal')
-    expect(appSource).toContain('gameDataGeneratedSignature')
-    expect(appSource).toContain('@generate="generateGameDataPatch"')
+    expect(appSource).not.toContain('gameDataGeneratedSignature')
+    expect(appSource).not.toContain('@generate=')
+  })
+
+  it('opens game data modification before refreshing Steam subscription status', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+    const start = appSource.indexOf('const openGameDataModification')
+    const end = appSource.indexOf('\n}', start)
+    const handler = appSource.slice(start, end)
+
+    expect(start).toBeGreaterThan(-1)
+    expect(handler.indexOf('showGameDataModification.value = true')).toBeGreaterThan(-1)
+    expect(handler.indexOf('store.refreshGameDataFeatures()')).toBeGreaterThan(-1)
+    expect(handler.indexOf('showGameDataModification.value = true'))
+      .toBeLessThan(handler.indexOf('store.refreshGameDataFeatures()'))
+    expect(handler).not.toContain('await store.refreshGameDataFeatures()')
+  })
+
+  it('routes separate browser and Steam-client Workshop actions', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+    const storeSource = read(resolve(frontendRoot, 'src/store.js'))
+
+    expect(appSource).toContain("action === 'open-workshop-browser'")
+    expect(appSource).toContain("action === 'open-workshop-client'")
+    expect(storeSource).toContain("invoke('open_workshop_page', modId)")
+    expect(storeSource).toContain("invoke('open_workshop_client', modId)")
   })
 })

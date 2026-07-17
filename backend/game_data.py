@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .constants import UNIT_MODEL_MULTIPLIER_MAX, UNIT_MODEL_MULTIPLIER_MIN
+from .game_data_settings import normalize_unit_scale_multiplier
 
 
 SCHEMA_PATH = Path(__file__).with_name("wh3_db_schema.json")
@@ -386,15 +386,11 @@ def build_game_data_entries(
     sources: Sequence[DbSource],
     settings: Mapping[str, Any],
 ) -> GameDataBuildResult:
-    try:
-        multiplier = float(settings.get("unit_model_multiplier", 1.0))
-    except (TypeError, ValueError):
-        multiplier = 1.0
-    if not math.isfinite(multiplier):
-        multiplier = 1.0
-    multiplier = max(
-        UNIT_MODEL_MULTIPLIER_MIN,
-        min(UNIT_MODEL_MULTIPLIER_MAX, multiplier),
+    multiplier = normalize_unit_scale_multiplier(
+        settings.get("unit_model_multiplier", 1)
+    )
+    scale_lord_hero_health = _coerce_bool(
+        settings.get("scale_lord_hero_health", False)
     )
     disable_unit = _coerce_bool(settings.get("disable_unit_friendly_fire", False))
     disable_spell = _coerce_bool(settings.get("disable_spell_friendly_fire", False))
@@ -404,6 +400,7 @@ def build_game_data_entries(
         "unit_model_multiplier": multiplier,
         "unit_rows_scaled": 0,
         "land_rows_scaled": 0,
+        "lord_hero_health_rows_scaled": 0,
         "unit_friendly_fire_rows_changed": 0,
         "spell_friendly_fire_rows_changed": 0,
     }
@@ -431,12 +428,16 @@ def build_game_data_entries(
     }
     if scale_units:
         target_land_units: set[str] = set()
+        character_land_units: set[str] = set()
         for key, candidate in effective["main_units_tables"].items():
             values = candidate.row.values
             caste = str(values.get("caste") or "").casefold()
             row = candidate.row
-            if caste not in {"lord", "hero"}:
-                land_unit = str(values.get("land_unit") or "")
+            land_unit = str(values.get("land_unit") or "")
+            if caste in {"lord", "hero"}:
+                if scale_lord_hero_health and land_unit:
+                    character_land_units.add(land_unit)
+            else:
                 if land_unit:
                     target_land_units.add(land_unit)
                 new_count = _scaled_i32(values.get("num_men"), multiplier, minimum=1)
@@ -458,6 +459,16 @@ def build_game_data_entries(
                     or new_engines != int(values.get("num_engines") or 0)
                 ):
                     stats["land_rows_scaled"] = int(stats["land_rows_scaled"]) + 1
+            if key in character_land_units:
+                new_bonus_hit_points = _scaled_i32(
+                    values.get("bonus_hit_points"),
+                    multiplier,
+                )
+                row = _patch_i32(row, "bonus_hit_points", new_bonus_hit_points)
+                if new_bonus_hit_points != int(values.get("bonus_hit_points") or 0):
+                    stats["lord_hero_health_rows_scaled"] = (
+                        int(stats["lord_hero_health_rows_scaled"]) + 1
+                    )
             patched_by_table["land_units_tables"][key] = row
 
     if disable_unit or disable_spell:

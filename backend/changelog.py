@@ -9,6 +9,33 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.6.5",
+        "date": "2026-07-17",
+        "entries": (
+            (
+                "v065_game_data_title",
+                (
+                    ("feature", "v065_auto_patch"),
+                    ("feature", "v065_unit_scale"),
+                    ("improvement", "v065_game_data_window"),
+                ),
+            ),
+            (
+                "v065_workshop_title",
+                (
+                    ("improvement", "v065_author_names"),
+                    ("feature", "v065_workshop_links"),
+                ),
+            ),
+            (
+                "v065_startup_title",
+                (
+                    ("fix", "v065_skip_intro"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.6.0",
         "date": "2026-07-16",
         "entries": (
@@ -146,6 +173,15 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v065_game_data_title": "游戏数据修改",
+        "v065_auto_patch": "启动游戏时会自动校验游戏数据补丁；设置、播放集、启用的 MOD 或游戏数据变化后会自动重新生成。",
+        "v065_unit_scale": "单位规模倍率现为 1–5 倍整数滑条，并可选择同步调整领主与英雄血量。",
+        "v065_game_data_window": "游戏数据修改窗口现在打开更快。",
+        "v065_workshop_title": "创意工坊体验",
+        "v065_author_names": "提高作者昵称获取成功率；临时获取失败时会保留已有昵称。",
+        "v065_workshop_links": "MOD 右键菜单新增浏览器与 Steam 客户端两个创意工坊跳转入口。",
+        "v065_startup_title": "游戏启动",
+        "v065_skip_intro": "修复“跳过开场动画”未完整生效的问题。",
         "v060_runtime_title": "启动与低消耗模式",
         "v060_low_consumption": "新增低消耗模式：游戏运行时自动降低管理器资源占用，退出游戏后恢复。",
         "v060_startup_speed": "优化启动和工坊刷新；重复启动会唤醒已有窗口，游戏运行状态识别也更准确。",
@@ -199,6 +235,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v065_game_data_title": "Game data modification",
+        "v065_auto_patch": "The game-data patch is checked automatically when the game launches and regenerated after relevant settings, playsets, enabled MODs, or game data change.",
+        "v065_unit_scale": "Unit scale now uses an integer 1–5 slider, with an option to scale lord and hero health.",
+        "v065_game_data_window": "Game Data Modification now opens faster.",
+        "v065_workshop_title": "Workshop experience",
+        "v065_author_names": "Workshop author names are more reliable, while existing names remain available when a refresh temporarily fails.",
+        "v065_workshop_links": "MOD context menus now provide separate Workshop links for the browser and Steam client.",
+        "v065_startup_title": "Game launch",
+        "v065_skip_intro": "Fixed Skip Intro so all opening movies are skipped as expected.",
         "v060_runtime_title": "Startup and low-consumption mode",
         "v060_low_consumption": "Added low-consumption mode to reduce manager resource usage while the game is running and restore it after the game closes.",
         "v060_startup_speed": "Improved startup and Workshop refresh; reopening WMM activates the existing window, with more accurate game-status detection.",
@@ -252,6 +297,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v065_game_data_title": "게임 데이터 수정",
+        "v065_auto_patch": "게임을 실행할 때 게임 데이터 패치를 자동으로 확인하며, 관련 설정, 플레이 세트, 활성 MOD 또는 게임 데이터가 바뀌면 자동으로 다시 생성합니다.",
+        "v065_unit_scale": "유닛 규모 배율을 1–5 정수 슬라이더로 변경하고 군주와 영웅의 체력도 함께 조정할 수 있습니다.",
+        "v065_game_data_window": "게임 데이터 수정 창이 더 빠르게 열립니다.",
+        "v065_workshop_title": "창작마당 사용성",
+        "v065_author_names": "창작마당 작성자 이름을 더 안정적으로 표시하며, 일시적으로 가져오지 못해도 기존 이름을 유지합니다.",
+        "v065_workshop_links": "MOD 우클릭 메뉴에서 브라우저와 Steam 클라이언트용 창작마당 링크를 각각 열 수 있습니다.",
+        "v065_startup_title": "게임 시작",
+        "v065_skip_intro": "‘오프닝 영상 건너뛰기’가 모든 시작 영상을 정상적으로 건너뛰도록 수정했습니다.",
         "v060_runtime_title": "시작 및 저소비 모드",
         "v060_low_consumption": "게임 실행 중 관리자의 리소스 사용량을 줄이고 게임 종료 후 자동 복원하는 저소비 모드를 추가했습니다.",
         "v060_startup_speed": "시작과 창작마당 새로 고침을 개선했으며, WMM을 다시 실행하면 기존 창이 열리고 게임 실행 상태도 더 정확하게 감지합니다.",
@@ -305,6 +359,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v065_game_data_title": "Изменение игровых данных",
+        "v065_auto_patch": "Патч игровых данных автоматически проверяется при запуске игры и пересоздаётся после изменения настроек, набора, активных MOD или игровых данных.",
+        "v065_unit_scale": "Масштаб отрядов теперь задаётся целым значением 1–5 на ползунке; здоровье лордов и героев можно масштабировать вместе с ним.",
+        "v065_game_data_window": "Окно изменения игровых данных теперь открывается быстрее.",
+        "v065_workshop_title": "Работа с Мастерской",
+        "v065_author_names": "Имена авторов Мастерской отображаются надёжнее, а при временной ошибке сохраняется уже полученное имя.",
+        "v065_workshop_links": "В контекстном меню MOD появились отдельные переходы в Мастерскую через браузер и клиент Steam.",
+        "v065_startup_title": "Запуск игры",
+        "v065_skip_intro": "Исправлен пропуск вступительных роликов: теперь он пропускает все начальные видео.",
         "v060_runtime_title": "Запуск и режим низкого потребления",
         "v060_low_consumption": "Добавлен режим низкого потребления: во время игры менеджер расходует меньше ресурсов, а после выхода автоматически восстанавливается.",
         "v060_startup_speed": "Ускорены запуск и обновление Мастерской; повторный запуск открывает существующее окно, а состояние игры определяется точнее.",
@@ -358,6 +421,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v065_game_data_title": "ゲームデータ変更",
+        "v065_auto_patch": "ゲーム起動時にゲームデータパッチを自動確認し、関連設定、プレイセット、有効な MOD、またはゲームデータが変わると自動で再生成します。",
+        "v065_unit_scale": "ユニット規模倍率を 1～5 の整数スライダーに変更し、ロードとヒーローの体力も同時に調整できるようにしました。",
+        "v065_game_data_window": "ゲームデータ変更画面がより速く開くようになりました。",
+        "v065_workshop_title": "ワークショップ操作",
+        "v065_author_names": "ワークショップ作者名をより安定して表示し、一時的に取得できない場合も既存の名前を保持します。",
+        "v065_workshop_links": "MOD の右クリックメニューから、ブラウザーと Steam クライアントのワークショップを個別に開けるようにしました。",
+        "v065_startup_title": "ゲーム起動",
+        "v065_skip_intro": "「オープニングムービーをスキップ」がすべての開始動画に正しく適用されるよう修正しました。",
         "v060_runtime_title": "起動と低消費モード",
         "v060_low_consumption": "ゲーム実行中の管理ツールのリソース使用量を抑え、終了後に自動復帰する低消費モードを追加しました。",
         "v060_startup_speed": "起動とワークショップ更新を改善しました。WMM を再起動すると既存画面を表示し、ゲーム状態もより正確に判定します。",

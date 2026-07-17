@@ -12,11 +12,13 @@ const props = defineProps({
   friendlyFireModName: { type: String, default: 'Dynamic No Friendly Fire' },
 })
 
-const emit = defineEmits(['close', 'generate', 'save'])
-const UNIT_MODEL_MULTIPLIER_MIN = 0.5
+const emit = defineEmits(['close', 'save'])
+const UNIT_MODEL_MULTIPLIER_MIN = 1
 const UNIT_MODEL_MULTIPLIER_MAX = 5
+const UNIT_MODEL_MULTIPLIER_STEPS = [1, 2, 3, 4, 5]
 const draft = reactive({
   unit_model_multiplier: 1,
+  scale_lord_hero_health: false,
   disable_unit_friendly_fire: false,
   disable_spell_friendly_fire: false,
 })
@@ -24,7 +26,11 @@ const draft = reactive({
 const normalizeMultiplier = value => {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return 1
-  return Math.max(UNIT_MODEL_MULTIPLIER_MIN, Math.min(UNIT_MODEL_MULTIPLIER_MAX, numeric))
+  const clamped = Math.max(
+    UNIT_MODEL_MULTIPLIER_MIN,
+    Math.min(UNIT_MODEL_MULTIPLIER_MAX, numeric),
+  )
+  return Math.round(clamped)
 }
 
 const unitSizeAvailable = computed(() => props.unitSizeSubscribed)
@@ -33,6 +39,7 @@ const requirementMessage = modName => t('gameData.requiredModNotSubscribed', { m
 
 const resetDraft = () => {
   draft.unit_model_multiplier = normalizeMultiplier(props.settings.unit_model_multiplier ?? 1)
+  draft.scale_lord_hero_health = !!props.settings.scale_lord_hero_health
   draft.disable_unit_friendly_fire = !!props.settings.disable_unit_friendly_fire
   draft.disable_spell_friendly_fire = !!props.settings.disable_spell_friendly_fire
 }
@@ -55,6 +62,7 @@ watch(
 
 const currentSettings = () => ({
   unit_model_multiplier: normalizeMultiplier(draft.unit_model_multiplier),
+  scale_lord_hero_health: !!draft.scale_lord_hero_health,
   disable_unit_friendly_fire: !!draft.disable_unit_friendly_fire,
   disable_spell_friendly_fire: !!draft.disable_spell_friendly_fire,
 })
@@ -64,10 +72,6 @@ const submit = () => {
   emit('save', currentSettings())
 }
 
-const generate = () => {
-  if (!unitSizeAvailable.value && !friendlyFireAvailable.value) return
-  emit('generate', currentSettings())
-}
 </script>
 
 <template>
@@ -92,18 +96,37 @@ const generate = () => {
               {{ requirementMessage(unitSizeModName) }}
             </p>
           </div>
-          <label class="multiplier-control">
+          <div class="unit-scale-control">
+            <div class="unit-scale-slider-row">
+              <input
+                v-model.number="draft.unit_model_multiplier"
+                type="range"
+                :min="UNIT_MODEL_MULTIPLIER_MIN"
+                :max="UNIT_MODEL_MULTIPLIER_MAX"
+                step="1"
+                :disabled="!!busy || !unitSizeAvailable"
+                :aria-label="t('gameData.unitMultiplier')"
+                data-testid="unit-model-multiplier"
+              />
+              <output class="unit-scale-value" data-testid="unit-scale-value">
+                {{ normalizeMultiplier(draft.unit_model_multiplier) }}×
+              </output>
+            </div>
+            <div class="unit-scale-ticks" data-testid="unit-scale-ticks" aria-hidden="true">
+              <span v-for="step in UNIT_MODEL_MULTIPLIER_STEPS" :key="step">{{ step }}</span>
+            </div>
+          </div>
+          <label class="switch-row character-health-toggle">
             <input
-              v-model.number="draft.unit_model_multiplier"
-              type="number"
-              :min="UNIT_MODEL_MULTIPLIER_MIN"
-              :max="UNIT_MODEL_MULTIPLIER_MAX"
-              step="0.1"
+              v-model="draft.scale_lord_hero_health"
+              type="checkbox"
               :disabled="!!busy || !unitSizeAvailable"
-              :aria-label="t('gameData.unitMultiplier')"
-              data-testid="unit-model-multiplier"
+              data-testid="scale-lord-hero-health"
             />
-            <span>×</span>
+            <span>
+              <strong>{{ t('gameData.scaleLordHeroHealth') }}</strong>
+              <small>{{ t('gameData.scaleLordHeroHealthHelp') }}</small>
+            </span>
           </label>
         </section>
 
@@ -136,15 +159,6 @@ const generate = () => {
       <footer class="modal-footer game-data-footer">
         <div class="game-data-footer-content" data-testid="game-data-footer-content">
           <div class="game-data-footer-actions" data-testid="game-data-footer-actions">
-            <button
-              type="button"
-              class="secondary-button"
-              :disabled="!!busy || (!unitSizeAvailable && !friendlyFireAvailable)"
-              data-testid="generate-game-data-patch"
-              @click="generate"
-            >
-              {{ busy === t('busy.generateGameDataPatch') ? busy : t('gameData.generatePatch') }}
-            </button>
             <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('close')">
               {{ t('common.cancel') }}
             </button>
@@ -153,7 +167,7 @@ const generate = () => {
             </button>
           </div>
           <p class="game-data-regeneration-warning" data-testid="game-data-regeneration-warning">
-            {{ t('gameData.regenerateAfterModChanges') }}
+            {{ t('gameData.autoGenerateOnLaunch') }}
           </p>
         </div>
       </footer>
@@ -200,9 +214,7 @@ const generate = () => {
 
 .multiplier-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
+  gap: 14px;
   padding: 17px 18px;
 }
 
@@ -212,41 +224,71 @@ const generate = () => {
 }
 
 .game-data-card-copy strong,
+.character-health-toggle strong,
 .friendly-fire-card :deep(.switch-row strong) {
   color: #ead9ca;
   font-size: 13px;
 }
 
 .game-data-card-copy small,
+.character-health-toggle small,
 .friendly-fire-card :deep(.switch-row small) {
   color: #8d7f77;
   font-size: 11px;
   line-height: 1.55;
 }
 
-.multiplier-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.unit-scale-control {
+  display: grid;
+  gap: 3px;
 }
 
-.multiplier-control input {
-  width: 112px;
-  height: 38px;
-  padding: 0 10px;
+.unit-scale-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.unit-scale-slider-row input {
+  min-width: 0;
+  flex: 1;
+  accent-color: #b87a3c;
+}
+
+.unit-scale-value {
+  min-width: 52px;
+  padding: 7px 9px;
   border: 1px solid #75523b;
   border-radius: 4px;
   background: #0e0b0b;
   color: #f1d29a;
   font-size: 15px;
   font-weight: 800;
+  text-align: center;
+}
+
+.unit-scale-ticks {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin-right: 66px;
+  color: #75675f;
+  font-size: 10px;
+  text-align: center;
+}
+
+.unit-scale-ticks span:first-child {
+  text-align: left;
+}
+
+.unit-scale-ticks span:last-child {
   text-align: right;
 }
 
-.multiplier-control span {
-  color: #c79c62;
-  font-size: 16px;
-  font-weight: 800;
+.character-health-toggle {
+  min-height: 62px;
+  padding-top: 12px;
+  border-top: 1px solid #302522;
+  border-bottom: 0;
 }
 
 .friendly-fire-card {
@@ -317,12 +359,8 @@ const generate = () => {
 }
 
 @media (max-width: 620px) {
-  .multiplier-card {
-    grid-template-columns: 1fr;
-  }
-
-  .multiplier-control input {
-    width: 100%;
+  .unit-scale-slider-row {
+    gap: 9px;
   }
 
   .game-data-modal > .game-data-footer {
@@ -331,7 +369,7 @@ const generate = () => {
 
   .game-data-footer-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 

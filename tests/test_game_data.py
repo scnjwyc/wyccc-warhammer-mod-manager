@@ -145,9 +145,9 @@ class GameDataPatchTests(unittest.TestCase):
                         "land_units_tables",
                         54,
                         [
-                            {"key": "land_infantry", "num_mounts": 2, "num_engines": 1},
-                            {"key": "land_lord", "num_mounts": 1, "num_engines": 0},
-                            {"key": "land_hero", "num_mounts": 1, "num_engines": 0},
+                            {"key": "land_infantry", "num_mounts": 2, "num_engines": 1, "bonus_hit_points": 100},
+                            {"key": "land_lord", "num_mounts": 1, "num_engines": 0, "bonus_hit_points": 1000},
+                            {"key": "land_hero", "num_mounts": 1, "num_engines": 0, "bonus_hit_points": 800},
                         ],
                     ),
                 ),
@@ -192,27 +192,80 @@ class GameDataPatchTests(unittest.TestCase):
         result = build_game_data_entries(
             [mod, base],
             {
-                "unit_model_multiplier": 1.5,
+                "unit_model_multiplier": 2,
+                "scale_lord_hero_health": False,
                 "disable_unit_friendly_fire": False,
                 "disable_spell_friendly_fire": False,
             },
         )
 
         main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
-        self.assertEqual(main_rows["unit_infantry"]["num_men"], 120)
-        self.assertEqual(main_rows["unit_artillery"]["num_men"], 6)
+        self.assertEqual(main_rows["unit_infantry"]["num_men"], 160)
+        self.assertEqual(main_rows["unit_artillery"]["num_men"], 8)
         self.assertEqual(main_rows["unit_lord"]["num_men"], 1)
         self.assertEqual(main_rows["unit_hero"]["num_men"], 1)
         self.assertEqual(len(main_rows), 4)
 
         land_rows = {row["key"]: row for row in _rows_for(result, "land_units_tables")}
-        self.assertEqual(land_rows["land_infantry"]["num_mounts"], 5)
+        self.assertEqual(land_rows["land_infantry"]["num_mounts"], 6)
         self.assertEqual(land_rows["land_infantry"]["num_engines"], 0)
         self.assertEqual(land_rows["land_artillery"]["num_mounts"], 0)
-        self.assertEqual(land_rows["land_artillery"]["num_engines"], 3)
+        self.assertEqual(land_rows["land_artillery"]["num_engines"], 4)
         self.assertEqual(land_rows["land_lord"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_lord"]["bonus_hit_points"], 1000)
+        self.assertEqual(land_rows["land_hero"]["bonus_hit_points"], 800)
         self.assertEqual(result.stats["unit_rows_scaled"], 2)
         self.assertEqual(result.stats["land_rows_scaled"], 2)
+        self.assertEqual(result.stats["lord_hero_health_rows_scaled"], 0)
+
+    def test_lord_and_hero_health_scaling_is_opt_in_and_keeps_model_counts(self) -> None:
+        source = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {"unit": "unit_infantry", "caste": "infantry", "land_unit": "land_infantry", "num_men": 10},
+                            {"unit": "unit_lord", "caste": "lord", "land_unit": "land_lord", "num_men": 1},
+                            {"unit": "unit_hero", "caste": "hero", "land_unit": "land_hero", "num_men": 1},
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\data__",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {"key": "land_infantry", "bonus_hit_points": 100},
+                            {"key": "land_lord", "bonus_hit_points": 1000},
+                            {"key": "land_hero", "bonus_hit_points": 800},
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        result = build_game_data_entries(
+            [source],
+            {
+                "unit_model_multiplier": 3,
+                "scale_lord_hero_health": True,
+            },
+        )
+
+        main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
+        self.assertEqual(main_rows["unit_infantry"]["num_men"], 30)
+        self.assertEqual(main_rows["unit_lord"]["num_men"], 1)
+        self.assertEqual(main_rows["unit_hero"]["num_men"], 1)
+        land_rows = {row["key"]: row for row in _rows_for(result, "land_units_tables")}
+        self.assertEqual(land_rows["land_infantry"]["bonus_hit_points"], 100)
+        self.assertEqual(land_rows["land_lord"]["bonus_hit_points"], 3000)
+        self.assertEqual(land_rows["land_hero"]["bonus_hit_points"], 2400)
+        self.assertEqual(result.stats["lord_hero_health_rows_scaled"], 2)
 
     def test_unit_multiplier_is_clamped_to_supported_range(self) -> None:
         source = DbSource(
@@ -244,7 +297,7 @@ class GameDataPatchTests(unittest.TestCase):
             ),
         )
 
-        for supplied, expected, expected_models in ((0.1, 0.5, 5), (50, 5.0, 50)):
+        for supplied, expected, expected_models in ((0.1, 1, 10), (2.5, 3, 30), (50, 5, 50)):
             with self.subTest(supplied=supplied):
                 result = build_game_data_entries(
                     [source],
@@ -257,7 +310,10 @@ class GameDataPatchTests(unittest.TestCase):
 
                 self.assertEqual(result.stats["unit_model_multiplier"], expected)
                 main_rows = _rows_for(result, "main_units_tables")
-                self.assertEqual(main_rows[0]["num_men"], expected_models)
+                if expected == 1:
+                    self.assertEqual(main_rows, [])
+                else:
+                    self.assertEqual(main_rows[0]["num_men"], expected_models)
 
     def test_friendly_fire_switches_separate_unit_and_spell_damage_carriers(self) -> None:
         source = DbSource(

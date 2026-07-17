@@ -1,87 +1,50 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.6.0",
-  "published_at": "2026-07-16",
+  "version": "0.6.5",
+  "published_at": "2026-07-17",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.6.0/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "b695348c6fba9e788a44e5abfbbc1bfafefbb157425abeb4b614cec0c3b099cd",
-    "size": 61888402
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.6.5/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "870baee861060fe489a827243dbaf3b96780c5a088ea4ef6be3c55ba38144789",
+    "size": 61909293
   },
   "changelog": [
-    {
-      "title": "启动与低消耗模式",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "新增低消耗模式：游戏运行时自动降低管理器资源占用，退出游戏后恢复。"
-        },
-        {
-          "type": "feature",
-          "text": "新增即时 MOD 增删检测：安装或删除 MOD 后自动刷新列表。"
-        },
-        {
-          "type": "improvement",
-          "text": "优化启动和工坊刷新；重复启动会唤醒已有窗口，游戏运行状态识别也更准确。"
-        }
-      ]
-    },
     {
       "title": "游戏数据修改",
       "changes": [
         {
           "type": "feature",
-          "text": "新增“游戏数据修改”窗口，可调整兵模人数和友伤选项；支持一键生成补丁，保存更改时也会自动更新。"
+          "text": "启动游戏时会自动校验游戏数据补丁；设置、播放集、启用的 MOD 或游戏数据变化后会自动重新生成。"
         },
         {
           "type": "feature",
-          "text": "订阅 Dynamic Unit Size 后，可按 0.5–5 倍调整普通单位、骑乘与战争机器的兵模人数。"
-        },
-        {
-          "type": "feature",
-          "text": "订阅 Dynamic No Friendly Fire 后，可分别禁用单位友伤和法术友伤，增益与治疗仍可正常作用于友军。"
-        }
-      ]
-    },
-    {
-      "title": "存档与 MOD 列表操作",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "存档列表可一键启用存档使用的 MOD，并与当前启用列表进行比较。"
-        },
-        {
-          "type": "feature",
-          "text": "新增 Ctrl+A 全选和双击启用或停用，让 MOD 列表操作更快捷。"
-        },
-        {
-          "type": "feature",
-          "text": "支持导入官方 MOD 启动器配置，快速新建播放集或替换当前播放集。"
-        },
-        {
-          "type": "fix",
-          "text": "修复工坊依赖刷新不准确的问题，让缺失依赖警告更可靠。"
-        }
-      ]
-    },
-    {
-      "title": "MOD 文件与工坊操作",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "支持批量复制 MOD 路径，详情栏的 MOD 名称和文件名也可直接选中复制。"
-        },
-        {
-          "type": "feature",
-          "text": "支持将 MOD 文件移入 Windows 回收站，误删后仍可恢复。"
+          "text": "单位规模倍率现为 1–5 倍整数滑条，并可选择同步调整领主与英雄血量。"
         },
         {
           "type": "improvement",
-          "text": "取消订阅时会同步清理对应工坊文件，并立即刷新 MOD 列表。"
+          "text": "游戏数据修改窗口现在打开更快。"
+        }
+      ]
+    },
+    {
+      "title": "创意工坊体验",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "提高作者昵称获取成功率；临时获取失败时会保留已有昵称。"
         },
         {
+          "type": "feature",
+          "text": "MOD 右键菜单新增浏览器与 Steam 客户端两个创意工坊跳转入口。"
+        }
+      ]
+    },
+    {
+      "title": "游戏启动",
+      "changes": [
+        {
           "type": "fix",
-          "text": "强制更新现在可重新下载并恢复缺失的工坊 MOD 文件。"
+          "text": "修复“跳过开场动画”未完整生效的问题。"
         }
       ]
     }

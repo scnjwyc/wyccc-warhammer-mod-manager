@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import math
 import os
 import struct
@@ -17,6 +16,7 @@ from .game_data import (
     GameDataEntry,
     build_game_data_entries,
 )
+from .game_data_settings import normalize_unit_scale_multiplier
 from .models import ModAsset
 
 
@@ -28,27 +28,26 @@ PERMISSIONS_VERSION = 11
 PERMISSIONS_GUID = "129d32d8-3563-4d4f-8e19-a815e834e456"
 
 INTRO_MOVIES = (
-    "movies\\epilepsy_warning\\epilepsy_warning_en.ca_vp8",
+    *(
+        f"movies\\epilepsy_warning\\epilepsy_warning_{language}.ca_vp8"
+        for language in (
+            "br",
+            "cn",
+            "cz",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "it",
+            "kr",
+            "pl",
+            "ru",
+            "tr",
+            "zh",
+        )
+    ),
     "movies\\gam_int.ca_vp8",
-    "movies\\startup_movie_01.ca_vp8",
-    "movies\\startup_movie_02.ca_vp8",
-    "movies\\startup_movie_03.ca_vp8",
-    "movies\\startup_movie_04.ca_vp8",
-)
-
-# Valid empty VP8 movie used by Warhammer Mod Manager for intro overrides.
-EMPTY_MOVIE = base64.b64decode(
-    "Q0FNVgEAKQBWUDgwgALgAVVVhUIBAAAAAQAAAEoCAAABAAAAIQIAAABQQgCdASqAAuABAEcIhYWI"
-    "hYSIAgIABhYE9waBZJ9r25snOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsnOHsn"
-    "OHsnOHsnOHsnN4D+/6tQgCkAAAAhAgAAAQ=="
+    *(f"movies\\startup_movie_{index:02d}.ca_vp8" for index in range(1, 9)),
 )
 
 
@@ -310,7 +309,7 @@ def write_pfh5_pack(path: Path, entries: Iterable[PackEntry]) -> Path:
 def _effective_game_data_settings(
     settings: dict[str, Any],
     subscribed_workshop_ids: Iterable[str],
-) -> dict[str, float | bool]:
+) -> dict[str, int | bool]:
     subscribed_ids = {
         str(workshop_id).strip()
         for workshop_id in subscribed_workshop_ids
@@ -322,14 +321,14 @@ def _effective_game_data_settings(
     friendly_fire_available = (
         GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]["workshop_id"] in subscribed_ids
     )
-    try:
-        unit_multiplier = float(settings.get("unit_model_multiplier", 1.0))
-    except (TypeError, ValueError):
-        unit_multiplier = 1.0
-    if not math.isfinite(unit_multiplier):
-        unit_multiplier = 1.0
+    unit_multiplier = normalize_unit_scale_multiplier(
+        settings.get("unit_model_multiplier", 1)
+    )
     return {
-        "unit_model_multiplier": unit_multiplier if unit_size_available else 1.0,
+        "unit_model_multiplier": unit_multiplier if unit_size_available else 1,
+        "scale_lord_hero_health": (
+            bool(settings.get("scale_lord_hero_health")) if unit_size_available else False
+        ),
         "disable_unit_friendly_fire": (
             bool(settings.get("disable_unit_friendly_fire")) if friendly_fire_available else False
         ),
@@ -339,7 +338,7 @@ def _effective_game_data_settings(
     }
 
 
-def _game_data_enabled(settings: dict[str, float | bool]) -> bool:
+def _game_data_enabled(settings: dict[str, int | bool]) -> bool:
     return (
         not math.isclose(
             float(settings["unit_model_multiplier"]),
@@ -352,7 +351,7 @@ def _game_data_enabled(settings: dict[str, float | bool]) -> bool:
     )
 
 
-def _enabled_game_data_options(settings: dict[str, float | bool]) -> list[str]:
+def _enabled_game_data_options(settings: dict[str, int | bool]) -> list[str]:
     options: list[str] = []
     if not math.isclose(
         float(settings["unit_model_multiplier"]),
@@ -361,11 +360,26 @@ def _enabled_game_data_options(settings: dict[str, float | bool]) -> list[str]:
         abs_tol=1e-9,
     ):
         options.append("unit_model_multiplier")
+        if settings["scale_lord_hero_health"]:
+            options.append("scale_lord_hero_health")
     if settings["disable_unit_friendly_fire"]:
         options.append("disable_unit_friendly_fire")
     if settings["disable_spell_friendly_fire"]:
         options.append("disable_spell_friendly_fire")
     return options
+
+
+def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
+    return sum(
+        int(stats.get(key, 0))
+        for key in (
+            "unit_rows_scaled",
+            "land_rows_scaled",
+            "lord_hero_health_rows_scaled",
+            "unit_friendly_fire_rows_changed",
+            "spell_friendly_fire_rows_changed",
+        )
+    )
 
 
 def _collect_game_data_sources(
@@ -416,6 +430,14 @@ def build_game_data_patch(
     sources = _collect_game_data_sources(data_path, assets, active_ids)
     game_data = build_game_data_entries(sources, effective_settings)
     entries = [PackEntry(entry.name, entry.payload) for entry in game_data.entries]
+    if not entries or _changed_game_data_rows(game_data.stats) == 0:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "options": _enabled_game_data_options(effective_settings),
+            "entry_count": 0,
+            "game_data": game_data.stats,
+        }
     write_pfh5_pack(output_path, entries)
     return {
         "path": str(output_path.resolve(strict=False)),
@@ -450,7 +472,7 @@ def build_runtime_options_pack(
         entries.append(PackEntry("script\\enable_console_logging", b"\0"))
         enabled_options.append("enable_script_logging")
     if settings.get("skip_intro_movies"):
-        entries.extend(PackEntry(name, EMPTY_MOVIE) for name in INTRO_MOVIES)
+        entries.extend(PackEntry(name, b"") for name in INTRO_MOVIES)
         enabled_options.append("skip_intro_movies")
 
     output_path = Path(output_dir) / RUNTIME_PACK_NAME

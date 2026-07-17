@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
-import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -11,10 +10,10 @@ from unittest.mock import patch
 
 from backend.api import API
 from backend.constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS, SOURCE_WORKSHOP
-from backend.game_data import GameDataBuildResult, GameDataEntry
 from backend.models import ModAsset
 from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
+from backend.steamworks_bridge import SteamworksBridgeError
 from backend.storage import StateRepository
 from tests.helpers import make_asset, write_pack
 
@@ -235,6 +234,52 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    @staticmethod
+    def _prepare_launch_api(root: Path) -> tuple[API, dict]:
+        game = root / "Total War WARHAMMER III"
+        data = game / "data"
+        data.mkdir(parents=True)
+        (game / "Warhammer3.exe").write_bytes(b"")
+        (data / "manifest.txt").write_text("data.pack\t0\ndb.pack\t0\n", encoding="utf-8")
+        write_pack(data / "data.pack")
+        write_pack(data / "db.pack")
+        api = API(root / "state")
+        api.call(
+            "save_settings",
+            [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+        )
+        return api, api.call("scan_mods", [False])
+
+    @staticmethod
+    def _feature_statuses(subscribed: bool = True) -> list[dict[str, object]]:
+        return [
+            {
+                "workshop_id": item["workshop_id"],
+                "title": item["title"],
+                "subscribed": subscribed,
+            }
+            for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
+        ]
+
+    @staticmethod
+    def _game_data_patch_result(root: Path, status: str = "generated") -> dict[str, object]:
+        path = ""
+        entry_count = 0
+        if status in {"generated", "reused"}:
+            patch_path = root / "state" / "runtime" / "!!!!wyccc_game_data_patch.pack"
+            write_pack(patch_path)
+            path = str(patch_path)
+            entry_count = 1
+        return {
+            "status": status,
+            "path": path,
+            "fingerprint": "a" * 64,
+            "changed_inputs": ["settings"] if status == "generated" else [],
+            "entry_count": entry_count,
+            "options": ["unit_model_multiplier"] if entry_count else [],
+            "game_data": {"unit_rows_scaled": entry_count},
+        }
+
     def test_force_update_requires_the_workshop_download_to_finish(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / "state")
@@ -301,207 +346,224 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(result["data"]["warning"], "")
+        self.assertTrue(result["data"]["known"])
+        self.assertEqual(result["data"]["source"], "live")
         query.assert_called_once_with(
             [items["unit_size"]["workshop_id"], items["friendly_fire"]["workshop_id"]],
             "schinese",
             app_id="1142710",
         )
 
-    def test_launch_does_not_refresh_subscriptions_for_game_data_generation(self) -> None:
+    def test_game_data_feature_status_retains_known_cache_after_refresh_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            with patch(
+                "backend.api.query_workshop_subscription_status",
+                side_effect=[
+                    self._feature_statuses(subscribed=True),
+                    SteamworksBridgeError("Steam offline"),
+                ],
+            ):
+                live = api.call("get_game_data_feature_status")
+                cached = api.call("get_game_data_feature_status")
+
+        self.assertTrue(live["data"]["known"])
+        self.assertEqual(live["data"]["source"], "live")
+        self.assertTrue(cached["data"]["known"])
+        self.assertEqual(cached["data"]["source"], "memory")
+        self.assertIn("Steam offline", cached["data"]["warning"])
+        self.assertTrue(
+            all(item["subscribed"] for item in cached["data"]["items"].values())
+        )
+
+    def test_launch_refreshes_subscriptions_and_ensures_patch_before_starting_game(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            game = root / "Total War WARHAMMER III"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (game / "Warhammer3.exe").write_bytes(b"")
-            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
-            write_pack(data / "data.pack")
-            api = API(root / "state")
-            api.call(
-                "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
-            )
-            scan = api.call("scan_mods", [False])
+            api, scan = self._prepare_launch_api(root)
+            api.call("save_game_data_settings", [{"unit_model_multiplier": 2.0}])
+            patch_result = self._game_data_patch_result(root)
             with (
                 patch(
                     "backend.api.query_workshop_subscription_status",
-                    side_effect=AssertionError("launch must not refresh game-data subscriptions"),
+                    return_value=self._feature_statuses(),
                 ) as query,
                 patch(
-                    "backend.api.build_runtime_options_pack",
-                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
-                ) as builder,
-                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
-                patch.object(api, "set_game_running"),
-            ):
-                launched = api.call(
-                    "launch_game",
-                    [[], scan["data"]["order_token"]],
-                )
-
-        self.assertTrue(launched["ok"])
-        self.assertNotIn("subscribed_workshop_ids", builder.call_args.kwargs)
-        query.assert_not_called()
-
-    def test_generate_game_data_patch_persists_settings_after_success(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            game = root / "Total War WARHAMMER III"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (game / "Warhammer3.exe").write_bytes(b"")
-            write_pack(data / "db.pack")
-            api = API(root / "state")
-            api.call(
-                "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
-            )
-            statuses = [
-                {
-                    "workshop_id": item["workshop_id"],
-                    "title": item["title"],
-                    "subscribed": True,
-                }
-                for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
-            ]
-            built = GameDataBuildResult(
-                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patch"),),
-                {"unit_model_multiplier": 2.0, "unit_rows_scaled": 1},
-            )
-
-            with (
-                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
-                patch("backend.start_options.build_game_data_entries", return_value=built),
-            ):
-                result = api.call(
-                    "generate_game_data_patch",
-                    [{"unit_model_multiplier": 2.0}, []],
-                )
-
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 2.0)
-            self.assertEqual(
-                Path(result["data"]["patch"]["path"]).name,
-                "!!!!wyccc_game_data_patch.pack",
-            )
-            self.assertEqual(api.settings_service.get()["unit_model_multiplier"], 2.0)
-
-    def test_failed_game_data_patch_generation_does_not_save_settings(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            game = root / "Total War WARHAMMER III"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (game / "Warhammer3.exe").write_bytes(b"")
-            write_pack(data / "db.pack")
-            api = API(root / "state")
-            api.call(
-                "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
-            )
-            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
-            statuses = [{"workshop_id": unit_item["workshop_id"], "subscribed": True}]
-
-            with (
-                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
-                patch(
-                    "backend.start_options.build_game_data_entries",
-                    side_effect=ValueError("缺少 main_units_tables"),
-                ),
-            ):
-                result = api.call(
-                    "generate_game_data_patch",
-                    [{"unit_model_multiplier": 2.0}, []],
-                )
-
-            self.assertFalse(result["ok"])
-            self.assertEqual(result["error"]["code"], "VALUEERROR")
-            self.assertIn("main_units_tables", result["error"]["message"])
-            self.assertEqual(api.settings_service.get()["unit_model_multiplier"], 1.0)
-
-    def test_launch_includes_an_existing_game_data_patch_without_rebuilding_it(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            game = root / "Total War WARHAMMER III"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (game / "Warhammer3.exe").write_bytes(b"")
-            write_pack(data / "data.pack")
-            patch_path = root / "state" / "runtime" / "!!!!wyccc_game_data_patch.pack"
-            write_pack(patch_path)
-            api = API(root / "state")
-            api.call(
-                "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
-            )
-            scan = api.call("scan_mods", [False])
-
-            with (
+                    "backend.api.ensure_game_data_patch",
+                    return_value=patch_result,
+                ) as ensure,
                 patch(
                     "backend.api.build_runtime_options_pack",
                     return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
                 ),
-                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}) as launch,
                 patch.object(api, "set_game_running"),
             ):
                 launched = api.call("launch_game", [[], scan["data"]["order_token"]])
 
-            self.assertTrue(launched["ok"])
-            self.assertIn("!!!!wyccc_game_data_patch.pack", launched["data"]["launch_plan"]["content"])
-            self.assertTrue(launched["data"]["launch_plan"]["target_path"].endswith("wyccc_launch_mods.txt"))
+        self.assertTrue(launched["ok"])
+        self.assertEqual(launched["data"]["game_data_patch"]["status"], "generated")
+        self.assertIn("!!!!wyccc_game_data_patch.pack", launched["data"]["launch_plan"]["content"])
+        self.assertEqual(ensure.call_args.kwargs["playset_id"], "default")
+        self.assertEqual(ensure.call_args.kwargs["active_ids"], [])
+        self.assertTrue(all(ensure.call_args.kwargs["subscription_state"].values()))
+        query.assert_called_once()
+        launch.assert_called_once()
 
-    def test_launch_is_rejected_while_game_data_patch_generation_is_running(self) -> None:
+    def test_launch_logs_generated_reused_and_zero_modification_outcomes(self) -> None:
+        for status in ("generated", "reused", "zero_modification"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                api, scan = self._prepare_launch_api(root)
+                patch_result = self._game_data_patch_result(root, status)
+                with (
+                    self.assertLogs("backend.api", level="INFO") as logs,
+                    patch(
+                        "backend.api.query_workshop_subscription_status",
+                        return_value=self._feature_statuses(),
+                    ),
+                    patch("backend.api.ensure_game_data_patch", return_value=patch_result),
+                    patch(
+                        "backend.api.build_runtime_options_pack",
+                        return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                    ),
+                    patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                    patch.object(api, "set_game_running"),
+                ):
+                    launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+                self.assertTrue(launched["ok"])
+                self.assertIn(f"status={status}", "\n".join(logs.output))
+
+    def test_launch_aborts_and_logs_generation_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            game = root / "Total War WARHAMMER III"
-            data = game / "data"
-            data.mkdir(parents=True)
-            (game / "Warhammer3.exe").write_bytes(b"")
-            write_pack(data / "data.pack")
-            write_pack(data / "db.pack")
-            api = API(root / "state")
-            api.call(
-                "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
-            )
-            scan = api.call("scan_mods", [False])
-            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
-            statuses = [{"workshop_id": unit_item["workshop_id"], "subscribed": True}]
-            started = threading.Event()
-            release = threading.Event()
-            built = GameDataBuildResult(
-                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"patch"),),
-                {"unit_model_multiplier": 2.0},
-            )
-
-            def blocking_builder(*args, **kwargs):
-                started.set()
-                release.wait(5)
-                return built
-
+            api, scan = self._prepare_launch_api(root)
             with (
-                patch("backend.api.query_workshop_subscription_status", return_value=statuses),
-                patch("backend.start_options.build_game_data_entries", side_effect=blocking_builder),
-                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}) as launch,
-                patch.object(api, "set_game_running"),
-                ThreadPoolExecutor(max_workers=1) as executor,
+                self.assertLogs("backend.api", level="ERROR") as logs,
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    return_value=self._feature_statuses(),
+                ),
+                patch(
+                    "backend.api.ensure_game_data_patch",
+                    side_effect=ValueError("缺少 main_units_tables"),
+                ),
+                patch("backend.api.launch_game") as launch,
             ):
-                future = executor.submit(
-                    api.call,
-                    "generate_game_data_patch",
-                    [{"unit_model_multiplier": 2.0}, []],
-                )
-                self.assertTrue(started.wait(1))
-                try:
-                    launched = api.call("launch_game", [[], scan["data"]["order_token"]])
-                finally:
-                    release.set()
-                generated = future.result(timeout=5)
+                result = api.call("launch_game", [[], scan["data"]["order_token"]])
 
-            self.assertFalse(launched["ok"])
-            self.assertIn("补丁", launched["error"]["message"])
-            self.assertTrue(generated["ok"])
-            launch.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertIn("main_units_tables", result["error"]["message"])
+        self.assertIn("status=generation_failed", "\n".join(logs.output))
+        launch.assert_not_called()
+
+    def test_unknown_subscription_with_requested_settings_aborts_and_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            api.call("save_game_data_settings", [{"unit_model_multiplier": 2.0}])
+            with (
+                self.assertLogs("backend.api", level="ERROR") as logs,
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=SteamworksBridgeError("Steam offline"),
+                ),
+                patch("backend.api.load_manifest_subscription_state", return_value=None),
+                patch("backend.api.ensure_game_data_patch") as ensure,
+                patch("backend.api.launch_game") as launch,
+            ):
+                result = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+        self.assertFalse(result["ok"])
+        self.assertIn("订阅状态", result["error"]["message"])
+        self.assertIn("status=subscription_error", "\n".join(logs.output))
+        ensure.assert_not_called()
+        launch.assert_not_called()
+
+    def test_subscription_error_uses_manifest_state_and_continues_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            api.call("save_game_data_settings", [{"unit_model_multiplier": 2.0}])
+            unit_id = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]["workshop_id"]
+            patch_result = self._game_data_patch_result(root, "zero_modification")
+            with (
+                self.assertLogs("backend.api", level="WARNING") as logs,
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=SteamworksBridgeError("Steam offline"),
+                ),
+                patch(
+                    "backend.api.load_manifest_subscription_state",
+                    return_value={unit_id: True},
+                ),
+                patch(
+                    "backend.api.ensure_game_data_patch",
+                    return_value=patch_result,
+                ) as ensure,
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                result = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(ensure.call_args.kwargs["subscription_state"], {unit_id: True})
+        self.assertIn("status=subscription_error", "\n".join(logs.output))
+        self.assertIn("source=manifest", "\n".join(logs.output))
+
+    def test_subscription_error_with_disabled_settings_continues_as_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            patch_result = self._game_data_patch_result(root, "zero_modification")
+            with (
+                self.assertLogs("backend.api", level="WARNING") as logs,
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=SteamworksBridgeError("Steam offline"),
+                ),
+                patch("backend.api.load_manifest_subscription_state", return_value=None),
+                patch(
+                    "backend.api.ensure_game_data_patch",
+                    return_value=patch_result,
+                ) as ensure,
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                result = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(ensure.call_args.kwargs["subscription_state"], {})
+        self.assertIn("status=subscription_error", "\n".join(logs.output))
+
+    def test_manual_game_data_patch_rpc_is_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            result = api.call("generate_game_data_patch", [{}, []])
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "METHOD_NOT_ALLOWED")
+
+    def test_launch_is_rejected_while_game_data_patch_lock_is_held(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            api._game_data_patch_lock.acquire()
+            try:
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+            finally:
+                api._game_data_patch_lock.release()
+
+        self.assertFalse(launched["ok"])
+        self.assertIn("补丁", launched["error"]["message"])
 
     def test_scan_discards_internal_feature_mods_from_a_stale_playset(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -550,7 +612,7 @@ class ApiContractTests(unittest.TestCase):
             [],
         )
 
-    def test_game_data_settings_rpc_only_updates_the_three_supported_values(self) -> None:
+    def test_game_data_settings_rpc_only_updates_the_four_supported_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / "state")
             original_language = api.settings_service.get()["language"]
@@ -559,6 +621,7 @@ class ApiContractTests(unittest.TestCase):
                 "save_game_data_settings",
                 [{
                     "unit_model_multiplier": 2.5,
+                    "scale_lord_hero_health": True,
                     "disable_unit_friendly_fire": True,
                     "disable_spell_friendly_fire": True,
                     "language": "ja-JP",
@@ -566,7 +629,8 @@ class ApiContractTests(unittest.TestCase):
             )
 
             self.assertTrue(result["ok"])
-            self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 2.5)
+            self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 3)
+            self.assertTrue(result["data"]["settings"]["scale_lord_hero_health"])
             self.assertTrue(result["data"]["settings"]["disable_unit_friendly_fire"])
             self.assertTrue(result["data"]["settings"]["disable_spell_friendly_fire"])
             self.assertEqual(result["data"]["settings"]["language"], original_language)
@@ -1084,6 +1148,32 @@ class ApiContractTests(unittest.TestCase):
                 [call.args[:2] for call in steam_operation.call_args_list],
                 [("force_update", "123"), ("unsubscribe", "123")],
             )
+
+    def test_workshop_page_actions_use_browser_and_official_steam_client_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            asset = ModAsset(
+                id="steam:123:example.pack",
+                pack_name="example.pack",
+                display_name="Example",
+                path=str(Path(temporary) / "example.pack"),
+                directory=temporary,
+                source=SOURCE_WORKSHOP,
+                workshop_id="123",
+            )
+            api._assets = {asset.id: asset}
+
+            with patch("backend.api.webbrowser.open", return_value=True) as browser:
+                browser_result = api.call("open_workshop_page", [asset.id])
+            with patch.object(api, "_open_uri") as open_uri:
+                client_result = api.call("open_workshop_client", [asset.id])
+
+        self.assertTrue(browser_result["ok"])
+        browser.assert_called_once_with(
+            "https://steamcommunity.com/sharedfiles/filedetails/?id=123"
+        )
+        self.assertTrue(client_result["ok"])
+        open_uri.assert_called_once_with("steam://url/CommunityFilePage/123")
 
     def test_warning_ignore_rpc_filters_and_restores_supported_mod_warnings(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

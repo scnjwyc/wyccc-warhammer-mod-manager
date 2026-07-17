@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { localizedPlaysetName, t } from './languages'
-import { gameDataSettingsSignature, useAppStore } from './store'
+import { useAppStore } from './store'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
@@ -21,7 +21,6 @@ import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 
 const store = useAppStore()
 const showGameDataModification = ref(false)
-const gameDataGeneratedSignature = ref('')
 const showSettings = ref(false)
 const showShare = ref(false)
 const showTypeManager = ref(false)
@@ -86,22 +85,13 @@ const saveSettings = async changes => {
 }
 
 const saveGameDataSettings = async changes => {
-  await store.saveGameDataSettings(changes, gameDataGeneratedSignature.value)
+  await store.saveGameDataSettings(changes)
   showGameDataModification.value = false
 }
 
-const generateGameDataPatch = async changes => {
-  const data = await store.generateGameDataPatch(changes)
-  gameDataGeneratedSignature.value = gameDataSettingsSignature(data.settings)
-}
-
-const openGameDataModification = async () => {
-  gameDataGeneratedSignature.value = ''
-  try {
-    await store.refreshGameDataFeatures()
-  } finally {
-    showGameDataModification.value = true
-  }
+const openGameDataModification = () => {
+  showGameDataModification.value = true
+  void store.refreshGameDataFeatures().catch(() => {})
 }
 
 const detectPaths = async () => {
@@ -293,9 +283,13 @@ const handleContextAction = async ({ action, value, mod }) => {
       store.moveManyToPosition(actionIds, 1)
     } else if (action === 'move-bottom') {
       store.moveManyToPosition(actionIds, store.activeIds.length)
-    } else if (action === 'open-workshop') {
+    } else if (action === 'open-workshop-browser') {
       for (const modId of actionIds) {
         if (store.modMap.get(modId)?.workshop_id) await store.openWorkshop(modId)
+      }
+    } else if (action === 'open-workshop-client') {
+      for (const modId of actionIds) {
+        if (store.modMap.get(modId)?.workshop_id) await store.openWorkshopClient(modId)
       }
     } else if (action === 'unsubscribe') {
       const targets = actionIds.filter(modId => store.modMap.get(modId)?.workshop_id)
@@ -747,7 +741,6 @@ onBeforeUnmount(() => {
       :unit-size-mod-name="unitSizeFeature.title"
       :friendly-fire-mod-name="friendlyFireFeature.title"
       @close="showGameDataModification = false"
-      @generate="generateGameDataPatch"
       @save="saveGameDataSettings"
     />
 

@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import socket
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+from backend.steam_friends import SteamFriendsError, SteamPersonaResult
 from backend.steamworks_bridge import SteamworksBridgeError
 from backend.workshop import (
+    AUTHOR_FAILURE_RETRY_MS,
+    AUTHOR_HTTP_MAX_WORKERS,
+    AuthorProfileError,
+    CACHE_SCHEMA_VERSION,
     DEPENDENCY_CACHE_WARNING,
     DETAILS_ENDPOINT,
     WorkshopMetadataService,
@@ -38,6 +45,12 @@ class WorkshopMetadataTests(unittest.TestCase):
         )
         self.query_dependencies = patcher.start()
         self.addCleanup(patcher.stop)
+        friends_patcher = patch(
+            "backend.workshop.query_steam_persona_names",
+            side_effect=lambda steam_ids: SteamPersonaResult({}, tuple(steam_ids)),
+        )
+        self.query_friends = friends_patcher.start()
+        self.addCleanup(friends_patcher.stop)
 
     def test_refresh_caches_creator_and_published_time(self) -> None:
         response = FakeResponse(
@@ -74,6 +87,148 @@ class WorkshopMetadataTests(unittest.TestCase):
         self.assertEqual(item["author"], "Example Author")
         self.assertEqual(item["created_at"], 1_690_000_000_000)
         self.assertEqual(item["updated_at"], 1_700_000_000_000)
+
+    def test_steam_friends_success_avoids_profile_http_and_logs_counts(self) -> None:
+        steam_id = "76561198000000000"
+        self.query_friends.side_effect = None
+        self.query_friends.return_value = SteamPersonaResult(
+            {steam_id: "Steam Author"},
+            (),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            authors: dict[str, dict] = {}
+            with (
+                self.assertLogs("backend.workshop", level="INFO") as logs,
+                patch.object(service, "_fetch_author_profile") as http_profile,
+            ):
+                service._refresh_author_profiles(authors, [steam_id])
+
+        self.assertEqual(authors[steam_id]["name"], "Steam Author")
+        self.assertEqual(authors[steam_id]["last_error_code"], "")
+        self.assertGreater(authors[steam_id]["last_attempt_at"], 0)
+        http_profile.assert_not_called()
+        self.assertIn("success=1", "\n".join(logs.output))
+        self.assertIn("failed=0", "\n".join(logs.output))
+
+    def test_empty_steam_friends_name_falls_back_to_profile_http(self) -> None:
+        steam_id = "76561198000000000"
+        self.query_friends.side_effect = None
+        self.query_friends.return_value = SteamPersonaResult(
+            {steam_id: ""},
+            (steam_id,),
+        )
+        profile = {
+            "steam_id": steam_id,
+            "name": "HTTP Author",
+            "profile_url": f"https://steamcommunity.com/profiles/{steam_id}/",
+            "avatar": "",
+            "fetched_at": 2_000_000_000_000,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            authors: dict[str, dict] = {}
+            with patch.object(
+                service,
+                "_fetch_author_profile",
+                return_value=profile,
+            ) as http_profile:
+                service._refresh_author_profiles(authors, [steam_id])
+
+        http_profile.assert_called_once()
+        self.assertEqual(authors[steam_id]["name"], "HTTP Author")
+
+    def test_failed_refresh_preserves_cached_name_avatar_and_logs_error_code(self) -> None:
+        steam_id = "76561198000000001"
+        now = 2_000_000_000_000
+        old_fetched_at = now - 8 * 24 * 60 * 60 * 1000
+        authors = {
+            steam_id: {
+                "steam_id": steam_id,
+                "name": "Cached Author",
+                "avatar": "https://example.invalid/cached.jpg",
+                "profile_url": f"https://steamcommunity.com/profiles/{steam_id}/",
+                "fetched_at": old_fetched_at,
+            }
+        }
+        self.query_friends.side_effect = SteamFriendsError("steam_unavailable", "offline")
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            with (
+                self.assertLogs("backend.workshop", level="WARNING") as logs,
+                patch("backend.workshop.time.time", return_value=now / 1000),
+                patch("backend.workshop.time.monotonic", return_value=10.0),
+                patch.object(
+                    service,
+                    "_fetch_author_profile",
+                    side_effect=AuthorProfileError("timeout", "timed out", retryable=True),
+                ),
+            ):
+                service._refresh_author_profiles(authors, [steam_id])
+
+        self.assertEqual(authors[steam_id]["name"], "Cached Author")
+        self.assertEqual(authors[steam_id]["avatar"], "https://example.invalid/cached.jpg")
+        self.assertEqual(authors[steam_id]["fetched_at"], old_fetched_at)
+        self.assertEqual(authors[steam_id]["last_error_code"], "timeout")
+        self.assertEqual(authors[steam_id]["last_error_at"], now)
+        self.assertIn("retained=1", "\n".join(logs.output))
+        self.assertIn("failed=1", "\n".join(logs.output))
+        self.assertIn("timeout=1", "\n".join(logs.output))
+
+    def test_transient_http_error_retries_but_permanent_404_does_not(self) -> None:
+        service = WorkshopMetadataService(Path("unused-cache.json"))
+        transient = urllib.error.URLError(socket.timeout("timed out"))
+        success = FakeResponse(b"<profile><steamID>Retry Author</steamID></profile>")
+        with (
+            patch(
+                "backend.workshop.urllib.request.urlopen",
+                side_effect=[transient, success],
+            ) as request,
+            patch("backend.workshop.time.sleep") as sleep,
+        ):
+            profile = service._fetch_author_profile("76561198000000002")
+
+        self.assertEqual(profile["name"], "Retry Author")
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(0.5)
+
+        permanent = urllib.error.HTTPError(
+            "https://example.invalid",
+            404,
+            "missing",
+            {},
+            None,
+        )
+        with patch(
+            "backend.workshop.urllib.request.urlopen",
+            side_effect=permanent,
+        ) as request:
+            with self.assertRaises(AuthorProfileError) as raised:
+                service._fetch_author_profile("76561198000000002")
+        self.assertEqual(raised.exception.code, "http_404")
+        self.assertFalse(raised.exception.retryable)
+        request.assert_called_once()
+
+    def test_author_failure_cooldown_uses_legacy_empty_record_timestamp(self) -> None:
+        steam_id = "76561198000000003"
+        now = 2_000_000_000_000
+        authors = {
+            steam_id: {
+                "steam_id": steam_id,
+                "name": "",
+                "avatar": "",
+                "fetched_at": now - AUTHOR_FAILURE_RETRY_MS + 1,
+            }
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            with patch("backend.workshop.time.time", return_value=now / 1000):
+                service._refresh_author_profiles(authors, [steam_id])
+
+        self.query_friends.assert_not_called()
+
+    def test_author_http_concurrency_is_limited_to_two_workers(self) -> None:
+        self.assertEqual(AUTHOR_HTTP_MAX_WORKERS, 2)
 
     def test_selected_language_uses_localized_title_and_falls_back_per_field(self) -> None:
         details_response = FakeResponse(
@@ -472,7 +627,7 @@ class WorkshopMetadataTests(unittest.TestCase):
         self.query_dependencies.assert_called_once_with(["123"], "english")
         self.assertEqual(item["required_workshop_items"], [])
         self.assertEqual(item["dependencies_last_error_at"], 0)
-        self.assertEqual(persisted["schema_version"], 6)
+        self.assertEqual(persisted["schema_version"], CACHE_SCHEMA_VERSION)
 
 
 if __name__ == "__main__":

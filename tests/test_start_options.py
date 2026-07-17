@@ -12,7 +12,6 @@ from unittest.mock import patch
 import backend.start_options as start_options
 from backend.game_data import GameDataBuildResult, GameDataEntry
 from backend.start_options import (
-    EMPTY_MOVIE,
     INTRO_MOVIES,
     PERMISSIONS_ENTRY,
     PERMISSIONS_GUID,
@@ -26,6 +25,28 @@ from backend.start_options import (
 
 UNIT_SIZE_FEATURE_WORKSHOP_ID = "3765783838"
 FRIENDLY_FIRE_FEATURE_WORKSHOP_ID = "3765783977"
+REFERENCE_INTRO_MOVIES = {
+    *(
+        f"movies\\epilepsy_warning\\epilepsy_warning_{language}.ca_vp8"
+        for language in (
+            "br",
+            "cn",
+            "cz",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "it",
+            "kr",
+            "pl",
+            "ru",
+            "tr",
+            "zh",
+        )
+    ),
+    "movies\\gam_int.ca_vp8",
+    *(f"movies\\startup_movie_{index:02d}.ca_vp8" for index in range(1, 9)),
+}
 
 
 def _string_u8(value: str) -> bytes:
@@ -88,6 +109,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     [],
                     {
                         "unit_model_multiplier": 2.0,
+                        "scale_lord_hero_health": True,
                         "disable_unit_friendly_fire": True,
                         "disable_spell_friendly_fire": True,
                     },
@@ -117,6 +139,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     [],
                     {
                         "unit_model_multiplier": 1.0,
+                        "scale_lord_hero_health": False,
                         "disable_unit_friendly_fire": False,
                         "disable_spell_friendly_fire": False,
                     },
@@ -149,6 +172,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     UNIT_SIZE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 2.0,
+                        "scale_lord_hero_health": True,
                         "disable_unit_friendly_fire": False,
                         "disable_spell_friendly_fire": False,
                     },
@@ -157,6 +181,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     FRIENDLY_FIRE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 1.0,
+                        "scale_lord_hero_health": False,
                         "disable_unit_friendly_fire": True,
                         "disable_spell_friendly_fire": True,
                     },
@@ -171,6 +196,7 @@ class StartOptionsPackTests(unittest.TestCase):
                             [],
                             {
                                 "unit_model_multiplier": 2.0,
+                                "scale_lord_hero_health": True,
                                 "disable_unit_friendly_fire": True,
                                 "disable_spell_friendly_fire": True,
                             },
@@ -228,6 +254,45 @@ class StartOptionsPackTests(unittest.TestCase):
             self.assertIn("unit_model_multiplier", result["options"])
             self.assertEqual(result["game_data"]["unit_rows_scaled"], 1)
 
+    def test_game_data_builder_reports_zero_modification_without_writing_a_pack(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            write_pfh5_pack(
+                data / "db.pack",
+                [PackEntry("db\\main_units_tables\\data__", b"source-table")],
+            )
+            unchanged = GameDataBuildResult(
+                (GameDataEntry("db\\main_units_tables\\!!!!wyccc_game_data_v0007", b"unchanged"),),
+                {
+                    "unit_model_multiplier": 2.0,
+                    "unit_rows_scaled": 0,
+                    "land_rows_scaled": 0,
+                    "unit_friendly_fire_rows_changed": 0,
+                    "spell_friendly_fire_rows_changed": 0,
+                },
+            )
+
+            with patch("backend.start_options.build_game_data_entries", return_value=unchanged):
+                result = build_game_data_patch(
+                    root / "runtime",
+                    str(data),
+                    {},
+                    [],
+                    {"unit_model_multiplier": 2.0},
+                    subscribed_workshop_ids=(UNIT_SIZE_FEATURE_WORKSHOP_ID,),
+                )
+
+            self.assertEqual(result["path"], "")
+            self.assertEqual(result["entry_count"], 0)
+            self.assertEqual(result["game_data"], unchanged.stats)
+            self.assertFalse((root / "runtime" / "!!!!wyccc_game_data_patch.pack").exists())
+
     def test_ca_zstandard_payload_uses_prefixed_output_size(self) -> None:
         calls: list[tuple[bytes, int]] = []
 
@@ -284,10 +349,11 @@ class StartOptionsPackTests(unittest.TestCase):
             )
 
             entries = {entry.name: entry.payload for entry in read_pack_entries(Path(result["path"]))}
-            self.assertEqual(result["entry_count"], 8)
+            self.assertEqual(set(INTRO_MOVIES), REFERENCE_INTRO_MOVIES)
+            self.assertEqual(result["entry_count"], 24)
             self.assertEqual(entries["script\\enable_console_logging"], b"\0")
-            for movie in INTRO_MOVIES:
-                self.assertEqual(entries[movie], EMPTY_MOVIE)
+            for movie in REFERENCE_INTRO_MOVIES:
+                self.assertEqual(entries[movie], b"")
             permissions = entries[PERMISSIONS_ENTRY]
             row_count_offset = 4 + 2 + len(PERMISSIONS_GUID) * 2 + 4 + 4 + 1
             self.assertEqual(struct.unpack_from("<i", permissions, row_count_offset)[0], 3)

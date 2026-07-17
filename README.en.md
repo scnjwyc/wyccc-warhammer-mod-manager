@@ -4,7 +4,7 @@
 
 A lightweight mod manager for Total War: WARHAMMER III.
 
-The current version is `0.6.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `0.6.5`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 

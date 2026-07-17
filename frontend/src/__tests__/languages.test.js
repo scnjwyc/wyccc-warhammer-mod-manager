@@ -91,38 +91,38 @@ describe('built-in interface languages', () => {
     }
   })
 
-  it('shows the supported unit multiplier range in every language', () => {
+  it('describes the 1-5 integer unit-scale control and character-health option in every language', () => {
     const expectedRanges = {
-      'zh-CN': '0.5–5',
-      'en-US': '0.5–5',
-      'ko-KR': '0.5–5',
-      'ru-RU': '0,5–5',
-      'ja-JP': '0.5～5',
+      'zh-CN': '1–5',
+      'en-US': '1–5',
+      'ko-KR': '1–5',
+      'ru-RU': '1–5',
+      'ja-JP': '1～5',
     }
 
     for (const [language, expectedRange] of Object.entries(expectedRanges)) {
       applyInterfaceLanguage(language)
       expect(t('gameData.unitMultiplierHelp'), language).toContain(expectedRange)
+      expect(t('gameData.scaleLordHeroHealth'), language).not.toBe('gameData.scaleLordHeroHealth')
+      expect(t('gameData.scaleLordHeroHealthHelp'), language).not.toBe('gameData.scaleLordHeroHealthHelp')
     }
+    applyInterfaceLanguage('zh-CN')
+    expect(t('gameData.unitMultiplier')).toBe('单位规模倍率')
   })
 
-  it('describes explicit game-data patch generation in every language', () => {
+  it('describes launch-time game-data patch validation in every language', () => {
     const expected = {
-      'zh-CN': { button: '生成补丁', busy: '生成游戏数据补丁', intro: '点击', reminder: '新增或删除涉及兵模数量或友伤的 MOD 后，必须重新生成补丁。' },
-      'en-US': { button: 'Generate patch', busy: 'Generating game data patch', intro: 'Generate patch', reminder: 'After adding or removing any MOD that affects model counts or friendly fire, you must generate the patch again.' },
-      'ko-KR': { button: '패치 생성', busy: '게임 데이터 패치 생성 중', intro: '패치 생성', reminder: '모델 수 또는 아군 피해에 영향을 주는 MOD를 추가하거나 제거한 뒤에는 반드시 패치를 다시 생성해야 합니다.' },
-      'ru-RU': { button: 'Создать патч', busy: 'Создание патча игровых данных', intro: 'Создать патч', reminder: 'После добавления или удаления MOD, влияющего на численность моделей или урон союзникам, обязательно создайте патч заново.' },
-      'ja-JP': { button: 'パッチを生成', busy: 'ゲームデータパッチを生成中', intro: 'パッチを生成', reminder: '兵数または味方ダメージに影響する MOD を追加・削除した後は、必ずパッチを再生成してください。' },
+      'zh-CN': ['启动游戏时', '配置组或顺序', '源 Pack', 'db.pack', '自动重新生成'],
+      'en-US': ['launched through this manager', 'playset or order', 'source Packs', 'db.pack', 'automatically regenerated'],
+      'ko-KR': ['이 관리자로 게임을 실행할 때', '플레이 세트 또는 순서', '원본 Pack', 'db.pack', '자동으로 다시 생성'],
+      'ru-RU': ['запуске игры через этот менеджер', 'набора или порядка', 'исходных Pack', 'db.pack', 'автоматически пересоздаётся'],
+      'ja-JP': ['このマネージャーからゲームを起動する際', 'プレイセットまたは順序', '元の Pack', 'db.pack', '自動的に再生成'],
     }
 
-    for (const [language, labels] of Object.entries(expected)) {
+    for (const [language, terms] of Object.entries(expected)) {
       applyInterfaceLanguage(language)
-      expect(t('gameData.generatePatch'), `${language}: button`).toBe(labels.button)
-      expect(t('busy.generateGameDataPatch'), `${language}: busy`).toBe(labels.busy)
-      expect(t('gameData.intro'), `${language}: intro`).toContain(labels.intro)
-      expect(t('gameData.regenerateAfterModChanges'), `${language}: reminder`).toBe(labels.reminder)
-      expect(`${t('gameData.intro')} ${t('gameData.runtimeNote')}`, language)
-        .not.toMatch(/启动游戏时|when the game launches|게임 실행 시|При запуске|ゲーム起動時/u)
+      const copy = t('gameData.autoGenerateOnLaunch')
+      for (const term of terms) expect(copy, `${language}: ${term}`).toContain(term)
     }
   })
 
