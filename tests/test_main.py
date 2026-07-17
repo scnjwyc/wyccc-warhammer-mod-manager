@@ -292,19 +292,113 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 2)
 
-    def test_frozen_build_uses_portable_data_directory(self) -> None:
+    def test_frozen_build_uses_user_data_without_creating_sibling_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            executable = root / "Wyccc's Mod Manager.exe"
+            desktop = root / "Desktop"
+            desktop.mkdir()
+            executable = desktop / "Wyccc's Mod Manager.exe"
+            user_data = root / "Roaming" / "WycccModManager"
             with (
                 patch.object(sys, "frozen", True, create=True),
                 patch.object(sys, "executable", str(executable)),
                 patch.dict(os.environ, {}, clear=True),
+                patch("main.default_data_dir", return_value=user_data),
             ):
                 data_dir = resolve_runtime_data_dir()
 
-            self.assertEqual(data_dir, (root / "data").resolve())
-            self.assertTrue(data_dir.is_dir())
+            self.assertEqual(data_dir, user_data)
+            self.assertFalse((desktop / "data").exists())
+
+    def test_frozen_build_migrates_existing_portable_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            desktop = root / "Desktop"
+            portable = desktop / "data"
+            portable.mkdir(parents=True)
+            (portable / "settings.json").write_text(
+                '{"language":"zh-CN"}',
+                encoding="utf-8",
+            )
+            user_data = root / "Roaming" / "WycccModManager"
+            with (
+                patch.object(sys, "frozen", True, create=True),
+                patch.object(
+                    sys,
+                    "executable",
+                    str(desktop / "Wyccc's Mod Manager.exe"),
+                ),
+                patch.dict(os.environ, {}, clear=True),
+                patch("main.default_data_dir", return_value=user_data),
+            ):
+                data_dir = resolve_runtime_data_dir()
+
+            self.assertEqual(data_dir, user_data)
+            self.assertEqual(
+                (user_data / "settings.json").read_text(encoding="utf-8"),
+                '{"language":"zh-CN"}',
+            )
+            self.assertTrue((portable / "settings.json").is_file())
+
+    def test_existing_user_data_wins_over_portable_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            desktop = root / "Desktop"
+            portable = desktop / "data"
+            portable.mkdir(parents=True)
+            (portable / "settings.json").write_text("portable", encoding="utf-8")
+            user_data = root / "Roaming" / "WycccModManager"
+            user_data.mkdir(parents=True)
+            (user_data / "settings.json").write_text("user", encoding="utf-8")
+            with (
+                patch.object(sys, "frozen", True, create=True),
+                patch.object(
+                    sys,
+                    "executable",
+                    str(desktop / "Wyccc's Mod Manager.exe"),
+                ),
+                patch.dict(os.environ, {}, clear=True),
+                patch("main.default_data_dir", return_value=user_data),
+            ):
+                data_dir = resolve_runtime_data_dir()
+
+            self.assertEqual(data_dir, user_data)
+            self.assertEqual(
+                (user_data / "settings.json").read_text(encoding="utf-8"),
+                "user",
+            )
+            self.assertEqual(
+                (portable / "settings.json").read_text(encoding="utf-8"),
+                "portable",
+            )
+
+    def test_failed_portable_migration_falls_back_to_portable_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            desktop = root / "Desktop"
+            portable = desktop / "data"
+            portable.mkdir(parents=True)
+            (portable / "settings.json").write_text("portable", encoding="utf-8")
+            user_data = root / "Roaming" / "WycccModManager"
+            with (
+                patch.object(sys, "frozen", True, create=True),
+                patch.object(
+                    sys,
+                    "executable",
+                    str(desktop / "Wyccc's Mod Manager.exe"),
+                ),
+                patch.dict(os.environ, {}, clear=True),
+                patch("main.default_data_dir", return_value=user_data),
+                patch(
+                    "shutil.copytree",
+                    side_effect=OSError("copy denied"),
+                ) as copytree,
+            ):
+                data_dir = resolve_runtime_data_dir()
+
+            self.assertEqual(data_dir, portable.resolve())
+            copytree.assert_called_once()
+            self.assertFalse(user_data.exists())
 
     def test_explicit_data_directory_wins_in_frozen_build(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,7 +4,9 @@ import argparse
 import ctypes
 import logging
 import os
+import shutil
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -110,9 +112,34 @@ def close_instance_handles() -> None:
     _instance_mutex = None
 
 
+def _migrate_legacy_portable_data(portable: Path, destination: Path) -> Path:
+    if not portable.is_dir():
+        return destination
+    try:
+        if destination.exists():
+            if not destination.is_dir():
+                return portable
+            if any(destination.iterdir()):
+                return destination
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{destination.name}-portable-migration-",
+            dir=destination.parent,
+        ) as temporary:
+            staged = Path(temporary) / destination.name
+            shutil.copytree(portable, staged)
+            if destination.exists():
+                destination.rmdir()
+            staged.replace(destination)
+        return destination
+    except OSError:
+        return portable
+
+
 def resolve_runtime_data_dir(override: str = "") -> Path:
     if override:
         return Path(override).expanduser().resolve(strict=False)
+    destination = default_data_dir()
     has_data_override = any(
         os.environ.get(name)
         for name in (
@@ -123,12 +150,8 @@ def resolve_runtime_data_dir(override: str = "") -> Path:
     )
     if getattr(sys, "frozen", False) and not has_data_override:
         portable = Path(sys.executable).resolve().parent / "data"
-        try:
-            portable.mkdir(parents=True, exist_ok=True)
-            return portable
-        except OSError:
-            pass
-    return default_data_dir()
+        return _migrate_legacy_portable_data(portable, destination)
+    return destination
 
 
 def configure_logging(data_dir: Path) -> None:
