@@ -158,7 +158,7 @@ python scripts/build.py --package --output-dir "G:\Wyccc's Mod Manager"
 %APPDATA%\WycccModManager\
 ```
 
-PyInstaller 发布结果只包含 EXE；程序首次运行后会在 EXE 同目录创建 `data/` 保存便携数据，如果发布目录不可写则回退到上述用户目录。命令行 `--data-dir` 和环境变量 `WYCCC_MM_DATA_DIR` 可显式覆盖。升级安装会在新目录尚不存在时依次读取旧版 `%APPDATA%\WycccWarhammerManager\`、`%APPDATA%\WycccWarhammerModManager\`，避免丢失现有设置与播放集。
+PyInstaller 发布结果只包含 EXE；发布版默认同样使用上述用户目录，因此从桌面直接运行不会再创建 `data/`。如果用户目录尚无数据而 EXE 同目录存在旧版 `data/`，首次启动会先将其完整复制到用户目录，旧目录会保留以便确认迁移结果后手动删除。命令行 `--data-dir` 和环境变量 `WYCCC_MM_DATA_DIR` 可显式覆盖。升级安装也会在新目录尚不存在时依次读取旧版 `%APPDATA%\WycccWarhammerManager\`、`%APPDATA%\WycccWarhammerModManager\`，避免丢失现有设置与播放集。
 
 其中可能包含：
 

@@ -158,7 +158,7 @@ The application does not require a separate manager account and includes no tele
 %APPDATA%\WycccModManager\
 ```
 
-The PyInstaller release contains only the EXE. On first launch, the application creates a `data/` directory beside the EXE for portable data. If the release directory is not writable, it falls back to the user directory above. The `--data-dir` command-line option and `WYCCC_MM_DATA_DIR` environment variable can explicitly override this behavior. During an upgrade, if no data exists in the new location, the application checks the legacy `%APPDATA%\WycccWarhammerManager\` and `%APPDATA%\WycccWarhammerModManager\` directories in order so existing settings and playsets are not lost.
+The PyInstaller release contains only the EXE and uses the same per-user directory by default, so running it directly from the Desktop no longer creates `data/`. If the user directory has no data and an older sibling `data/` exists beside the EXE, the first launch copies it into the user directory while retaining the source for manual cleanup after verification. The `--data-dir` command-line option and `WYCCC_MM_DATA_DIR` environment variable can explicitly override this behavior. During an upgrade, if no data exists in the new location, the application also checks the legacy `%APPDATA%\WycccWarhammerManager\` and `%APPDATA%\WycccWarhammerModManager\` directories in order so existing settings and playsets are not lost.
 
 The data directory may contain:
 
