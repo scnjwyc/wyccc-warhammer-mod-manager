@@ -41,7 +41,7 @@ def fetch_workshop_collection(value: str, *, app_id: int | str) -> dict[str, Any
         data=payload,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "WycccModManager/0.8.0",
+            "User-Agent": "WycccModManager/0.8.1",
         },
         method="POST",
     )

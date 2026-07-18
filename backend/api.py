@@ -303,9 +303,10 @@ class API:
     def _get_bootstrap(self) -> dict[str, Any]:
         settings = self.settings_service.get_public()
         paths = self.settings_service.resolve_game_paths()
+        game_id = paths.game_id
         target = self._active_order_path(paths.game_path) if paths.game_path else Path()
         self._last_order_token = file_token(target) if paths.game_path else "missing"
-        current_playset = self.state_repository.get_current_playset()
+        current_playset = self.state_repository.get_current_playset(game_id)
         private_settings = self.settings_service.get()
         running = self._current_runtime_running()
         return {
@@ -315,7 +316,7 @@ class API:
             "paths": paths.to_dict(),
             "path_health": self._path_health(paths),
             "enabled_order": current_playset["mod_ids"],
-            "playsets": self.state_repository.list_playsets(),
+            "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current_playset,
             "backups": self.state_repository.list_backups(),
             "mod_types": self.state_repository.list_mod_types(),
@@ -567,6 +568,7 @@ class API:
             scan_revision = self._mod_revision_value()
             settings = self.settings_service.get()
             paths = self.settings_service.resolve_game_paths()
+            game_id = paths.game_id
             health = self._path_health(paths)
             if not health["game_ready"]:
                 raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
@@ -617,19 +619,19 @@ class API:
                 if mod_id in self._assets
             }
 
-            current_playset = self.state_repository.get_current_playset()
+            current_playset = self.state_repository.get_current_playset(game_id)
             original_order = list(current_playset["mod_ids"])
-            if not self.state_repository.are_playsets_initialized():
+            if not self.state_repository.are_playsets_initialized(game_id):
                 original_order = self.load_order.import_disk_order(
                     paths.game_path,
                     scan_result.mods,
                     self.state_repository.get_active_order_filename(),
                 )
-                self.state_repository.update_current_playset(original_order)
-                self.state_repository.mark_playsets_initialized()
+                self.state_repository.update_current_playset(original_order, game_id)
+                self.state_repository.mark_playsets_initialized(game_id)
             stored_order = self._canonicalize_mod_ids(original_order)
             if stored_order != original_order:
-                self.state_repository.update_current_playset(stored_order)
+                self.state_repository.update_current_playset(stored_order, game_id)
             present_order = [mod_id for mod_id in stored_order if mod_id in self._assets]
             missing_order = [mod_id for mod_id in stored_order if mod_id not in self._assets]
             self._refresh_missing_dependency_warnings(present_order)
@@ -641,8 +643,8 @@ class API:
                     "enabled_order": present_order,
                     "missing_enabled_ids": missing_order,
                     "order_token": self._last_order_token,
-                    "playsets": self.state_repository.list_playsets(),
-                    "current_playset": self.state_repository.get_current_playset(),
+                    "playsets": self.state_repository.list_playsets(game_id),
+                    "current_playset": self.state_repository.get_current_playset(game_id),
                     # A filesystem event arriving during this scan must remain
                     # visible to the frontend so it schedules one follow-up scan.
                     "mod_revision": scan_revision,
@@ -738,6 +740,7 @@ class API:
         expected_token: str = "",
     ) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        game_id = paths.game_id
         ordered_mod_ids = self._canonicalize_mod_ids(ordered_mod_ids)
         plan = self.load_order.build_plan(
             paths.game_path,
@@ -755,7 +758,7 @@ class API:
             expected_token or self._last_order_token,
             comparison_path,
         )
-        current_playset = self.state_repository.get_current_playset()
+        current_playset = self.state_repository.get_current_playset(game_id)
         current_ids = self._canonicalize_mod_ids(current_playset["mod_ids"])
         missing_ids = {
             mod_id
@@ -771,7 +774,7 @@ class API:
                 playset_order.append(active_queue.pop(0))
         playset_order.extend(active_queue)
         self.state_repository.update_current_playset(
-            list(dict.fromkeys(playset_order))
+            list(dict.fromkeys(playset_order)), game_id
         )
         self._refresh_missing_dependency_warnings(written_plan.ordered_mod_ids)
         self.state_repository.set_active_order_filename(Path(written_plan.target_path).name)
@@ -829,7 +832,7 @@ class API:
                     data_path=paths.data_path,
                     assets=self._assets,
                     active_ids=saved["plan"]["ordered_mod_ids"],
-                    playset_id=self.state_repository.get_current_playset_id(),
+                    playset_id=self.state_repository.get_current_playset_id(paths.game_id),
                     settings=settings,
                     subscription_state=subscription_state,
                 )
@@ -1061,58 +1064,64 @@ class API:
         return self._runtime_payload(running)
 
     def _list_playsets(self) -> list[dict[str, Any]]:
-        return self.state_repository.list_playsets()
+        return self.state_repository.list_playsets(self._active_game().id)
 
     def _current_playset_payload(self) -> dict[str, Any]:
-        current = self.state_repository.get_current_playset()
+        game_id = self._active_game().id
+        current = self.state_repository.get_current_playset(game_id)
         canonical_ids = self._canonicalize_mod_ids(current["mod_ids"])
         if canonical_ids != current["mod_ids"]:
-            current = self.state_repository.update_current_playset(canonical_ids)
+            current = self.state_repository.update_current_playset(canonical_ids, game_id)
         present = [mod_id for mod_id in canonical_ids if mod_id in self._assets]
         missing = [mod_id for mod_id in canonical_ids if mod_id not in self._assets]
         self._refresh_missing_dependency_warnings(present)
         return {
-            "playsets": self.state_repository.list_playsets(),
+            "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current,
             "ordered_mod_ids": present,
             "missing_mod_ids": missing,
         }
 
     def _create_playset(self, name: str, mod_ids: list[str]) -> dict[str, Any]:
+        game_id = self._active_game().id
         self.state_repository.create_playset(
             name,
             self._canonicalize_mod_ids(mod_ids),
+            game_id,
         )
         return self._current_playset_payload()
 
     def _rename_playset(self, playset_id: str, name: str) -> dict[str, Any]:
-        playset = self.state_repository.rename_playset(playset_id, name)
+        game_id = self._active_game().id
+        playset = self.state_repository.rename_playset(playset_id, name, game_id)
         return {
             "playset": playset,
-            "playsets": self.state_repository.list_playsets(),
-            "current_playset": self.state_repository.get_current_playset(),
+            "playsets": self.state_repository.list_playsets(game_id),
+            "current_playset": self.state_repository.get_current_playset(game_id),
         }
 
     def _update_playset(self, playset_id: str, mod_ids: list[str]) -> dict[str, Any]:
+        game_id = self._active_game().id
         playset = self.state_repository.update_playset(
             playset_id,
             self._canonicalize_mod_ids(mod_ids),
+            game_id,
         )
         self._refresh_missing_dependency_warnings(
-            self.state_repository.get_current_playset()["mod_ids"]
+            self.state_repository.get_current_playset(game_id)["mod_ids"]
         )
         return {
             "playset": playset,
-            "playsets": self.state_repository.list_playsets(),
-            "current_playset": self.state_repository.get_current_playset(),
+            "playsets": self.state_repository.list_playsets(game_id),
+            "current_playset": self.state_repository.get_current_playset(game_id),
         }
 
     def _delete_playset(self, playset_id: str) -> dict[str, Any]:
-        self.state_repository.delete_playset(playset_id)
+        self.state_repository.delete_playset(playset_id, self._active_game().id)
         return self._current_playset_payload()
 
     def _switch_playset(self, playset_id: str) -> dict[str, Any]:
-        self.state_repository.switch_playset(playset_id)
+        self.state_repository.switch_playset(playset_id, self._active_game().id)
         return self._current_playset_payload()
 
     def _list_backups(self) -> list[dict[str, Any]]:
@@ -1167,7 +1176,9 @@ class API:
     def _import_share(self, share_code: str) -> dict[str, Any]:
         references = parse_share(share_code)
         ordered_ids, missing = resolve_share_with_pending(references, self._assets)
-        self.state_repository.update_current_playset(ordered_ids)
+        self.state_repository.update_current_playset(
+            ordered_ids, self._active_game().id
+        )
         pending_workshop_ids = list(
             dict.fromkeys(
                 str(reference.get("workshop_id") or "")
@@ -1252,7 +1263,9 @@ class API:
             importable_references,
             self._assets,
         )
-        self.state_repository.update_current_playset(ordered_ids)
+        self.state_repository.update_current_playset(
+            ordered_ids, self._active_game().id
+        )
         pending_workshop_ids = list(
             dict.fromkeys(
                 str(reference.get("workshop_id") or "")
@@ -1324,6 +1337,7 @@ class API:
             "supports_official_profile_import",
             "Official launcher profile import",
         )
+        game_id = self._active_game().id
         if mode not in {"new", "replace"}:
             raise ValueError("官方配置导入模式无效")
         parsed = parse_mod_profile(profile_path)
@@ -1332,7 +1346,7 @@ class API:
         if mode == "new":
             existing_names = {
                 str(item.get("name") or "").casefold()
-                for item in self.state_repository.list_playsets()
+                for item in self.state_repository.list_playsets(game_id)
             }
             base_name = str(parsed["profile"]["name"] or "官方启动器配置").strip()
             name = base_name
@@ -1340,9 +1354,9 @@ class API:
             while name.casefold() in existing_names:
                 name = f"{base_name} ({suffix})"
                 suffix += 1
-            self.state_repository.create_playset(name, ordered_ids)
+            self.state_repository.create_playset(name, ordered_ids, game_id)
         else:
-            self.state_repository.update_current_playset(ordered_ids)
+            self.state_repository.update_current_playset(ordered_ids, game_id)
         pending_workshop_ids = list(
             dict.fromkeys(
                 str(reference.get("workshop_id") or "")
@@ -1413,7 +1427,13 @@ class API:
         if asset.preview_path and preview.is_file():
             try:
                 with Image.open(preview) as source:
-                    image = ImageOps.exif_transpose(source).convert("RGB")
+                    image = ImageOps.exif_transpose(source)
+                    if image.mode == "P" and isinstance(
+                        image.info.get("transparency"),
+                        bytes,
+                    ):
+                        image = image.convert("RGBA")
+                    image = image.convert("RGB")
                     image = ImageOps.fit(
                         image,
                         (72, 72),

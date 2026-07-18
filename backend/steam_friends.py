@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
+import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterable, Iterator
@@ -15,6 +18,8 @@ from .steamworks_bridge import runtime_root
 
 _STEAM_FRIENDS_LOCK = threading.Lock()
 _UNKNOWN_PERSONA_NAMES = {"", "[unknown]"}
+_WORKER_FLAG = "--steam-friends-worker"
+_WORKER_RESULT_PREFIX = "WMM_STEAM_FRIENDS_RESULT="
 
 
 class SteamFriendsError(RuntimeError):
@@ -225,3 +230,138 @@ def query_steam_persona_names(
                 dll.SteamAPI_Shutdown()
             except Exception:
                 pass
+
+
+def query_steam_persona_names_isolated(
+    steam_ids: Iterable[str],
+    app_id: int = 1_142_710,
+    root: Path | None = None,
+    timeout_seconds: float = 5.0,
+    poll_interval: float = 0.05,
+) -> SteamPersonaResult:
+    normalized_ids = _normalized_steam_ids(steam_ids)
+    if not normalized_ids:
+        return SteamPersonaResult({}, ())
+
+    if getattr(sys, "frozen", False):
+        command = [sys.executable, _WORKER_FLAG]
+    else:
+        command = [
+            sys.executable,
+            str(runtime_root() / "main.py"),
+            _WORKER_FLAG,
+        ]
+    request = {
+        "steam_ids": list(normalized_ids),
+        "app_id": int(app_id),
+        "root": str(Path(root).resolve(strict=False)) if root is not None else "",
+        "timeout_seconds": float(timeout_seconds),
+        "poll_interval": float(poll_interval),
+    }
+    try:
+        completed = subprocess.run(
+            command,
+            input=json.dumps(request, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=max(5.0, float(timeout_seconds) + 5.0),
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise SteamFriendsError(
+            "steam_unavailable",
+            f"Steam Friends worker could not run: {exc}",
+        ) from exc
+
+    result_line = next(
+        (
+            line[len(_WORKER_RESULT_PREFIX) :]
+            for line in reversed(completed.stdout.splitlines())
+            if line.startswith(_WORKER_RESULT_PREFIX)
+        ),
+        "",
+    )
+    if not result_line:
+        detail = (completed.stderr or completed.stdout).strip()[-800:]
+        suffix = f": {detail}" if detail else ""
+        raise SteamFriendsError(
+            "steam_unavailable",
+            f"Steam Friends worker returned no result (exit {completed.returncode}){suffix}",
+        )
+    try:
+        payload = json.loads(result_line)
+    except json.JSONDecodeError as exc:
+        raise SteamFriendsError(
+            "steam_unavailable",
+            "Steam Friends worker returned invalid JSON",
+        ) from exc
+    if not isinstance(payload, dict) or not payload.get("ok"):
+        code = str(payload.get("code") or "steam_unavailable") if isinstance(payload, dict) else ""
+        message = str(payload.get("error") or "") if isinstance(payload, dict) else ""
+        raise SteamFriendsError(code or "steam_unavailable", message or "Steam Friends worker failed")
+
+    names = payload.get("names")
+    unresolved = payload.get("unresolved")
+    if not isinstance(names, dict) or not isinstance(unresolved, list):
+        raise SteamFriendsError(
+            "steam_unavailable",
+            "Steam Friends worker returned invalid data",
+        )
+    normalized_names = {
+        str(steam_id): str(name)
+        for steam_id, name in names.items()
+        if str(steam_id).isdigit() and str(name).strip()
+    }
+    normalized_unresolved = tuple(
+        str(steam_id) for steam_id in unresolved if str(steam_id).isdigit()
+    )
+    return SteamPersonaResult(normalized_names, normalized_unresolved)
+
+
+def run_steam_friends_worker(
+    input_stream: Any | None = None,
+    output_stream: Any | None = None,
+) -> int:
+    source = input_stream or sys.stdin
+    target = output_stream or sys.stdout
+    try:
+        request = json.loads(source.read())
+        if not isinstance(request, dict) or not isinstance(request.get("steam_ids"), list):
+            raise ValueError("Steam Friends worker request is invalid")
+        root_value = str(request.get("root") or "").strip()
+        result = query_steam_persona_names(
+            request["steam_ids"],
+            app_id=int(request.get("app_id") or 1_142_710),
+            root=Path(root_value) if root_value else None,
+            timeout_seconds=float(request.get("timeout_seconds") or 5.0),
+            poll_interval=float(request.get("poll_interval") or 0.05),
+        )
+        payload = {
+            "ok": True,
+            "names": result.names,
+            "unresolved": list(result.unresolved),
+        }
+    except SteamFriendsError as exc:
+        payload = {"ok": False, "code": exc.code, "error": str(exc)}
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        payload = {
+            "ok": False,
+            "code": "steam_unavailable",
+            "error": str(exc) or "Steam Friends worker request is invalid",
+        }
+    target.write(
+        f"{_WORKER_RESULT_PREFIX}{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n"
+    )
+    target.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        run_steam_friends_worker()
+        if _WORKER_FLAG in sys.argv[1:]
+        else 2
+    )

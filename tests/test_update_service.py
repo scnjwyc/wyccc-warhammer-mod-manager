@@ -50,7 +50,7 @@ class UpdateServiceTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "app": "Wyccc's Mod Manager",
-                        "version": "0.8.1",
+                        "version": "0.8.2",
                         "published_at": "2026-07-15",
                         "download": {
                             "url": executable.name,
@@ -77,12 +77,12 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["entries"][0]["changes"][0]["type"], "feature")
             self.assertGreater(settings.get()["last_update_check_at"], 0)
 
-            downloaded = service.download("0.8.1")
+            downloaded = service.download("0.8.2")
             self.assertEqual(downloaded["status"], "ready")
             self.assertTrue(Path(downloaded["local_path"]).is_file())
             self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
 
-            service.ignore("0.8.1")
+            service.ignore("0.8.2")
             ignored = service.check(manual=False)
             self.assertFalse(ignored["has_update"])
             self.assertTrue(ignored["ignored"])
@@ -98,7 +98,7 @@ class UpdateServiceTests(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "version": "0.8.1",
+                        "version": "0.8.2",
                         "download_url": executable.name,
                         "sha256": "0" * 64,
                         "size": executable.stat().st_size,
@@ -154,7 +154,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 calls.append(url)
-                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.8.1"
+                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.8.2"
                 return self._manifest(version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
@@ -162,7 +162,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertEqual(calls, [GITHUB_UPDATE_MANIFEST_URL, GITEE_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(checked["version"], "0.8.1")
+            self.assertEqual(checked["version"], "0.8.2")
             self.assertTrue(checked["has_update"])
 
     def test_repository_check_falls_back_when_the_preferred_source_fails(self) -> None:
@@ -174,7 +174,7 @@ class UpdateServiceTests(unittest.TestCase):
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 if url == GITEE_UPDATE_MANIFEST_URL:
                     raise OSError("Gitee unavailable")
-                return self._manifest("0.8.1"), url
+                return self._manifest("0.8.2"), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
                 checked = service.check(manual=True)
@@ -224,6 +224,17 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertIn("$started = Start-Process @startParameters", content)
             self.assertIn("Move-Item -LiteralPath $backup -Destination $current", content)
             self.assertIn("[string]::IsNullOrWhiteSpace($arguments)", content)
+            self.assertEqual(content.count("$env:PYINSTALLER_RESET_ENVIRONMENT = '1'"), 2)
+            self.assertIn(
+                "$env:PYINSTALLER_RESET_ENVIRONMENT = '1'\n"
+                "        $started = Start-Process @startParameters",
+                content,
+            )
+            self.assertIn(
+                "$env:PYINSTALLER_RESET_ENVIRONMENT = '1'\n"
+                "        Start-Process @restartParameters",
+                content,
+            )
             powershell = shutil.which("powershell.exe") or shutil.which("powershell")
             if os.name == "nt" and powershell:
                 environment = os.environ.copy()

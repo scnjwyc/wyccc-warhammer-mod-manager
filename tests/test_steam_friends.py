@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import io
+import json
 import os
+import subprocess
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from backend.steam_friends import (
     SteamFriendsError,
     SteamPersonaResult,
     query_steam_persona_names,
+    query_steam_persona_names_isolated,
+    run_steam_friends_worker,
 )
 
 
@@ -55,6 +61,89 @@ class FakeSteamDll:
 
 
 class SteamFriendsTests(unittest.TestCase):
+    def test_worker_serializes_the_in_process_steam_result(self) -> None:
+        request = io.StringIO(
+            json.dumps(
+                {
+                    "steam_ids": ["76561198000000007"],
+                    "app_id": 1_142_710,
+                    "root": "",
+                    "timeout_seconds": 0.25,
+                    "poll_interval": 0.01,
+                }
+            )
+        )
+        response = io.StringIO()
+        dll = FakeSteamDll(
+            names_after_callbacks={"76561198000000007": (1, "Worker Author")}
+        )
+
+        with patch("backend.steam_friends._load_library", return_value=dll):
+            exit_code = run_steam_friends_worker(request, response)
+
+        self.assertEqual(exit_code, 0)
+        result_line = response.getvalue().strip()
+        self.assertTrue(result_line.startswith("WMM_STEAM_FRIENDS_RESULT="))
+        payload = json.loads(result_line.split("=", 1)[1])
+        self.assertEqual(
+            payload,
+            {
+                "ok": True,
+                "names": {"76561198000000007": "Worker Author"},
+                "unresolved": [],
+            },
+        )
+
+    def test_isolated_query_returns_worker_result_without_loading_steam_in_parent(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=(
+                'WMM_STEAM_FRIENDS_RESULT={"ok":true,'
+                '"names":{"76561198000000001":"Worker Author"},'
+                '"unresolved":[]}\n'
+            ),
+            stderr="native Steam diagnostic",
+        )
+
+        with (
+            patch("subprocess.run", return_value=completed) as run,
+            patch("backend.steam_friends._load_library") as loader,
+        ):
+            result = query_steam_persona_names_isolated(
+                ["76561198000000001"],
+                timeout_seconds=0.25,
+            )
+
+        self.assertEqual(
+            result,
+            SteamPersonaResult({"76561198000000001": "Worker Author"}, ()),
+        )
+        loader.assert_not_called()
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertIn("--steam-friends-worker", command)
+        self.assertTrue(Path(command[1]).is_absolute())
+        self.assertEqual(Path(command[1]).name, "main.py")
+        request = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(request["steam_ids"], ["76561198000000001"])
+        self.assertEqual(request["timeout_seconds"], 0.25)
+
+    def test_isolated_query_classifies_a_worker_exit_without_killing_parent(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="Steam worker stopped",
+        )
+
+        with patch("subprocess.run", return_value=completed):
+            with self.assertRaises(SteamFriendsError) as raised:
+                query_steam_persona_names_isolated(["76561198000000002"])
+
+        self.assertEqual(raised.exception.code, "steam_unavailable")
+        self.assertIn("exit 1", str(raised.exception))
+
     def test_empty_query_returns_without_loading_steam(self) -> None:
         with patch("backend.steam_friends._load_library") as loader:
             result = query_steam_persona_names([])

@@ -125,10 +125,19 @@ describe('built-in interface languages', () => {
       'ja-JP': '1～5',
       'es-ES': '1–5',
     }
+    const expectedFormationTerms = {
+      'zh-CN': '阵型',
+      'en-US': 'formation',
+      'ko-KR': '대형',
+      'ru-RU': 'строя',
+      'ja-JP': '陣形',
+      'es-ES': 'formación',
+    }
 
     for (const [language, expectedRange] of Object.entries(expectedRanges)) {
       applyInterfaceLanguage(language)
       expect(t('gameData.unitMultiplierHelp'), language).toContain(expectedRange)
+      expect(t('gameData.unitMultiplierHelp'), language).toContain(expectedFormationTerms[language])
       expect(t('gameData.scaleLordHeroHealth'), language).not.toBe('gameData.scaleLordHeroHealth')
       expect(t('gameData.scaleLordHeroHealthHelp'), language).not.toBe('gameData.scaleLordHeroHealthHelp')
       expect(t('gameData.singleEntityUnitMode'), language).not.toBe('gameData.singleEntityUnitMode')

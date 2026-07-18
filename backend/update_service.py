@@ -432,6 +432,7 @@ try {{
         if (-not [string]::IsNullOrWhiteSpace($arguments)) {{
             $startParameters['ArgumentList'] = $arguments
         }}
+        $env:PYINSTALLER_RESET_ENVIRONMENT = '1'
         $started = Start-Process @startParameters
         Start-Sleep -Milliseconds 1500
         if ($started.HasExited) {{ throw '新版本启动后立即退出' }}
@@ -452,6 +453,7 @@ try {{
         if (-not [string]::IsNullOrWhiteSpace($arguments)) {{
             $restartParameters['ArgumentList'] = $arguments
         }}
+        $env:PYINSTALLER_RESET_ENVIRONMENT = '1'
         Start-Process @restartParameters
     }}
     exit 1

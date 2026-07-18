@@ -81,6 +81,22 @@ class PackagedRuntimeTests(unittest.TestCase):
         close_handle.assert_called_once_with(123)
         signal.assert_called_once_with()
 
+    def test_steam_friends_worker_mode_runs_before_desktop_startup(self) -> None:
+        with (
+            patch.object(sys, "argv", ["main.py", "--steam-friends-worker"]),
+            patch(
+                "backend.steam_friends.run_steam_friends_worker",
+                return_value=17,
+            ) as worker,
+        ):
+            try:
+                result = run_app()
+            except SystemExit as exc:
+                result = int(exc.code)
+
+        self.assertEqual(result, 17)
+        worker.assert_called_once_with()
+
     def test_missing_webview2_opens_download_guidance_without_creating_a_window(self) -> None:
         fake_webview = SimpleNamespace(create_window=Mock(), start=Mock())
         with (
@@ -137,17 +153,17 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.8.0")
+        self.assertEqual(APP_VERSION, "0.8.1")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.8.0'", frontend_store)
-        self.assertIn("filevers=(0, 8, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.8.0')", version_info)
-        self.assertIn("`0.8.0`", readme)
-        self.assertIn("`0.8.0`", readme_en)
+        self.assertIn("appVersion: '0.8.1'", frontend_store)
+        self.assertIn("filevers=(0, 8, 1, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.8.1')", version_info)
+        self.assertIn("`0.8.1`", readme)
+        self.assertIn("`0.8.1`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], "0.8.0")
+        self.assertEqual(update_manifest["version"], APP_VERSION)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
@@ -160,10 +176,10 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:8]],
-            ["0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+            [release["version"] for release in changelog[:9]],
+            ["0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
         )
-        self.assertEqual(changelog[1]["version"], "0.7.0")
+        self.assertEqual(changelog[1]["version"], "0.8.0")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
@@ -182,13 +198,15 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:8]],
-                ["0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+                [release["version"] for release in releases[:9]],
+                ["0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 3)
+            self.assertEqual(len(releases[0]["entries"]), 1)
+            release_080 = next(release for release in releases if release["version"] == "0.8.0")
             release_070 = next(release for release in releases if release["version"] == "0.7.0")
             release_065 = next(release for release in releases if release["version"] == "0.6.5")
             release_060 = next(release for release in releases if release["version"] == "0.6.0")
+            self.assertEqual(len(release_080["entries"]), 3)
             self.assertEqual(len(release_070["entries"]), 2)
             self.assertEqual(len(release_065["entries"]), 3)
             self.assertEqual(len(release_060["entries"]), 3)
@@ -410,16 +428,20 @@ class PackagedRuntimeTests(unittest.TestCase):
             "бэкенд",
         )
 
+        release_080 = next(
+            release for release in CHANGELOG_STRUCTURE if release["version"] == "0.8.0"
+        )
         structure_keys = {
             key
-            for title_key, changes in CHANGELOG_STRUCTURE[0]["entries"]
+            for title_key, changes in release_080["entries"]
             for key in (title_key, *(text_key for _change_type, text_key in changes))
         }
         self.assertSetEqual(structure_keys, expected_keys)
 
         for language in languages:
-            release = get_all_changelogs(language)[0]
-            self.assertEqual(release["version"], "0.8.0")
+            release = next(
+                item for item in get_all_changelogs(language) if item["version"] == "0.8.0"
+            )
             self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [4, 4, 4])
             visible_copy = " ".join(
                 [entry["title"] for entry in release["entries"]]
@@ -437,12 +459,62 @@ class PackagedRuntimeTests(unittest.TestCase):
                 for change in entry["changes"]:
                     self.assertLessEqual(len(change["text"]), 180, language)
 
-        chinese = str(get_all_changelogs("zh-CN")[0])
+        chinese = str(
+            next(
+                item
+                for item in get_all_changelogs("zh-CN")
+                if item["version"] == "0.8.0"
+            )
+        )
         self.assertIn("全面战争：三国", chinese)
         self.assertIn("当前账号", chinese)
         self.assertIn("同名 PNG 封面", chinese)
         self.assertIn("必要运行组件", chinese)
         self.assertIn("快捷键设置", chinese)
+
+    def test_081_changelog_is_concise_and_covers_the_fixed_features(self) -> None:
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
+        expected_keys = {
+            "v081_fixed_title",
+            "v081_friendly_fire",
+            "v081_game_scoped_playsets",
+            "v081_update_restart",
+            "v081_unit_formation",
+        }
+        structure_keys = {
+            key
+            for title_key, changes in CHANGELOG_STRUCTURE[0]["entries"]
+            for key in (title_key, *(text_key for _change_type, text_key in changes))
+        }
+        self.assertSetEqual(structure_keys, expected_keys)
+
+        for language in languages:
+            release = get_all_changelogs(language)[0]
+            self.assertEqual(release["version"], "0.8.1")
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [4])
+            visible_copy = " ".join(
+                [entry["title"] for entry in release["entries"]]
+                + [
+                    change["text"]
+                    for entry in release["entries"]
+                    for change in entry["changes"]
+                ]
+            )
+            self.assertNotIn("backend", visible_copy.casefold())
+            for entry in release["entries"]:
+                self.assertLessEqual(len(entry["title"]), 60, language)
+                for change in entry["changes"]:
+                    self.assertLessEqual(len(change["text"]), 180, language)
+
+        chinese = str(get_all_changelogs("zh-CN")[0])
+        self.assertIn("移除友伤", chinese)
+        self.assertIn("战锤 3", chinese)
+        self.assertIn("三国", chinese)
+        self.assertIn("软件更新后自动重启", chinese)
+        self.assertIn("作者信息刷新", chinese)
+        self.assertIn("管理器退出", chinese)
+        self.assertIn("阵型", chinese)
+        self.assertIn("牵引坐骑", chinese)
 
     def test_agents_requires_concise_function_focused_changelogs(self) -> None:
         agents = (

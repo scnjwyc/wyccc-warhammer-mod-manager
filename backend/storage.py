@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .constants import IGNORABLE_MOD_WARNING_CODES, LEGACY_MOD_WARNING_CODE_ALIASES
+from .games import DEFAULT_GAME_ID, game_definitions, get_game_definition
 from .mod_types import (
     DEFAULT_MOD_TYPE_ID,
     DEFAULT_MOD_TYPE_IDS,
@@ -20,6 +21,19 @@ from .mod_types import (
 
 DEFAULT_PLAYSET_ID = "default"
 DEFAULT_PLAYSET_NAME = "默认"
+PLAYSET_SCHEMA_VERSION = "8"
+
+
+def _normalized_game_id(game_id: str | None) -> str:
+    return get_game_definition(game_id).id
+
+
+def _default_playset_id(game_id: str) -> str:
+    return DEFAULT_PLAYSET_ID if game_id == DEFAULT_GAME_ID else f"{DEFAULT_PLAYSET_ID}:{game_id}"
+
+
+def _game_state_key(prefix: str, game_id: str) -> str:
+    return f"{prefix}:{game_id}"
 
 
 class StateRepository:
@@ -96,7 +110,8 @@ class StateRepository:
 
                 CREATE TABLE IF NOT EXISTS playsets (
                     id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    game_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
                 );
@@ -164,10 +179,78 @@ class StateRepository:
                         row["mod_id"],
                     ),
                 )
+            self._ensure_playset_schema(connection)
             self._initialize_playsets(connection)
             connection.execute(
-                "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', '7')"
+                "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', ?)",
+                (PLAYSET_SCHEMA_VERSION,),
             )
+
+    @classmethod
+    def _ensure_playset_schema(cls, connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(playsets)").fetchall()
+        }
+        if "game_id" not in columns:
+            cls._migrate_legacy_playsets_to_game_scope(connection)
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS playsets_game_name_unique "
+            "ON playsets(game_id, name COLLATE NOCASE)"
+        )
+
+    @staticmethod
+    def _migrate_legacy_playsets_to_game_scope(connection: sqlite3.Connection) -> None:
+        playset_rows = connection.execute(
+            "SELECT id, name, created_at, updated_at FROM playsets"
+        ).fetchall()
+        item_rows = connection.execute(
+            "SELECT playset_id, mod_id, position FROM playset_items "
+            "ORDER BY playset_id, position, mod_id"
+        ).fetchall()
+        connection.execute("DROP TABLE playset_items")
+        connection.execute("DROP TABLE playsets")
+        connection.execute(
+            """
+            CREATE TABLE playsets (
+                id TEXT PRIMARY KEY,
+                game_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE playset_items (
+                playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                mod_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (playset_id, mod_id)
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+            [
+                (
+                    str(row["id"]),
+                    DEFAULT_GAME_ID,
+                    str(row["name"]),
+                    int(row["created_at"]),
+                    int(row["updated_at"]),
+                )
+                for row in playset_rows
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO playset_items(playset_id, mod_id, position) VALUES(?, ?, ?)",
+            [
+                (str(row["playset_id"]), str(row["mod_id"]), int(row["position"]))
+                for row in item_rows
+            ],
+        )
 
     @classmethod
     def _initialize_playsets(cls, connection: sqlite3.Connection) -> None:
@@ -176,17 +259,28 @@ class StateRepository:
             "SELECT value FROM app_state WHERE key = 'enabled_order'"
         ).fetchone()
         legacy_order = cls._decode_order(legacy_order_row["value"] if legacy_order_row else "[]")
-
-        default_row = connection.execute(
-            "SELECT id FROM playsets WHERE id = ?",
-            (DEFAULT_PLAYSET_ID,),
+        legacy_current_row = connection.execute(
+            "SELECT value FROM app_state WHERE key = 'current_playset_id'"
         ).fetchone()
-        if not default_row:
+        legacy_initialized_row = connection.execute(
+            "SELECT value FROM app_state WHERE key = 'playsets_initialized'"
+        ).fetchone()
+
+        for definition in game_definitions():
+            game_id = definition.id
+            default_id = _default_playset_id(game_id)
+            default_row = connection.execute(
+                "SELECT id FROM playsets WHERE id = ? AND game_id = ?",
+                (default_id, game_id),
+            ).fetchone()
+            if default_row:
+                continue
             connection.execute(
-                "INSERT INTO playsets(id, name, created_at, updated_at) VALUES(?, ?, ?, ?)",
-                (DEFAULT_PLAYSET_ID, DEFAULT_PLAYSET_NAME, now, now),
+                "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+                (default_id, game_id, DEFAULT_PLAYSET_NAME, now, now),
             )
-            cls._replace_playset_items(connection, DEFAULT_PLAYSET_ID, legacy_order)
+            if game_id == DEFAULT_GAME_ID:
+                cls._replace_playset_items(connection, default_id, legacy_order)
 
         migration_row = connection.execute(
             "SELECT value FROM system_info WHERE key = 'playsets_migrated'"
@@ -197,7 +291,7 @@ class StateRepository:
             ).fetchall()
             for preset in preset_rows:
                 playset_id = str(preset["id"] or uuid.uuid4().hex)
-                if playset_id == DEFAULT_PLAYSET_ID or connection.execute(
+                if playset_id == _default_playset_id(DEFAULT_GAME_ID) or connection.execute(
                     "SELECT 1 FROM playsets WHERE id = ?",
                     (playset_id,),
                 ).fetchone():
@@ -205,11 +299,16 @@ class StateRepository:
                 base_name = str(preset["name"] or "旧预设").strip() or "旧预设"
                 if base_name.casefold() == DEFAULT_PLAYSET_NAME.casefold():
                     base_name = f"{DEFAULT_PLAYSET_NAME}（旧预设）"
-                playset_name = cls._available_playset_name(connection, base_name)
+                playset_name = cls._available_playset_name(
+                    connection,
+                    DEFAULT_GAME_ID,
+                    base_name,
+                )
                 connection.execute(
-                    "INSERT INTO playsets(id, name, created_at, updated_at) VALUES(?, ?, ?, ?)",
+                    "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
                     (
                         playset_id,
+                        DEFAULT_GAME_ID,
                         playset_name,
                         int(preset["created_at"] or now),
                         int(preset["updated_at"] or now),
@@ -228,23 +327,55 @@ class StateRepository:
                 "INSERT INTO system_info(key, value) VALUES('playsets_migrated', '1')"
             )
 
-        current_row = connection.execute(
-            "SELECT value FROM app_state WHERE key = 'current_playset_id'"
-        ).fetchone()
-        current_id = str(current_row["value"] if current_row else DEFAULT_PLAYSET_ID)
-        if not connection.execute("SELECT 1 FROM playsets WHERE id = ?", (current_id,)).fetchone():
-            current_id = DEFAULT_PLAYSET_ID
-        cls._write_app_state(connection, "current_playset_id", current_id)
-
-        initialized_row = connection.execute(
-            "SELECT value FROM app_state WHERE key = 'playsets_initialized'"
-        ).fetchone()
-        if not initialized_row:
-            cls._write_app_state(
-                connection,
-                "playsets_initialized",
-                "1" if legacy_order_row else "0",
+        legacy_current_id = str(
+            legacy_current_row["value"] if legacy_current_row else _default_playset_id(DEFAULT_GAME_ID)
+        )
+        legacy_initialized = str(
+            legacy_initialized_row["value"]
+            if legacy_initialized_row
+            else ("1" if legacy_order_row else "0")
+        )
+        for definition in game_definitions():
+            game_id = definition.id
+            default_id = _default_playset_id(game_id)
+            current_key = _game_state_key("current_playset_id", game_id)
+            current_row = connection.execute(
+                "SELECT value FROM app_state WHERE key = ?",
+                (current_key,),
+            ).fetchone()
+            current_id = str(
+                current_row["value"]
+                if current_row
+                else (legacy_current_id if game_id == DEFAULT_GAME_ID else default_id)
             )
+            if not connection.execute(
+                "SELECT 1 FROM playsets WHERE id = ? AND game_id = ?",
+                (current_id, game_id),
+            ).fetchone():
+                current_id = default_id
+            cls._write_app_state(connection, current_key, current_id)
+
+            initialized_key = _game_state_key("playsets_initialized", game_id)
+            if not connection.execute(
+                "SELECT 1 FROM app_state WHERE key = ?",
+                (initialized_key,),
+            ).fetchone():
+                cls._write_app_state(
+                    connection,
+                    initialized_key,
+                    legacy_initialized if game_id == DEFAULT_GAME_ID else "0",
+                )
+
+            enabled_order_key = _game_state_key("enabled_order", game_id)
+            if not connection.execute(
+                "SELECT 1 FROM app_state WHERE key = ?",
+                (enabled_order_key,),
+            ).fetchone():
+                cls._write_app_state(
+                    connection,
+                    enabled_order_key,
+                    json.dumps(legacy_order if game_id == DEFAULT_GAME_ID else [], ensure_ascii=False),
+                )
 
     @staticmethod
     def _decode_order(raw_value: Any) -> list[str]:
@@ -281,22 +412,26 @@ class StateRepository:
         return normalized
 
     @staticmethod
-    def _available_playset_name(connection: sqlite3.Connection, base_name: str) -> str:
+    def _available_playset_name(
+        connection: sqlite3.Connection,
+        game_id: str,
+        base_name: str,
+    ) -> str:
         candidate = base_name
         suffix = 2
         while connection.execute(
-            "SELECT 1 FROM playsets WHERE name = ? COLLATE NOCASE",
-            (candidate,),
+            "SELECT 1 FROM playsets WHERE game_id = ? AND name = ? COLLATE NOCASE",
+            (game_id, candidate),
         ).fetchone():
             candidate = f"{base_name} ({suffix})"
             suffix += 1
         return candidate
 
-    def get_enabled_order(self) -> list[str]:
-        return list(self.get_current_playset()["mod_ids"])
+    def get_enabled_order(self, game_id: str = DEFAULT_GAME_ID) -> list[str]:
+        return list(self.get_current_playset(game_id)["mod_ids"])
 
-    def set_enabled_order(self, mod_ids: list[str]) -> None:
-        self.update_current_playset(mod_ids)
+    def set_enabled_order(self, mod_ids: list[str], game_id: str = DEFAULT_GAME_ID) -> None:
+        self.update_current_playset(mod_ids, game_id)
 
     def get_active_order_filename(self) -> str:
         with self._lock, self._connect() as connection:
@@ -704,19 +839,43 @@ class StateRepository:
         if row:
             raise ValueError("类型名称已存在")
 
-    def list_playsets(self) -> list[dict[str, Any]]:
+    @staticmethod
+    def _require_playset_in_game(
+        connection: sqlite3.Connection,
+        playset_id: str,
+        game_id: str,
+    ) -> None:
+        row = connection.execute(
+            "SELECT game_id FROM playsets WHERE id = ?",
+            (playset_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("播放集不存在")
+        if str(row["game_id"]) != game_id:
+            raise ValueError("播放集不属于当前游戏")
+
+    def list_playsets(self, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
+        game_id = _normalized_game_id(game_id)
+        default_id = _default_playset_id(game_id)
         with self._lock, self._connect() as connection:
             playset_rows = connection.execute(
                 """
-                SELECT id, name, created_at, updated_at
+                SELECT id, game_id, name, created_at, updated_at
                 FROM playsets
+                WHERE game_id = ?
                 ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, name COLLATE NOCASE, id
                 """,
-                (DEFAULT_PLAYSET_ID,),
+                (game_id, default_id),
             ).fetchall()
             item_rows = connection.execute(
-                "SELECT playset_id, mod_id, position FROM playset_items "
-                "ORDER BY playset_id, position, mod_id"
+                """
+                SELECT item.playset_id, item.mod_id, item.position
+                FROM playset_items AS item
+                INNER JOIN playsets AS playset ON playset.id = item.playset_id
+                WHERE playset.game_id = ?
+                ORDER BY item.playset_id, item.position, item.mod_id
+                """,
+                (game_id,),
             ).fetchall()
         items_by_playset: dict[str, list[str]] = {}
         for row in item_rows:
@@ -724,8 +883,9 @@ class StateRepository:
         return [
             {
                 "id": row["id"],
+                "game_id": row["game_id"],
                 "name": row["name"],
-                "is_default": row["id"] == DEFAULT_PLAYSET_ID,
+                "is_default": row["id"] == default_id,
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "mod_ids": items_by_playset.get(row["id"], []),
@@ -733,38 +893,54 @@ class StateRepository:
             for row in playset_rows
         ]
 
-    def get_current_playset_id(self) -> str:
+    def get_current_playset_id(self, game_id: str = DEFAULT_GAME_ID) -> str:
+        game_id = _normalized_game_id(game_id)
+        default_id = _default_playset_id(game_id)
+        current_key = _game_state_key("current_playset_id", game_id)
         with self._lock, self._connect() as connection:
             row = connection.execute(
-                "SELECT value FROM app_state WHERE key = 'current_playset_id'"
+                "SELECT value FROM app_state WHERE key = ?",
+                (current_key,),
             ).fetchone()
-            playset_id = str(row["value"] if row else DEFAULT_PLAYSET_ID)
+            playset_id = str(row["value"] if row else default_id)
             if not connection.execute(
-                "SELECT 1 FROM playsets WHERE id = ?",
-                (playset_id,),
+                "SELECT 1 FROM playsets WHERE id = ? AND game_id = ?",
+                (playset_id, game_id),
             ).fetchone():
-                playset_id = DEFAULT_PLAYSET_ID
-                self._write_app_state(connection, "current_playset_id", playset_id)
+                playset_id = default_id
+                self._write_app_state(connection, current_key, playset_id)
         return playset_id
 
-    def get_current_playset(self) -> dict[str, Any]:
-        current_id = self.get_current_playset_id()
-        return next(
-            item for item in self.list_playsets() if item["id"] == current_id
-        )
+    def get_current_playset(self, game_id: str = DEFAULT_GAME_ID) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
+        current_id = self.get_current_playset_id(game_id)
+        return next(item for item in self.list_playsets(game_id) if item["id"] == current_id)
 
-    def are_playsets_initialized(self) -> bool:
+    def are_playsets_initialized(self, game_id: str = DEFAULT_GAME_ID) -> bool:
+        game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
             row = connection.execute(
-                "SELECT value FROM app_state WHERE key = 'playsets_initialized'"
+                "SELECT value FROM app_state WHERE key = ?",
+                (_game_state_key("playsets_initialized", game_id),),
             ).fetchone()
         return bool(row and str(row["value"]) == "1")
 
-    def mark_playsets_initialized(self) -> None:
+    def mark_playsets_initialized(self, game_id: str = DEFAULT_GAME_ID) -> None:
+        game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
-            self._write_app_state(connection, "playsets_initialized", "1")
+            self._write_app_state(
+                connection,
+                _game_state_key("playsets_initialized", game_id),
+                "1",
+            )
 
-    def create_playset(self, name: str, mod_ids: list[str]) -> dict[str, Any]:
+    def create_playset(
+        self,
+        name: str,
+        mod_ids: list[str],
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("播放集名称不能为空")
@@ -772,120 +948,164 @@ class StateRepository:
         playset_id = uuid.uuid4().hex
         with self._lock, self._connect() as connection:
             if connection.execute(
-                "SELECT 1 FROM playsets WHERE name = ? COLLATE NOCASE",
-                (clean_name,),
+                "SELECT 1 FROM playsets WHERE game_id = ? AND name = ? COLLATE NOCASE",
+                (game_id, clean_name),
             ).fetchone():
                 raise ValueError("播放集名称已存在")
             connection.execute(
-                "INSERT INTO playsets(id, name, created_at, updated_at) VALUES(?, ?, ?, ?)",
-                (playset_id, clean_name, now, now),
+                "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+                (playset_id, game_id, clean_name, now, now),
             )
             normalized = self._replace_playset_items(connection, playset_id, mod_ids)
-            self._write_app_state(connection, "current_playset_id", playset_id)
             self._write_app_state(
                 connection,
-                "enabled_order",
+                _game_state_key("current_playset_id", game_id),
+                playset_id,
+            )
+            self._write_app_state(
+                connection,
+                _game_state_key("enabled_order", game_id),
                 json.dumps(normalized, ensure_ascii=False),
             )
-            self._write_app_state(connection, "playsets_initialized", "1")
-        return next(item for item in self.list_playsets() if item["id"] == playset_id)
+            self._write_app_state(
+                connection,
+                _game_state_key("playsets_initialized", game_id),
+                "1",
+            )
+        return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
 
-    def rename_playset(self, playset_id: str, name: str) -> dict[str, Any]:
-        if playset_id == DEFAULT_PLAYSET_ID:
-            raise ValueError("默认播放集无法重命名")
+    def rename_playset(
+        self,
+        playset_id: str,
+        name: str,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("播放集名称不能为空")
         now = int(time.time() * 1000)
         with self._lock, self._connect() as connection:
-            if not connection.execute(
-                "SELECT 1 FROM playsets WHERE id = ?",
-                (playset_id,),
-            ).fetchone():
-                raise ValueError("播放集不存在")
+            self._require_playset_in_game(connection, playset_id, game_id)
+            if playset_id == _default_playset_id(game_id):
+                raise ValueError("默认播放集无法重命名")
             if connection.execute(
-                "SELECT 1 FROM playsets WHERE name = ? COLLATE NOCASE AND id <> ?",
-                (clean_name, playset_id),
+                "SELECT 1 FROM playsets WHERE game_id = ? AND name = ? COLLATE NOCASE AND id <> ?",
+                (game_id, clean_name, playset_id),
             ).fetchone():
                 raise ValueError("播放集名称已存在")
             connection.execute(
-                "UPDATE playsets SET name = ?, updated_at = ? WHERE id = ?",
-                (clean_name, now, playset_id),
+                "UPDATE playsets SET name = ?, updated_at = ? WHERE id = ? AND game_id = ?",
+                (clean_name, now, playset_id, game_id),
             )
-        return next(item for item in self.list_playsets() if item["id"] == playset_id)
+        return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
 
-    def update_playset(self, playset_id: str, mod_ids: list[str]) -> dict[str, Any]:
+    def update_playset(
+        self,
+        playset_id: str,
+        mod_ids: list[str],
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
         now = int(time.time() * 1000)
         with self._lock, self._connect() as connection:
-            if not connection.execute(
-                "SELECT 1 FROM playsets WHERE id = ?",
-                (playset_id,),
-            ).fetchone():
-                raise ValueError("播放集不存在")
+            self._require_playset_in_game(connection, playset_id, game_id)
             normalized = self._replace_playset_items(connection, playset_id, mod_ids)
             connection.execute(
-                "UPDATE playsets SET updated_at = ? WHERE id = ?",
-                (now, playset_id),
+                "UPDATE playsets SET updated_at = ? WHERE id = ? AND game_id = ?",
+                (now, playset_id, game_id),
             )
             current_row = connection.execute(
-                "SELECT value FROM app_state WHERE key = 'current_playset_id'"
+                "SELECT value FROM app_state WHERE key = ?",
+                (_game_state_key("current_playset_id", game_id),),
             ).fetchone()
             if current_row and str(current_row["value"]) == playset_id:
                 self._write_app_state(
                     connection,
-                    "enabled_order",
+                    _game_state_key("enabled_order", game_id),
                     json.dumps(normalized, ensure_ascii=False),
                 )
-            self._write_app_state(connection, "playsets_initialized", "1")
-        return next(item for item in self.list_playsets() if item["id"] == playset_id)
+            self._write_app_state(
+                connection,
+                _game_state_key("playsets_initialized", game_id),
+                "1",
+            )
+        return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
 
-    def update_current_playset(self, mod_ids: list[str]) -> dict[str, Any]:
-        return self.update_playset(self.get_current_playset_id(), mod_ids)
+    def update_current_playset(
+        self,
+        mod_ids: list[str],
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
+        return self.update_playset(self.get_current_playset_id(game_id), mod_ids, game_id)
 
-    def switch_playset(self, playset_id: str) -> dict[str, Any]:
+    def switch_playset(
+        self,
+        playset_id: str,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
-            if not connection.execute(
-                "SELECT 1 FROM playsets WHERE id = ?",
-                (playset_id,),
-            ).fetchone():
-                raise ValueError("播放集不存在")
+            self._require_playset_in_game(connection, playset_id, game_id)
             item_rows = connection.execute(
                 "SELECT mod_id FROM playset_items WHERE playset_id = ? ORDER BY position, mod_id",
                 (playset_id,),
             ).fetchall()
             mod_ids = [str(row["mod_id"]) for row in item_rows]
-            self._write_app_state(connection, "current_playset_id", playset_id)
             self._write_app_state(
                 connection,
-                "enabled_order",
+                _game_state_key("current_playset_id", game_id),
+                playset_id,
+            )
+            self._write_app_state(
+                connection,
+                _game_state_key("enabled_order", game_id),
                 json.dumps(mod_ids, ensure_ascii=False),
             )
-            self._write_app_state(connection, "playsets_initialized", "1")
-        return next(item for item in self.list_playsets() if item["id"] == playset_id)
+            self._write_app_state(
+                connection,
+                _game_state_key("playsets_initialized", game_id),
+                "1",
+            )
+        return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
 
-    def delete_playset(self, playset_id: str) -> dict[str, Any]:
-        if playset_id == DEFAULT_PLAYSET_ID:
-            raise ValueError("默认播放集无法删除")
+    def delete_playset(
+        self,
+        playset_id: str,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
+        default_id = _default_playset_id(game_id)
         with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            if playset_id == default_id:
+                raise ValueError("默认播放集无法删除")
             current_row = connection.execute(
-                "SELECT value FROM app_state WHERE key = 'current_playset_id'"
+                "SELECT value FROM app_state WHERE key = ?",
+                (_game_state_key("current_playset_id", game_id),),
             ).fetchone()
-            cursor = connection.execute("DELETE FROM playsets WHERE id = ?", (playset_id,))
-            if cursor.rowcount == 0:
-                raise ValueError("播放集不存在")
+            connection.execute(
+                "DELETE FROM playsets WHERE id = ? AND game_id = ?",
+                (playset_id, game_id),
+            )
             if current_row and str(current_row["value"]) == playset_id:
                 item_rows = connection.execute(
                     "SELECT mod_id FROM playset_items WHERE playset_id = ? ORDER BY position, mod_id",
-                    (DEFAULT_PLAYSET_ID,),
+                    (default_id,),
                 ).fetchall()
                 default_ids = [str(row["mod_id"]) for row in item_rows]
-                self._write_app_state(connection, "current_playset_id", DEFAULT_PLAYSET_ID)
                 self._write_app_state(
                     connection,
-                    "enabled_order",
+                    _game_state_key("current_playset_id", game_id),
+                    default_id,
+                )
+                self._write_app_state(
+                    connection,
+                    _game_state_key("enabled_order", game_id),
                     json.dumps(default_ids, ensure_ascii=False),
                 )
-        return self.get_current_playset()
+        return self.get_current_playset(game_id)
 
     def add_backup(self, file_path: str, ordered_mod_ids: list[str]) -> dict[str, Any]:
         backup_id = uuid.uuid4().hex

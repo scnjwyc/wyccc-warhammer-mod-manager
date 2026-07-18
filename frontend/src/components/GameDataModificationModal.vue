@@ -217,6 +217,26 @@ const submit = () => {
           </label>
         </section>
 
+        <section class="game-data-card friendly-fire-card" :class="{ unavailable: !friendlyFireAvailable }">
+          <p v-if="!friendlyFireAvailable" class="game-data-requirement" data-testid="friendly-fire-requirement">
+            {{ requirementMessage(friendlyFireModName) }}
+          </p>
+          <label class="switch-row">
+            <input v-model="draft.disable_unit_friendly_fire" type="checkbox" :disabled="!!busy || !friendlyFireAvailable" data-testid="disable-unit-friendly-fire" />
+            <span>
+              <strong>{{ t('gameData.disableUnitFriendlyFire') }}</strong>
+              <small>{{ t('gameData.disableUnitFriendlyFireHelp') }}</small>
+            </span>
+          </label>
+          <label class="switch-row">
+            <input v-model="draft.disable_spell_friendly_fire" type="checkbox" :disabled="!!busy || !friendlyFireAvailable" data-testid="disable-spell-friendly-fire" />
+            <span>
+              <strong>{{ t('gameData.disableSpellFriendlyFire') }}</strong>
+              <small>{{ t('gameData.disableSpellFriendlyFireHelp') }}</small>
+            </span>
+          </label>
+        </section>
+
         <section class="game-data-card multiplier-card unit-capacity-card" :class="{ unavailable: !unitCapacityAvailable }">
           <div class="game-data-card-copy">
             <strong>{{ t('gameData.unitRecruitmentCapacityMultiplier') }}</strong>
@@ -247,26 +267,6 @@ const submit = () => {
           </div>
         </section>
 
-        <section class="game-data-card friendly-fire-card" :class="{ unavailable: !friendlyFireAvailable }">
-          <p v-if="!friendlyFireAvailable" class="game-data-requirement" data-testid="friendly-fire-requirement">
-            {{ requirementMessage(friendlyFireModName) }}
-          </p>
-          <label class="switch-row">
-            <input v-model="draft.disable_unit_friendly_fire" type="checkbox" :disabled="!!busy || !friendlyFireAvailable" data-testid="disable-unit-friendly-fire" />
-            <span>
-              <strong>{{ t('gameData.disableUnitFriendlyFire') }}</strong>
-              <small>{{ t('gameData.disableUnitFriendlyFireHelp') }}</small>
-            </span>
-          </label>
-          <label class="switch-row">
-            <input v-model="draft.disable_spell_friendly_fire" type="checkbox" :disabled="!!busy || !friendlyFireAvailable" data-testid="disable-spell-friendly-fire" />
-            <span>
-              <strong>{{ t('gameData.disableSpellFriendlyFire') }}</strong>
-              <small>{{ t('gameData.disableSpellFriendlyFireHelp') }}</small>
-            </span>
-          </label>
-        </section>
-
         <div class="game-data-note">
           <p>{{ t('gameData.runtimeNote') }}</p>
           <p>{{ t('gameData.friendlyEffectsNote') }}</p>
@@ -275,6 +275,9 @@ const submit = () => {
 
       <footer class="modal-footer game-data-footer">
         <div class="game-data-footer-content" data-testid="game-data-footer-content">
+          <p class="game-data-regeneration-warning" data-testid="game-data-regeneration-warning">
+            {{ t('gameData.autoGenerateOnLaunch') }}
+          </p>
           <div class="game-data-footer-actions" data-testid="game-data-footer-actions">
             <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('close')">
               {{ t('common.cancel') }}
@@ -283,9 +286,6 @@ const submit = () => {
               {{ busy || t('gameData.save') }}
             </button>
           </div>
-          <p class="game-data-regeneration-warning" data-testid="game-data-regeneration-warning">
-            {{ t('gameData.autoGenerateOnLaunch') }}
-          </p>
         </div>
       </footer>
     </form>
@@ -311,6 +311,8 @@ const submit = () => {
 
 .game-data-body {
   display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 15px;
   padding: 22px;
 }
@@ -482,7 +484,7 @@ const submit = () => {
 }
 
 .friendly-fire-card {
-  overflow: hidden;
+  min-height: min-content;
   padding: 2px 15px;
 }
 
@@ -519,7 +521,7 @@ const submit = () => {
 
 .game-data-modal > .game-data-footer {
   flex-basis: auto;
-  min-height: 92px;
+  min-height: 72px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
@@ -527,8 +529,9 @@ const submit = () => {
 .game-data-footer-content {
   display: grid;
   width: 100%;
-  gap: 5px;
-  justify-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
 }
 
 .game-data-footer-actions {
@@ -539,9 +542,8 @@ const submit = () => {
 }
 
 .game-data-regeneration-warning {
-  justify-self: end;
+  min-width: 0;
   margin: 0;
-  max-width: min(520px, 100%);
   color: #d69b65;
   font-size: 13px;
   line-height: 1.45;
@@ -567,6 +569,11 @@ const submit = () => {
     padding: 12px 14px;
   }
 
+  .game-data-footer-content {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
   .game-data-footer-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -578,7 +585,7 @@ const submit = () => {
   }
 
   .game-data-regeneration-warning {
-    justify-self: stretch;
+    grid-row: 1;
   }
 }
 </style>

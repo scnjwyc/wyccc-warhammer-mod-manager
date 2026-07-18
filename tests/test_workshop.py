@@ -8,6 +8,8 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+import backend.steam_friends as steam_friends
+import backend.workshop as workshop
 from backend.steam_friends import SteamFriendsError, SteamPersonaResult
 from backend.steamworks_bridge import SteamworksBridgeError
 from backend.workshop import (
@@ -35,6 +37,14 @@ class FakeResponse:
         if isinstance(self.payload, bytes):
             return self.payload
         return json.dumps(self.payload).encode("utf-8")
+
+
+class WorkshopIsolationTests(unittest.TestCase):
+    def test_author_refresh_uses_the_isolated_steam_friends_boundary(self) -> None:
+        self.assertIs(
+            workshop.query_steam_persona_names,
+            steam_friends.query_steam_persona_names_isolated,
+        )
 
 
 class WorkshopMetadataTests(unittest.TestCase):

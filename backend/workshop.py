@@ -16,7 +16,7 @@ from typing import Any
 from .json_store import AtomicJsonStore
 from .steam_friends import (
     SteamFriendsError,
-    query_steam_persona_names,
+    query_steam_persona_names_isolated as query_steam_persona_names,
 )
 from .steamworks_bridge import (
     SteamworksBridgeError,

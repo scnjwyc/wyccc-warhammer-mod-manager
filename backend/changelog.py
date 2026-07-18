@@ -9,6 +9,21 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.8.1",
+        "date": "2026-07-18",
+        "entries": (
+            (
+                "v081_fixed_title",
+                (
+                    ("fix", "v081_friendly_fire"),
+                    ("fix", "v081_game_scoped_playsets"),
+                    ("fix", "v081_update_restart"),
+                    ("fix", "v081_unit_formation"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.8.0",
         "date": "2026-07-18",
         "entries": (
@@ -220,6 +235,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v081_fixed_title": "修复",
+        "v081_friendly_fire": "已在“游戏数据修改”面板恢复“移除友伤”设置。",
+        "v081_game_scoped_playsets": "播放集现按游戏分开保存和显示，战锤 3 与三国互不混用。",
+        "v081_update_restart": "修复软件更新后自动重启时偶发的错误提示，并避免作者信息刷新异常导致管理器退出。",
+        "v081_unit_formation": "修复多倍单位规模下阵型拖拽范围异常，并避免巨炮、战鼓等战争机器重复放大每台机器的牵引坐骑，防止数量错乱和穿模。",
         "v080_added_title": "新增",
         "v080_adjusted_title": "调整",
         "v080_workshop_collection_import": "新增创意工坊 MOD 合集导入：自动订阅缺失 MOD，并按合集原有顺序写入当前播放集。",
@@ -326,6 +346,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v081_fixed_title": "Fixes",
+        "v081_friendly_fire": "Restored the Remove Friendly Fire setting in Game Data Modification.",
+        "v081_game_scoped_playsets": "Playsets are now stored and shown separately for each game, so WARHAMMER III and THREE KINGDOMS no longer mix.",
+        "v081_update_restart": "Fixed an occasional error after update restart and prevented author refresh failures from exiting the manager.",
+        "v081_unit_formation": "Fixed formation dragging at increased unit scales and stopped cannons, war drums, and other engines from multiplying their per-engine draught mounts.",
         "v080_added_title": "Added",
         "v080_adjusted_title": "Adjusted",
         "v080_workshop_collection_import": "Added Workshop collection import: missing MODs are subscribed automatically and the current playset follows the collection order.",
@@ -432,6 +457,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v081_fixed_title": "수정",
+        "v081_friendly_fire": "게임 데이터 수정 화면에 아군 오사 제거 설정을 복원했습니다.",
+        "v081_game_scoped_playsets": "플레이세트를 게임별로 따로 저장하고 표시하여 WARHAMMER III와 THREE KINGDOMS가 섞이지 않습니다.",
+        "v081_update_restart": "업데이트 후 자동 재시작 오류를 수정하고 작성자 정보 새로 고침 실패로 관리자가 종료되지 않도록 했습니다.",
+        "v081_unit_formation": "다중 유닛 규모의 대형 조절을 수정하고, 대포와 전쟁 북 같은 전쟁 기계가 각 기계의 견인 탈것 수를 중복 확대하지 않도록 했습니다.",
         "v080_added_title": "추가",
         "v080_adjusted_title": "조정",
         "v080_workshop_collection_import": "창작마당 컬렉션 가져오기를 추가했습니다. 누락된 MOD를 자동 구독하고 현재 플레이 세트를 컬렉션 순서로 구성합니다.",
@@ -538,6 +568,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v081_fixed_title": "Исправления",
+        "v081_friendly_fire": "В панели изменения игровых данных восстановлена настройка отключения дружественного огня.",
+        "v081_game_scoped_playsets": "Наборы модов теперь сохраняются и отображаются отдельно для каждой игры: WARHAMMER III и THREE KINGDOMS не смешиваются.",
+        "v081_update_restart": "Исправлена ошибка автоперезапуска после обновления; сбой обновления данных авторов больше не закрывает менеджер.",
+        "v081_unit_formation": "Исправлено растягивание строя; пушки, боевые барабаны и другие машины больше не умножают повторно число тягловых животных на каждую машину.",
         "v080_added_title": "Добавлено",
         "v080_adjusted_title": "Изменено",
         "v080_workshop_collection_import": "Добавлен импорт коллекций Мастерской: недостающие MOD подписываются автоматически, а текущий набор получает порядок коллекции.",
@@ -644,6 +679,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v081_fixed_title": "修正",
+        "v081_friendly_fire": "ゲームデータ変更画面に「味方への攻撃を無効化」設定を復元しました。",
+        "v081_game_scoped_playsets": "プレイセットをゲームごとに保存・表示するようにし、WARHAMMER III と THREE KINGDOMS が混在しなくなりました。",
+        "v081_update_restart": "更新後の自動再起動エラーを修正し、作者情報の更新失敗でマネージャーが終了しないようにしました。",
+        "v081_unit_formation": "ユニット規模拡大時の陣形調整を修正し、大砲や戦鼓などが兵器ごとの牽引動物数まで重複して拡大しないようにしました。",
         "v080_added_title": "追加",
         "v080_adjusted_title": "調整",
         "v080_workshop_collection_import": "ワークショップコレクションのインポートを追加しました。不足している MOD を自動購読し、現在のプレイセットへコレクション順で追加します。",
@@ -750,6 +790,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v081_fixed_title": "Correcciones",
+        "v081_friendly_fire": "Se restauró el ajuste para eliminar el fuego amigo en Modificación de datos del juego.",
+        "v081_game_scoped_playsets": "Los conjuntos se guardan y se muestran por juego para que WARHAMMER III y THREE KINGDOMS no se mezclen.",
+        "v081_update_restart": "Se corrigió el reinicio tras actualizar y se evitó que un fallo al actualizar autores cierre el gestor.",
+        "v081_unit_formation": "Se corrigió el ajuste de formaciones y se evitó que cañones, tambores de guerra y otras máquinas multipliquen de nuevo sus monturas de tiro por máquina.",
         "v080_added_title": "Añadido",
         "v080_adjusted_title": "Ajustado",
         "v080_workshop_collection_import": "Se añadió la importación de colecciones del Taller: los MOD faltantes se suscriben automáticamente y el conjunto actual conserva el orden de la colección.",

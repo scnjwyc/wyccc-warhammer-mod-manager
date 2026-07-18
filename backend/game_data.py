@@ -634,13 +634,20 @@ def build_game_data_entries(
             row = candidate.row
             values = row.values
             if key in target_land_units:
-                new_mounts = _scaled_i32(values.get("num_mounts"), multiplier)
+                new_mounts = (
+                    int(values.get("num_mounts") or 0)
+                    if _is_engine_backed(values)
+                    else _scaled_i32(values.get("num_mounts"), multiplier)
+                )
                 new_engines = _scaled_i32(values.get("num_engines"), multiplier)
+                new_rank_depth = _scaled_i32(values.get("rank_depth"), multiplier)
                 row = _patch_i32(row, "num_mounts", new_mounts)
                 row = _patch_i32(row, "num_engines", new_engines)
+                row = _patch_i32(row, "rank_depth", new_rank_depth)
                 if (
                     new_mounts != int(values.get("num_mounts") or 0)
                     or new_engines != int(values.get("num_engines") or 0)
+                    or new_rank_depth != int(values.get("rank_depth") or 0)
                 ):
                     stats["land_rows_scaled"] = int(stats["land_rows_scaled"]) + 1
             if key in character_land_units or key in single_entity_health_land_units:

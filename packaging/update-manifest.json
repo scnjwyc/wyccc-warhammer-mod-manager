@@ -1,74 +1,32 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "published_at": "2026-07-18",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.8.0/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "6dae6a1491ebc8358f2ac5f2fe5c03e4f521c97d00783d6e52e17ee5e39bd89c",
-    "size": 61967145
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.8.1/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "646d0223a925bb3e3585599b6ea55ee7dc025a6a9e61e6aab6b1b09ca0deb864",
+    "size": 61977338
   },
   "changelog": [
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "新增《全面战争：三国》选择与路径检测；切换游戏后会保留各自目录。"
-        },
-        {
-          "type": "feature",
-          "text": "新增快捷键设置：Shift+W 打开工坊，Shift+R 用 RPFM 打开，Shift+E 切换启用状态，Shift+Enter 启动游戏。"
-        },
-        {
-          "type": "feature",
-          "text": "新增创意工坊 MOD 合集导入：自动订阅缺失 MOD，并按合集原有顺序写入当前播放集。"
-        },
-        {
-          "type": "feature",
-          "text": "游戏数据修改新增单位招募容量调节，可设置 1–5 倍或无限。"
-        }
-      ]
-    },
-    {
-      "title": "调整",
-      "changes": [
-        {
-          "type": "improvement",
-          "text": "发布窗口不再选择封面或确认所有权，自动使用与 Pack 同名 PNG 封面。"
-        },
-        {
-          "type": "improvement",
-          "text": "移除设置中的“软件更新通道”选项，更新检查统一使用内置来源。"
-        },
-        {
-          "type": "improvement",
-          "text": "快捷键支持自定义组合键，并会在右键菜单中显示对应快捷键。"
-        },
-        {
-          "type": "improvement",
-          "text": "统一下拉框主题样式，并放大设置页标签与更新日志文字。"
-        }
-      ]
-    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "更新按钮只会对当前账号拥有的工坊项目显示；已订阅但不在 Data 中的自有 MOD 也可更新。"
+          "text": "已在“游戏数据修改”面板恢复“移除友伤”设置。"
         },
         {
           "type": "fix",
-          "text": "启动前会检查必要运行组件，缺失时提供官方下载指引，减少空白窗口。"
+          "text": "播放集现按游戏分开保存和显示，战锤 3 与三国互不混用。"
         },
         {
           "type": "fix",
-          "text": "修复“移入回收站”按钮样式显示不正确的问题。"
+          "text": "修复软件更新后自动重启时偶发的错误提示，并避免作者信息刷新异常导致管理器退出。"
         },
         {
           "type": "fix",
-          "text": "修复了由中文路径导致的各种功能失效。"
+          "text": "修复多倍单位规模下阵型拖拽范围异常，并避免巨炮、战鼓等战争机器重复放大每台机器的牵引坐骑，防止数量错乱和穿模。"
         }
       ]
     }

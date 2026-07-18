@@ -239,8 +239,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=APP_NAME)
     parser.add_argument("--dev-url", default="", help="Use a running Vite development server")
     parser.add_argument("--data-dir", default="", help="Override the application data directory")
+    parser.add_argument(
+        "--steam-friends-worker",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
+    if args.steam_friends_worker:
+        from backend.steam_friends import run_steam_friends_worker
+
+        return run_steam_friends_worker()
     if not ensure_single_instance():
         return 0
     data_dir = resolve_runtime_data_dir(args.data_dir)

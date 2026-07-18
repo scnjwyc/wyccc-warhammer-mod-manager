@@ -57,7 +57,7 @@ class StorageContractTests(unittest.TestCase):
                 schema_version = connection.execute(
                     "SELECT value FROM system_info WHERE key = 'schema_version'"
                 ).fetchone()[0]
-            self.assertEqual(schema_version, "7")
+            self.assertEqual(schema_version, "8")
 
     def test_legacy_presets_migrate_to_playsets_and_current_order_becomes_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -101,6 +101,65 @@ class StorageContractTests(unittest.TestCase):
                 [item["name"] for item in StateRepository(database).list_playsets()],
                 ["默认", "旧预设"],
             )
+
+    def test_playsets_migrate_into_warhammer_and_are_scoped_by_game(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "state.db"
+            with closing(sqlite3.connect(database)) as connection:
+                connection.executescript(
+                    """
+                    CREATE TABLE system_info (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE playsets (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    );
+                    CREATE TABLE playset_items (
+                        playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                        mod_id TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        PRIMARY KEY (playset_id, mod_id)
+                    );
+                    INSERT INTO system_info(key, value) VALUES('schema_version', '7');
+                    INSERT INTO app_state(key, value) VALUES
+                        ('current_playset_id', 'favorite'),
+                        ('playsets_initialized', '1'),
+                        ('enabled_order', '["legacy-a", "legacy-b"]');
+                    INSERT INTO playsets(id, name, created_at, updated_at) VALUES
+                        ('default', '默认', 1, 2),
+                        ('favorite', '常用', 3, 4);
+                    INSERT INTO playset_items(playset_id, mod_id, position) VALUES
+                        ('default', 'legacy-a', 0),
+                        ('default', 'legacy-b', 1),
+                        ('favorite', 'favorite-b', 0),
+                        ('favorite', 'favorite-a', 1);
+                    """
+                )
+
+            repository = StateRepository(database)
+
+            warhammer = repository.list_playsets("warhammer3")
+            three_kingdoms = repository.list_playsets("three_kingdoms")
+            self.assertEqual([item["name"] for item in warhammer], ["默认", "常用"])
+            self.assertTrue(all(item["game_id"] == "warhammer3" for item in warhammer))
+            self.assertEqual(warhammer[1]["mod_ids"], ["favorite-b", "favorite-a"])
+            self.assertEqual(len(three_kingdoms), 1)
+            self.assertTrue(three_kingdoms[0]["is_default"])
+            self.assertEqual(three_kingdoms[0]["mod_ids"], [])
+            self.assertEqual(repository.get_current_playset("warhammer3")["id"], "favorite")
+            self.assertEqual(
+                repository.get_current_playset("three_kingdoms")["id"],
+                "default:three_kingdoms",
+            )
+
+            created = repository.create_playset("常用", ["three-a"], "three_kingdoms")
+            self.assertEqual(created["game_id"], "three_kingdoms")
+            self.assertEqual(created["name"], "常用")
+            self.assertEqual(created["mod_ids"], ["three-a"])
+            with self.assertRaisesRegex(ValueError, "不属于当前游戏"):
+                repository.switch_playset("favorite", "three_kingdoms")
 
     def test_sqlite_schema_and_user_intent_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -308,6 +367,83 @@ class ApiContractTests(unittest.TestCase):
             "options": ["unit_model_multiplier"] if entry_count else [],
             "game_data": {"unit_rows_scaled": entry_count},
         }
+
+    def test_playsets_follow_the_selected_game(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, warhammer_scan = self._prepare_launch_api(root)
+            self.assertTrue(warhammer_scan["ok"])
+            warhammer_created = api.call("create_playset", ["常用", []])
+            self.assertTrue(warhammer_created["ok"])
+            warhammer_playset_id = warhammer_created["data"]["current_playset"]["id"]
+
+            three_kingdoms_game = root / "Total War THREE KINGDOMS"
+            three_kingdoms_data = three_kingdoms_game / "data"
+            three_kingdoms_workshop = root / "steamapps" / "workshop" / "content" / "779340"
+            three_kingdoms_data.mkdir(parents=True)
+            three_kingdoms_workshop.mkdir(parents=True)
+            (three_kingdoms_game / "Three_Kingdoms.exe").write_bytes(b"")
+            (three_kingdoms_data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(three_kingdoms_data / "data.pack")
+
+            switched_to_three_kingdoms = api.call(
+                "save_settings",
+                [{
+                    "selected_game": "three_kingdoms",
+                    "game_installations": {
+                        "warhammer3": {
+                            "game_path": str(root / "Total War WARHAMMER III"),
+                            "workshop_path": "",
+                        },
+                        "three_kingdoms": {
+                            "game_path": str(three_kingdoms_game),
+                            "workshop_path": str(three_kingdoms_workshop),
+                        },
+                    },
+                    "fetch_workshop_metadata": False,
+                }],
+            )
+            self.assertTrue(switched_to_three_kingdoms["ok"])
+
+            bootstrap = api.call("get_bootstrap")
+            self.assertTrue(bootstrap["ok"])
+            self.assertEqual([item["name"] for item in bootstrap["data"]["playsets"]], ["默认"])
+
+            blocked = api.call("switch_playset", [warhammer_playset_id])
+            self.assertFalse(blocked["ok"])
+            self.assertIn("不属于当前游戏", blocked["error"]["message"])
+
+            three_kingdoms_created = api.call("create_playset", ["常用", []])
+            self.assertTrue(three_kingdoms_created["ok"])
+            self.assertEqual(three_kingdoms_created["data"]["current_playset"]["name"], "常用")
+
+            switched_to_warhammer = api.call(
+                "save_settings",
+                [{
+                    "selected_game": "warhammer3",
+                    "game_installations": {
+                        "warhammer3": {
+                            "game_path": str(root / "Total War WARHAMMER III"),
+                            "workshop_path": "",
+                        },
+                        "three_kingdoms": {
+                            "game_path": str(three_kingdoms_game),
+                            "workshop_path": str(three_kingdoms_workshop),
+                        },
+                    },
+                    "fetch_workshop_metadata": False,
+                }],
+            )
+            self.assertTrue(switched_to_warhammer["ok"])
+
+            restored = api.call("get_bootstrap")
+            self.assertTrue(restored["ok"])
+            self.assertEqual(
+                [item["name"] for item in restored["data"]["playsets"]],
+                ["默认", "常用"],
+            )
+            self.assertEqual(restored["data"]["current_playset"]["id"], warhammer_playset_id)
+            self.assertEqual(restored["data"]["current_playset"]["mod_ids"], [])
 
     def test_force_update_requires_the_workshop_download_to_finish(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

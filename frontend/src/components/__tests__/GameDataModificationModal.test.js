@@ -159,7 +159,7 @@ describe('game data modification modal', () => {
     expect(wrapper.vm.$options.emits).not.toContain('generate')
   })
 
-  it('keeps all footer buttons in one right-side action row above the patch reminder', () => {
+  it('keeps the patch reminder and actions in one balanced footer row', () => {
     const wrapper = mount(GameDataModificationModal, {
       props: {
         open: true,
@@ -174,11 +174,47 @@ describe('game data modification modal', () => {
     expect(buttons[1].attributes('type')).toBe('submit')
 
     const reminder = footerContent.get('[data-testid="game-data-regeneration-warning"]')
-    expect(actionRow.element.nextElementSibling).toBe(reminder.element)
+    expect(reminder.element.nextElementSibling).toBe(actionRow.element)
     expect(reminder.text()).toContain('启动游戏时')
     expect(reminder.text()).toContain('配置组或顺序')
     expect(reminder.text()).toContain('源 Pack')
     expect(reminder.text()).toContain('db.pack')
+
+    const footerRule = componentSource.match(/\.game-data-footer-content\s*\{([^}]*)\}/)?.[1] ?? ''
+    expect(footerRule).toContain('grid-template-columns: minmax(0, 1fr) auto')
+    expect(footerRule).toContain('align-items: center')
+  })
+
+  it('keeps friendly-fire controls before recruitment capacity', () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: {},
+        unitSizeSubscribed: true,
+        friendlyFireSubscribed: true,
+        unitCapacitySubscribed: true,
+      },
+    })
+
+    expect(wrapper.findAll('.game-data-card').map(card => ({
+      multiplier: card.classes().includes('multiplier-card'),
+      friendly: card.classes().includes('friendly-fire-card'),
+      capacity: card.classes().includes('unit-capacity-card'),
+    }))).toEqual([
+      { multiplier: true, friendly: false, capacity: false },
+      { multiplier: false, friendly: true, capacity: false },
+      { multiplier: true, friendly: false, capacity: true },
+    ])
+  })
+
+  it('keeps the friendly-fire card from collapsing inside the scroll grid', () => {
+    const bodyRule = componentSource.match(/\.game-data-body\s*\{([^}]*)\}/)?.[1] ?? ''
+    const friendlyFireRule = componentSource.match(/\.friendly-fire-card\s*\{([^}]*)\}/)?.[1] ?? ''
+
+    expect(bodyRule).toContain('grid-auto-rows: max-content')
+    expect(bodyRule).toContain('align-content: start')
+    expect(friendlyFireRule).toContain('min-height: min-content')
+    expect(friendlyFireRule).not.toContain('overflow: hidden')
   })
 
   it('resets the draft from persisted settings whenever it reopens', async () => {

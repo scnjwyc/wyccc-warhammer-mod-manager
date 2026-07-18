@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
