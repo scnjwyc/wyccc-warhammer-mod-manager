@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -101,6 +102,90 @@ describe('bundled Steamworks native bridge', () => {
       expect(payload.result.completed).toBe(true)
       expect(payload.result.actual_size_on_disk).toBe('10')
       expect(existsSync(pack)).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('subscribes a published item so the legacy CA launcher can discover it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wmm-publish-subscribe-'))
+    const bridge = join(root, 'workshop_bridge.js')
+    const steamworks = join(root, 'steamworks')
+    const content = join(root, 'content')
+    const preview = join(root, 'preview.png')
+    const trace = join(root, 'trace.txt')
+    mkdirSync(steamworks)
+    mkdirSync(content)
+    writeFileSync(join(content, 'example.pack'), Buffer.alloc(3))
+    writeFileSync(preview, Buffer.alloc(3))
+    copyFileSync(resolve(process.cwd(), '../steam_runtime/workshop_bridge.js'), bridge)
+    writeFileSync(
+      join(steamworks, 'index.js'),
+      `
+        "use strict";
+        const fs = require("fs");
+        module.exports.init = () => ({
+          localplayer: {
+            getSteamId: () => ({ steamId64: 76561198000000000n }),
+            getName: () => "Wyccc",
+          },
+          workshop: {
+            supportsUpdateLanguage: () => true,
+            getSubscribedItems: () => [],
+            createItem: async () => ({
+              itemId: 123n,
+              needsToAcceptAgreement: false,
+            }),
+            updateItem: async itemId => {
+              fs.appendFileSync(process.env.WMM_TEST_TRACE, \`updated:\${itemId.toString()}\\n\`);
+              return { needsToAcceptAgreement: false };
+            },
+            subscribe: async itemId => {
+              fs.appendFileSync(process.env.WMM_TEST_TRACE, \`subscribed:\${itemId.toString()}\\n\`);
+            },
+          },
+        });
+      `,
+      'utf8',
+    )
+
+    try {
+      let output
+      try {
+        output = execFileSync(
+          process.execPath,
+          [bridge],
+          {
+            input: JSON.stringify({
+              operation: 'publish_item',
+              appId: 1142710,
+              contentPath: content,
+              previewPath: preview,
+              title: 'Example MOD',
+              description: '',
+              changeNote: '',
+              tags: ['mod', 'graphical'],
+              visibility: 0,
+              language: 'english',
+            }),
+            encoding: 'utf8',
+            timeout: 2_000,
+            env: { ...process.env, WMM_TEST_TRACE: trace },
+          },
+        )
+      } catch (error) {
+        throw new Error(`${error.stdout || ''}${error.stderr || ''}`)
+      }
+      const payload = JSON.parse(
+        output.split('\n').find(line => line.startsWith('WMM_WORKSHOP_RESULT=')).slice(20),
+      )
+
+      expect(payload.result.subscribed).toBe(true)
+      expect(payload.result.subscription_added).toBe(true)
+      expect(readFileSync(trace, 'utf8').trim().split('\n')).toEqual([
+        'updated:123',
+        'subscribed:123',
+      ])
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

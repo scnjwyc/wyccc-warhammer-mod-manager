@@ -25,6 +25,7 @@ from backend.start_options import (
 
 UNIT_SIZE_FEATURE_WORKSHOP_ID = "3765783838"
 FRIENDLY_FIRE_FEATURE_WORKSHOP_ID = "3765783977"
+UNIT_CAP_FEATURE_WORKSHOP_ID = start_options.GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_cap"]["workshop_id"]
 REFERENCE_INTRO_MOVIES = {
     *(
         f"movies\\epilepsy_warning\\epilepsy_warning_{language}.ca_vp8"
@@ -172,6 +173,7 @@ class StartOptionsPackTests(unittest.TestCase):
                     UNIT_SIZE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 2.0,
+                        "unit_recruitment_capacity_multiplier": 1,
                         "single_entity_unit_mode": "health",
                         "scale_lord_hero_health": True,
                         "disable_unit_friendly_fire": False,
@@ -182,10 +184,22 @@ class StartOptionsPackTests(unittest.TestCase):
                     FRIENDLY_FIRE_FEATURE_WORKSHOP_ID,
                     {
                         "unit_model_multiplier": 1.0,
+                        "unit_recruitment_capacity_multiplier": 1,
                         "single_entity_unit_mode": "scale",
                         "scale_lord_hero_health": False,
                         "disable_unit_friendly_fire": True,
                         "disable_spell_friendly_fire": True,
+                    },
+                ),
+                (
+                    UNIT_CAP_FEATURE_WORKSHOP_ID,
+                    {
+                        "unit_model_multiplier": 1.0,
+                        "single_entity_unit_mode": "scale",
+                        "scale_lord_hero_health": False,
+                        "unit_recruitment_capacity_multiplier": 4,
+                        "disable_unit_friendly_fire": False,
+                        "disable_spell_friendly_fire": False,
                     },
                 ),
             ):
@@ -200,6 +214,7 @@ class StartOptionsPackTests(unittest.TestCase):
                                 "unit_model_multiplier": 2.0,
                                 "single_entity_unit_mode": "health",
                                 "scale_lord_hero_health": True,
+                                "unit_recruitment_capacity_multiplier": 4,
                                 "disable_unit_friendly_fire": True,
                                 "disable_spell_friendly_fire": True,
                             },
@@ -212,9 +227,14 @@ class StartOptionsPackTests(unittest.TestCase):
                         key
                         for key, value in expected.items()
                         if (key == "unit_model_multiplier" and value != 1.0)
+                        or (key == "unit_recruitment_capacity_multiplier" and value != 1)
                         or (key == "single_entity_unit_mode" and value == "health")
                         or (
-                            key not in {"unit_model_multiplier", "single_entity_unit_mode"}
+                            key not in {
+                                "unit_model_multiplier",
+                                "unit_recruitment_capacity_multiplier",
+                                "single_entity_unit_mode",
+                            }
                             and value
                         )
                     ]

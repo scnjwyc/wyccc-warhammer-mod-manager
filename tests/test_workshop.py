@@ -492,6 +492,39 @@ class WorkshopMetadataTests(unittest.TestCase):
         self.assertEqual(item["description"], "Русское описание")
         self.assertEqual(item["description_language"], "russian")
 
+    def test_metadata_is_scoped_to_the_requested_game_app(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_path = Path(temporary) / "workshop_cache.json"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": CACHE_SCHEMA_VERSION,
+                        "items": {
+                            "123": {
+                                "workshop_id": "123",
+                                "app_id": 1_142_710,
+                                "title": "Warhammer item",
+                                "description": "",
+                            }
+                        },
+                        "authors": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = WorkshopMetadataService(cache_path)
+            with (
+                patch.object(service, "_refresh_english_details"),
+                patch(
+                    "backend.workshop.query_workshop_languages",
+                    return_value={"russian": {"123": {"title": "Three Kingdoms", "description": ""}}},
+                ) as query_languages,
+            ):
+                self.assertEqual(service.get_many(["123"], "en-US", app_id=779340), {})
+                service.refresh_localized(["123"], "ru-RU", app_id=779340)
+
+        query_languages.assert_called_once_with(["123"], ["russian"], app_id=779340)
+
     def test_steam_english_fallback_is_not_mislabeled_as_a_translation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             cache_path = Path(temporary) / "workshop_cache.json"

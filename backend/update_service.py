@@ -130,19 +130,12 @@ class UpdateService:
             return (gitee, github)
         return (github, gitee)
 
-    def check(self, *, manual: bool = True, manifest_url: str | None = None) -> dict[str, Any]:
+    def check(self, *, manual: bool = True) -> dict[str, Any]:
         with self._lock:
             settings = self.settings_service.get()
-            explicit_override = manifest_url is not None
-            configured_url = (
-                str(manifest_url).strip()
-                if explicit_override
-                else str(settings.get("update_manifest_url") or "").strip()
+            sources = self.preferred_repository_sources(
+                str(settings.get("language") or "")
             )
-            if configured_url:
-                sources = (("custom", _validate_url(configured_url, allow_file=True)),)
-            else:
-                sources = self.preferred_repository_sources(str(settings.get("language") or ""))
 
             candidates: list[dict[str, Any]] = []
             failures: list[tuple[str, Exception]] = []
@@ -159,7 +152,7 @@ class UpdateService:
             if not candidates:
                 if len(sources) == 1 and failures:
                     raise failures[0][1]
-                source_labels = {"gitee": "Gitee", "github": "GitHub", "custom": "自定义源"}
+                source_labels = {"gitee": "Gitee", "github": "GitHub"}
                 failed_names = (
                     "、".join(source_labels.get(source, source) for source, _ in failures)
                     or "Gitee、GitHub"
@@ -176,11 +169,7 @@ class UpdateService:
                     info = candidate
 
             checked_at = int(time.time())
-            saved_changes: dict[str, Any] = {"last_update_check_at": checked_at}
-            stored_url = str(settings.get("update_manifest_url") or "").strip()
-            if explicit_override and configured_url != stored_url:
-                saved_changes["update_manifest_url"] = configured_url
-            self.settings_service.save(saved_changes)
+            self.settings_service.save({"last_update_check_at": checked_at})
 
             newer = is_newer_version(info["version"], APP_VERSION)
             ignored = str(settings.get("ignored_update_version") or "") == info["version"]

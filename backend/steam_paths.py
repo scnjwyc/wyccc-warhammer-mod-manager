@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterator
 
-from .constants import WH3_APP_ID, WH3_GAME_FOLDER
+from .games import GameDefinition, WARHAMMER3_GAME, get_game_definition
 from .models import GamePaths
 
 _TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
@@ -137,7 +137,7 @@ def _library_roots(steam_root: Path) -> list[Path]:
     return unique
 
 
-def _read_install_dir(manifest_path: Path) -> str:
+def _read_install_dir(manifest_path: Path, default_install_dir: str) -> str:
     try:
         parsed = parse_vdf(manifest_path.read_text(encoding="utf-8-sig", errors="replace"))
         state = parsed.get("AppState", parsed.get("appstate", {}))
@@ -147,7 +147,7 @@ def _read_install_dir(manifest_path: Path) -> str:
                 return str(value)
     except (OSError, ValueError):
         pass
-    return WH3_GAME_FOLDER
+    return default_install_dir
 
 
 def _case_insensitive_value(mapping: dict[str, Any], key: str, default: Any = "") -> Any:
@@ -173,12 +173,15 @@ def read_app_manifest_last_updated(manifest_path: Path) -> int:
 
 def game_last_updated_at(paths: GamePaths) -> int:
     """Resolve the game's last Steam update, with local core files as a fallback."""
+    definition = paths.game_definition
     candidates: list[Path] = []
     if paths.steam_library:
-        candidates.append(Path(paths.steam_library) / "steamapps" / f"appmanifest_{WH3_APP_ID}.acf")
+        candidates.append(
+            Path(paths.steam_library) / "steamapps" / f"appmanifest_{definition.app_id}.acf"
+        )
     if paths.game_path:
         game_root = Path(paths.game_path)
-        candidates.append(game_root.parent.parent / f"appmanifest_{WH3_APP_ID}.acf")
+        candidates.append(game_root.parent.parent / f"appmanifest_{definition.app_id}.acf")
     seen: set[str] = set()
     for manifest in candidates:
         key = str(manifest.resolve(strict=False)).casefold()
@@ -193,7 +196,7 @@ def game_last_updated_at(paths: GamePaths) -> int:
     if paths.game_path:
         game_root = Path(paths.game_path)
         for candidate in (
-            game_root / "Warhammer3.exe",
+            Path(paths.executable_path),
             game_root / "data" / "data.pack",
             game_root / "data" / "db.pack",
             game_root / "data" / "data_script.pack",
@@ -205,21 +208,27 @@ def game_last_updated_at(paths: GamePaths) -> int:
     return max(local_times, default=0)
 
 
-def discover_wh3_paths() -> GamePaths:
+def discover_game_paths(game_id: str = "") -> GamePaths:
+    definition = get_game_definition(game_id)
+    return _discover_game_paths(definition)
+
+
+def _discover_game_paths(definition: GameDefinition) -> GamePaths:
     for steam_root in candidate_steam_roots():
         for library_root in _library_roots(steam_root):
             steamapps = library_root / "steamapps"
-            manifest = steamapps / f"appmanifest_{WH3_APP_ID}.acf"
+            manifest = steamapps / f"appmanifest_{definition.app_id}.acf"
             if not manifest.is_file():
                 continue
-            install_dir = _read_install_dir(manifest)
+            install_dir = _read_install_dir(manifest, definition.install_dir)
             game_path = steamapps / "common" / install_dir
-            executable = game_path / "Warhammer3.exe"
+            executable = game_path / definition.executable_name
             data_path = game_path / "data"
             if not executable.is_file() or not data_path.is_dir():
                 continue
-            workshop_path = steamapps / "workshop" / "content" / WH3_APP_ID
+            workshop_path = steamapps / "workshop" / "content" / definition.app_id
             return GamePaths(
+                game_id=definition.id,
                 game_path=str(game_path.resolve()),
                 data_path=str(data_path.resolve()),
                 workshop_path=str(workshop_path.resolve(strict=False)),
@@ -227,4 +236,9 @@ def discover_wh3_paths() -> GamePaths:
                 steam_library=str(library_root.resolve(strict=False)),
                 detected_by="steam-vdf",
             )
-    return GamePaths()
+    return GamePaths(game_id=definition.id)
+
+
+def discover_wh3_paths() -> GamePaths:
+    """Compatibility wrapper for callers which still explicitly request WH3."""
+    return _discover_game_paths(WARHAMMER3_GAME)

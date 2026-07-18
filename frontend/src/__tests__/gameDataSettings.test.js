@@ -19,6 +19,7 @@ describe('game data settings state', () => {
     const settings = {
       language: 'zh-CN',
       unit_model_multiplier: 2,
+      unit_recruitment_capacity_multiplier: 4,
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -31,6 +32,7 @@ describe('game data settings state', () => {
 
     await store.saveGameDataSettings({
       unit_model_multiplier: 2,
+      unit_recruitment_capacity_multiplier: 4,
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -39,6 +41,7 @@ describe('game data settings state', () => {
     expect(invokeMock).toHaveBeenCalledTimes(1)
     expect(invokeMock).toHaveBeenCalledWith('save_game_data_settings', {
       unit_model_multiplier: 2,
+      unit_recruitment_capacity_multiplier: 4,
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -70,6 +73,12 @@ describe('game data settings state', () => {
           pack_name: 'wyccc_dynamic_no_friendly_fire.pack',
           subscribed: false,
         },
+        unit_cap: {
+          workshop_id: '3766867060',
+          title: 'Dynamic Unit Cap',
+          pack_name: 'wyccc_dynamic_unit_cap.pack',
+          subscribed: true,
+        },
       },
       warning: '',
     })
@@ -79,6 +88,7 @@ describe('game data settings state', () => {
 
     expect(store.gameDataFeatureSubscribed('unit_size')).toBe(true)
     expect(store.gameDataFeatureSubscribed('friendly_fire')).toBe(false)
+    expect(store.gameDataFeatureSubscribed('unit_cap')).toBe(true)
     expect(store.gameDataFeatures.unit_size.title).toBe('Dynamic Unit Size')
     expect(store.mods).toHaveLength(2)
     expect(store.activeIds).toEqual(['friendly-fire'])

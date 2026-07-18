@@ -249,6 +249,29 @@ def subscribe_workshop_items(
     return dict(result)
 
 
+def get_current_user(
+    *,
+    app_id: int | str = 1_142_710,
+    root: Path | None = None,
+    timeout_seconds: int = 45,
+) -> dict[str, str]:
+    payload = _run_bridge_request(
+        {
+            "operation": "get_current_user",
+            "appId": int(app_id),
+        },
+        root=root,
+        timeout_seconds=timeout_seconds,
+    )
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise SteamworksBridgeError("Steamworks bridge result has no current-user data")
+    steam_id = str(result.get("steam_id") or "").strip()
+    if not steam_id.isdigit():
+        raise SteamworksBridgeError("Current Steam user is unavailable")
+    return {"steam_id": steam_id, "name": str(result.get("name") or "").strip()}
+
+
 def perform_workshop_operation(
     operation: str,
     workshop_id: str,

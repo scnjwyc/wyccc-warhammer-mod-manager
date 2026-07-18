@@ -11,6 +11,7 @@ from backend.steamworks_bridge import (
     RESULT_PREFIX,
     SteamworksBridgeError,
     find_node_executable,
+    get_current_user,
     perform_workshop_operation,
     publish_workshop_item,
     query_workshop_dependencies,
@@ -21,6 +22,73 @@ from backend.steamworks_bridge import (
 
 
 class SteamworksBridgeTests(unittest.TestCase):
+    def test_bulk_subscription_continues_after_an_inaccessible_item(self) -> None:
+        node = find_node_executable()
+        if node is None:
+            self.skipTest("Node.js runtime is unavailable")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime = root / "steam_runtime"
+            runtime.mkdir(parents=True)
+            (runtime / "workshop_bridge.js").write_text(
+                (Path(__file__).parents[1] / "steam_runtime" / "workshop_bridge.js").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            steamworks = runtime / "steamworks"
+            steamworks.mkdir()
+            (steamworks / "index.js").write_text(
+                """
+module.exports = {
+  init() {
+    return {
+      workshop: {
+        getSubscribedItems() { return []; },
+        async subscribe(itemId) {
+          if (itemId.toString() === '456') throw new Error('access denied');
+        },
+      },
+    };
+  },
+};
+""",
+                encoding="utf-8",
+            )
+
+            result = subscribe_workshop_items(["123", "456", "789"], root=root)
+
+        self.assertEqual(result["subscribed"], ["123", "789"])
+        self.assertEqual(result["failed"][0]["workshop_id"], "456")
+        self.assertIn("access denied", result["failed"][0]["error"])
+
+    def test_current_user_query_uses_the_requested_game_app(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = root / "steam_runtime" / "workshop_bridge.js"
+            script.parent.mkdir(parents=True)
+            script.write_text("// fixture", encoding="utf-8")
+            node = root / "node.exe"
+            node.write_bytes(b"node fixture")
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=(
+                    f"{RESULT_PREFIX}{json.dumps({'ok': True, 'result': {'steam_id': '76561198000000000', 'name': 'Wyccc'}}) }\n"
+                ),
+                stderr="",
+            )
+            with (
+                patch("backend.steamworks_bridge.find_node_executable", return_value=node),
+                patch("backend.steamworks_bridge.subprocess.run", return_value=completed) as run,
+            ):
+                result = get_current_user(app_id=779340, root=root)
+
+        self.assertEqual(result, {"steam_id": "76561198000000000", "name": "Wyccc"})
+        request = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(request["operation"], "get_current_user")
+        self.assertEqual(request["appId"], 779340)
+
     def test_packaged_node_runtime_is_preferred(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

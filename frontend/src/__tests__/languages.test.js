@@ -45,6 +45,26 @@ describe('built-in interface languages', () => {
     expect(translationKeys.every(hasTranslation)).toBe(true)
   })
 
+  it('localizes the game selector and game-aware path feedback in every language', () => {
+    for (const key of [
+      'settings.game',
+      'settings.gameWarhammer3',
+      'settings.gameThreeKingdoms',
+      'settings.manualPathRequired',
+      'settings.pathValid',
+      'settings.pathRequirement',
+      'toast.pathsDetected',
+      'toast.gameLaunched',
+    ]) expect(hasTranslation(key), key).toBe(true)
+
+    for (const language of languageCodes) {
+      applyInterfaceLanguage(language)
+      expect(t('settings.gameThreeKingdoms'), language).not.toBe('settings.gameThreeKingdoms')
+      expect(t('toast.pathsDetected', { game: 'Example' }), language).toContain('Example')
+      expect(t('toast.gameLaunched', { game: 'Example', pid: 7 }), language).toContain('7')
+    }
+  })
+
   it('provides a catalog entry for every static translation key used by the interface', () => {
     const usedKeys = new Set()
     const keyPattern = /(?<![A-Za-z0-9_])t\(\s*(['"])([^'"]+)\1/g
@@ -118,6 +138,15 @@ describe('built-in interface languages', () => {
     }
     applyInterfaceLanguage('zh-CN')
     expect(t('gameData.unitMultiplier')).toBe('单位规模倍率')
+  })
+
+  it('describes recruitment capacity without exposing internal table names', () => {
+    for (const language of languageCodes) {
+      applyInterfaceLanguage(language)
+      const copy = t('gameData.unitRecruitmentCapacityMultiplierHelp')
+      expect(copy, language).not.toMatch(/main_units_tables/i)
+      expect(copy, language).not.toBe('gameData.unitRecruitmentCapacityMultiplierHelp')
+    }
   })
 
   it('describes launch-time game-data patch validation in every language', () => {

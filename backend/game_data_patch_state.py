@@ -10,6 +10,7 @@ from typing import Any
 
 from .game_data_settings import (
     normalize_single_entity_unit_mode,
+    normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
 )
 from .json_store import AtomicJsonStore
@@ -22,7 +23,7 @@ from .start_options import (
 
 GAME_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_game_data_patch.json"
 FINGERPRINT_SCHEMA_VERSION = 1
-GAME_DATA_BUILDER_VERSION = 5
+GAME_DATA_BUILDER_VERSION = 6
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -35,6 +36,11 @@ def _normalized_settings(settings: Mapping[str, Any]) -> dict[str, int | bool | 
     return {
         "unit_model_multiplier": normalize_unit_scale_multiplier(
             settings.get("unit_model_multiplier", 1)
+        ),
+        "unit_recruitment_capacity_multiplier": (
+            normalize_unit_recruitment_capacity_multiplier(
+                settings.get("unit_recruitment_capacity_multiplier", 1)
+            )
         ),
         "single_entity_unit_mode": normalize_single_entity_unit_mode(
             settings.get("single_entity_unit_mode", "scale")
@@ -60,6 +66,7 @@ def game_data_settings_requested(settings: Mapping[str, Any]) -> bool:
             rel_tol=0.0,
             abs_tol=1e-9,
         )
+        or int(normalized["unit_recruitment_capacity_multiplier"]) != 1
         or bool(normalized["disable_unit_friendly_fire"])
         or bool(normalized["disable_spell_friendly_fire"])
     )

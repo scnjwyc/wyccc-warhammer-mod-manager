@@ -14,6 +14,29 @@ const componentSource = readFileSync(
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
 describe('game data modification modal', () => {
+  it('provides a 1-5 recruitment-capacity slider with an unlimited final node', async () => {
+    const wrapper = mount(GameDataModificationModal, {
+      props: {
+        open: true,
+        settings: { unit_recruitment_capacity_multiplier: 5 },
+        unitCapacitySubscribed: true,
+      },
+    })
+
+    const capacity = wrapper.get('[data-testid="unit-recruitment-capacity-multiplier"]')
+    expect(capacity.attributes('type')).toBe('range')
+    expect(capacity.element.value).toBe('5')
+    expect(capacity.attributes('min')).toBe('1')
+    expect(capacity.attributes('max')).toBe('6')
+    expect(capacity.attributes('step')).toBe('1')
+    expect(wrapper.get('[data-testid="unit-recruitment-capacity-ticks"]').text()).toContain('5')
+    expect(wrapper.get('[data-testid="unit-recruitment-capacity-ticks"]').text()).toContain(String.fromCharCode(0x221e))
+
+    await capacity.setValue('6')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0].unit_recruitment_capacity_multiplier).toBe(0)
+  })
+
   it('explains in every language that a 1× multiplier disables unit scaling', () => {
     const expected = {
       'zh-CN': ['1 倍', '关闭'],
@@ -38,12 +61,13 @@ describe('game data modification modal', () => {
     }
   })
 
-  it('uses a 1-5 integer slider and emits all five game data settings', async () => {
+  it('uses a 1-5 integer slider, a two-choice unit rule toggle, and emits all six game data settings', async () => {
     const wrapper = mount(GameDataModificationModal, {
       props: {
         open: true,
         settings: {
           unit_model_multiplier: 2,
+          unit_recruitment_capacity_multiplier: 3,
           single_entity_unit_mode: 'scale',
           scale_lord_hero_health: false,
           disable_unit_friendly_fire: false,
@@ -64,16 +88,18 @@ describe('game data modification modal', () => {
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').element.checked).toBe(false)
 
     const singleEntityMode = wrapper.get('[data-testid="single-entity-unit-mode"]')
-    expect(singleEntityMode.attributes('type')).toBe('range')
-    expect(singleEntityMode.attributes('min')).toBe('0')
-    expect(singleEntityMode.attributes('max')).toBe('1')
-    expect(singleEntityMode.attributes('step')).toBe('1')
-    expect(singleEntityMode.element.value).toBe('1')
+    const healthMode = wrapper.get('[data-testid="single-entity-unit-mode-health"]')
+    const scaleMode = wrapper.get('[data-testid="single-entity-unit-mode-scale"]')
+    expect(singleEntityMode.attributes('role')).toBe('group')
+    expect(healthMode.element.tagName).toBe('BUTTON')
+    expect(healthMode.attributes('aria-pressed')).toBe('false')
+    expect(scaleMode.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('input[data-testid="single-entity-unit-mode"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('血量')
     expect(wrapper.text()).toContain('规模')
 
     await multiplier.setValue('4')
-    await singleEntityMode.setValue('0')
+    await healthMode.trigger('click')
     await wrapper.get('[data-testid="scale-lord-hero-health"]').setValue(true)
     await wrapper.get('[data-testid="disable-unit-friendly-fire"]').setValue(true)
     await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(false)
@@ -81,6 +107,7 @@ describe('game data modification modal', () => {
 
     expect(wrapper.emitted('save')[0][0]).toEqual({
       unit_model_multiplier: 4,
+      unit_recruitment_capacity_multiplier: 3,
       single_entity_unit_mode: 'health',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
@@ -120,6 +147,7 @@ describe('game data modification modal', () => {
         open: true,
         settings: {
           unit_model_multiplier: 2,
+          unit_recruitment_capacity_multiplier: 3,
           scale_lord_hero_health: false,
           disable_unit_friendly_fire: false,
           disable_spell_friendly_fire: false,
@@ -172,7 +200,8 @@ describe('game data modification modal', () => {
     })
 
     expect(wrapper.get('[data-testid="unit-model-multiplier"]').element.value).toBe('3')
-    expect(wrapper.get('[data-testid="single-entity-unit-mode"]').element.value).toBe('0')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode-health"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode-scale"]').attributes('aria-pressed')).toBe('false')
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').element.checked).toBe(true)
   })
 
@@ -189,20 +218,25 @@ describe('game data modification modal', () => {
         },
         unitSizeSubscribed: false,
         friendlyFireSubscribed: false,
+        unitCapacitySubscribed: false,
         unitSizeModName: 'Dynamic Unit Size',
         friendlyFireModName: 'Dynamic No Friendly Fire',
+        unitCapacityModName: 'Dynamic Unit Cap',
       },
     })
 
     expect(wrapper.get('[data-testid="unit-model-multiplier"]').attributes()).toHaveProperty('disabled')
-    expect(wrapper.get('[data-testid="single-entity-unit-mode"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode-health"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="single-entity-unit-mode-scale"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="scale-lord-hero-health"]').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[data-testid="unit-recruitment-capacity-multiplier"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="disable-unit-friendly-fire"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="disable-spell-friendly-fire"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('[data-testid="unit-size-requirement"]').text()).toContain('尚未订阅')
     expect(wrapper.get('[data-testid="unit-size-requirement"]').text()).toContain('Dynamic Unit Size')
     expect(wrapper.get('[data-testid="friendly-fire-requirement"]').text()).toContain('尚未订阅')
     expect(wrapper.get('[data-testid="friendly-fire-requirement"]').text()).toContain('Dynamic No Friendly Fire')
+    expect(wrapper.get('[data-testid="unit-capacity-requirement"]').text()).toContain('Dynamic Unit Cap')
     expect(wrapper.text()).not.toContain('wyccc_dynamic_')
     expect(wrapper.get('button[type="submit"]').attributes()).toHaveProperty('disabled')
   })

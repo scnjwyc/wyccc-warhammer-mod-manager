@@ -1,7 +1,7 @@
 [project]
 name = "wyccc-mod-manager"
-version = "0.7.0"
-description = "A focused Total War: WARHAMMER III mod manager."
+version = "0.8.0"
+description = "A focused Total War mod manager."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

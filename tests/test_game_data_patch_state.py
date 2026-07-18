@@ -24,7 +24,7 @@ UNIT_SIZE_WORKSHOP_ID = "3765783838"
 
 class GameDataPatchStateTests(unittest.TestCase):
     def test_builder_version_invalidates_pre_single_entity_mode_patches(self) -> None:
-        self.assertEqual(GAME_DATA_BUILDER_VERSION, 5)
+        self.assertEqual(GAME_DATA_BUILDER_VERSION, 6)
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -44,6 +44,7 @@ class GameDataPatchStateTests(unittest.TestCase):
         self.active_ids = ["first", "second"]
         self.settings = {
             "unit_model_multiplier": 2,
+            "unit_recruitment_capacity_multiplier": 1,
             "single_entity_unit_mode": "scale",
             "scale_lord_hero_health": False,
             "disable_unit_friendly_fire": False,
@@ -107,6 +108,10 @@ class GameDataPatchStateTests(unittest.TestCase):
         base_digest = fingerprint_game_data_inputs(base)
 
         changed_settings = dict(self.settings, unit_model_multiplier=3)
+        changed_recruitment_capacity = dict(
+            self.settings,
+            unit_recruitment_capacity_multiplier=3,
+        )
         changed_single_entity_mode = dict(
             self.settings,
             single_entity_unit_mode="health",
@@ -115,6 +120,7 @@ class GameDataPatchStateTests(unittest.TestCase):
         changed_subscription = {UNIT_SIZE_WORKSHOP_ID: False}
         variants = [
             self._inputs(settings=changed_settings),
+            self._inputs(settings=changed_recruitment_capacity),
             self._inputs(settings=changed_single_entity_mode),
             self._inputs(settings=changed_health_setting),
             self._inputs(playset_id="campaign"),

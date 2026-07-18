@@ -12,6 +12,7 @@ from backend.constants import (
 )
 from backend.models import GamePaths
 from backend.scanner import ModScanner, read_pack_dependencies, read_pack_type
+from backend.start_options import GAME_DATA_PATCH_NAME, RUNTIME_PACK_NAME
 from tests.helpers import write_pack
 
 
@@ -19,20 +20,26 @@ class OfflineWorkshopMetadata:
     def __init__(self) -> None:
         self.requested_ids: list[str] = []
         self.requested_language = ""
+        self.requested_app_id = 0
 
     def get_many(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         self.requested_ids = list(workshop_ids)
         self.requested_language = interface_language
+        self.requested_app_id = app_id
         return {}
 
     def refresh(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         raise AssertionError(f"network refresh must stay disabled: {workshop_ids}")
 
@@ -42,6 +49,8 @@ class CachedWorkshopMetadata(OfflineWorkshopMetadata):
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         self.requested_ids = list(workshop_ids)
         self.requested_language = interface_language
@@ -60,6 +69,8 @@ class TitledWorkshopMetadata(OfflineWorkshopMetadata):
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         self.requested_ids = list(workshop_ids)
         self.requested_language = interface_language
@@ -78,6 +89,8 @@ class DependencyWorkshopMetadata(OfflineWorkshopMetadata):
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         return {
             "101": {
@@ -101,23 +114,42 @@ class DependencyWarningWorkshopMetadata(DependencyWorkshopMetadata):
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
         self.ensure_calls += 1
         self.last_refresh_warning = (
             "Steam 暂时无法读取部分工坊依赖，已使用已有缓存；"
             "缺失依赖结果可能不是最新状态"
         )
-        return self.get_many(workshop_ids, interface_language)
+        return self.get_many(workshop_ids, interface_language, app_id=app_id)
 
     def refresh(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
     ) -> dict[str, dict]:
-        return self.ensure_dependencies(workshop_ids, interface_language)
+        return self.ensure_dependencies(workshop_ids, interface_language, app_id=app_id)
 
 
 class ScannerTests(unittest.TestCase):
+    def test_three_kingdoms_scanner_requests_metadata_for_its_steam_app(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "779340"
+            write_pack(workshop / "123" / "three_kingdoms.pack")
+            metadata = OfflineWorkshopMetadata()
+
+            result = ModScanner(metadata).scan(
+                GamePaths(game_id="three_kingdoms", workshop_path=str(workshop)),
+                {"language": "en-US", "check_outdated_mods": False},
+            )
+
+        self.assertEqual(len(result.mods), 1)
+        self.assertEqual(metadata.requested_app_id, 779340)
+
     def test_internal_game_data_feature_mods_are_excluded_from_all_sources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -128,6 +160,8 @@ class ScannerTests(unittest.TestCase):
             fire_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]
             write_pack(data / "data.pack")
             write_pack(data / unit_item["pack_name"])
+            write_pack(data / GAME_DATA_PATCH_NAME)
+            write_pack(data / RUNTIME_PACK_NAME)
             write_pack(data / "visible_local.pack")
             write_pack(workshop / unit_item["workshop_id"] / unit_item["pack_name"])
             write_pack(workshop / fire_item["workshop_id"] / fire_item["pack_name"])

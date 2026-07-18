@@ -107,14 +107,18 @@ def _normalized_executable_path(path: str | Path) -> str:
     return os.path.normcase(os.path.abspath(value)) if value else ""
 
 
-def is_game_running(expected_executable: str | Path = "") -> bool:
+def is_game_running(
+    expected_executable: str | Path = "",
+    *,
+    process_name: str = WH3_PROCESS_NAME,
+) -> bool:
+    expected_process_name = str(process_name or WH3_PROCESS_NAME).casefold()
     if os.name == "nt":
         try:
-            expected = WH3_PROCESS_NAME.casefold()
             matches = [
                 process_id
                 for process_id, process_name in _windows_process_entries()
-                if process_name.casefold() == expected
+                if process_name.casefold() == expected_process_name
             ]
             if not matches:
                 return False
@@ -134,7 +138,7 @@ def is_game_running(expected_executable: str | Path = "") -> bool:
             return False
     try:
         completed = subprocess.run(
-            ["pgrep", "-f", WH3_PROCESS_NAME],
+            ["pgrep", "-f", str(process_name or WH3_PROCESS_NAME)],
             capture_output=True,
             check=False,
             timeout=5,
@@ -148,15 +152,18 @@ def launch_game(
     game_path: str,
     mod_list_path: str,
     save_name: str = "",
+    *,
+    executable_name: str = WH3_EXECUTABLE,
+    process_name: str = WH3_PROCESS_NAME,
 ) -> dict[str, int | str | list[str]]:
     game_root = Path(game_path)
-    executable = game_root / WH3_EXECUTABLE
+    executable = game_root / str(executable_name or WH3_EXECUTABLE)
     if not executable.is_file():
         raise ValueError(f"找不到游戏可执行文件：{executable}")
     if not Path(mod_list_path).is_file():
         raise ValueError(f"找不到启动清单：{mod_list_path}")
-    if is_game_running(executable):
-        raise ValueError("Warhammer3.exe 已经在运行")
+    if is_game_running(executable, process_name=process_name):
+        raise ValueError(f"{executable.name} 已经在运行")
 
     normalized_save_name = str(save_name or "").strip()
     if normalized_save_name and (

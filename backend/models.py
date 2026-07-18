@@ -4,9 +4,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .games import DEFAULT_GAME_ID, GameDefinition, get_game_definition
+
 
 @dataclass(frozen=True)
 class GamePaths:
+    game_id: str = DEFAULT_GAME_ID
     game_path: str = ""
     data_path: str = ""
     workshop_path: str = ""
@@ -15,10 +18,14 @@ class GamePaths:
     detected_by: str = ""
 
     @property
+    def game_definition(self) -> GameDefinition:
+        return get_game_definition(self.game_id)
+
+    @property
     def executable_path(self) -> str:
         if not self.game_path:
             return ""
-        return str(Path(self.game_path) / "Warhammer3.exe")
+        return str(Path(self.game_path) / self.game_definition.executable_name)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

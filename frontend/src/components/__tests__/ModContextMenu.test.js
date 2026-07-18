@@ -25,6 +25,26 @@ const types = [
 const buttonByText = (wrapper, text) => wrapper.findAll('button').find(button => button.text().includes(text))
 
 describe('ModContextMenu', () => {
+  it('shows configured shortcut keys beside shortcut actions', () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod,
+        active: true,
+        types,
+        keyboardShortcuts: {
+          'toggle-active': 'Ctrl+E',
+          'open-workshop': 'Alt+W',
+          'open-rpfm': 'Ctrl+Alt+R',
+        },
+      },
+    })
+
+    expect(wrapper.get('[data-testid="context-toggle-active"] .context-menu-shortcut').text()).toBe('Ctrl + E')
+    expect(wrapper.get('[data-testid="context-open-workshop-browser"] .context-menu-shortcut').text()).toBe('Alt + W')
+    expect(wrapper.get('[data-testid="context-open-rpfm"] .context-menu-shortcut').text()).toBe('Ctrl + Alt + R')
+  })
+
   it('contains every requested operation and emits type selection', async () => {
     const wrapper = mount(ModContextMenu, {
       props: { open: true, x: 100, y: 100, mod, active: true, types },
@@ -32,7 +52,7 @@ describe('ModContextMenu', () => {
 
     for (const label of [
       '停用', '修改类型', '类型管理', '指定加载顺序', '列表顶部', '列表底部',
-      '跳转到创意工坊(浏览器)', '跳转到创意工坊(客户端)', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
+      '跳转到创意工坊', '跳转到创意工坊(客户端)', '取消订阅', '强制更新', '打开文件目录', '在 RPFM 打开', '从列表中隐藏',
       '复制 MOD 路径', '删除 MOD 文件', '复制模组到 Data 文件夹',
       '忽略问题', '忽略 MOD 过期', '忽略缺失依赖',
     ]) {
@@ -58,6 +78,46 @@ describe('ModContextMenu', () => {
     expect(buttonByText(wrapper, '取消订阅').attributes('disabled')).toBeDefined()
   })
 
+  it('offers update for an eligible Workshop-only MOD and hides it for mismatched ownership', () => {
+    const eligible = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod,
+        types,
+        selectedModIds: [mod.id],
+        eligibleUpdateIds: [mod.id],
+      },
+    })
+    expect(eligible.find('[data-testid="context-publish-update"]').exists()).toBe(true)
+    expect(eligible.find('[data-testid="context-publish-upload"]').exists()).toBe(false)
+
+    const mismatched = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod,
+        types,
+        selectedModIds: [mod.id],
+        eligibleUpdateIds: [],
+      },
+    })
+    expect(mismatched.find('[data-testid="context-publish-update"]').exists()).toBe(false)
+  })
+
+  it('hides update when any selected MOD is not eligible', () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod,
+        types,
+        selectionCount: 2,
+        selectedModIds: [mod.id, 'steam:456:other.pack'],
+        eligibleUpdateIds: [mod.id],
+      },
+    })
+
+    expect(wrapper.find('[data-testid="context-publish-update"]').exists()).toBe(false)
+  })
+
   it('shows batch counts on top-level actions and disables the RPFM action', async () => {
     const wrapper = mount(ModContextMenu, {
       props: {
@@ -68,6 +128,8 @@ describe('ModContextMenu', () => {
         active: true,
         types,
         selectionCount: 3,
+        selectedModIds: [mod.id, 'steam:456:two.pack', 'steam:789:three.pack'],
+        eligibleUpdateIds: [mod.id, 'steam:456:two.pack', 'steam:789:three.pack'],
       },
     })
 
@@ -76,7 +138,7 @@ describe('ModContextMenu', () => {
       '忽略问题（3项）', '忽略 MOD 过期（3项）', '忽略缺失依赖（3项）',
       '打开文件目录（3项）', '从列表中隐藏（3项）', '复制模组到 Data 文件夹（3项）',
       'UI（3项）', '指定加载顺序（3项）', '列表顶部（3项）', '列表底部（3项）',
-      '跳转到创意工坊(浏览器)（3项）', '跳转到创意工坊(客户端)（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
+      '跳转到创意工坊（3项）', '跳转到创意工坊(客户端)（3项）', '取消订阅（3项）', '强制更新（3项）', '更新到工坊（3项）',
     ]) {
       expect(wrapper.text()).toContain(label)
     }
@@ -110,7 +172,7 @@ describe('ModContextMenu', () => {
     })
 
     const nav = wrapper.get('nav')
-    const browser = buttonByText(wrapper, '跳转到创意工坊(浏览器)')
+    const browser = buttonByText(wrapper, '跳转到创意工坊')
     const client = buttonByText(wrapper, '跳转到创意工坊(客户端)')
     const steamMenu = wrapper.get('[data-testid="context-steam-menu"]')
     expect(browser.element.parentElement).toBe(nav.element)

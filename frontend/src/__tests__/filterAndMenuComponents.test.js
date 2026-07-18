@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import ModContextMenu from '../components/ModContextMenu.vue'
+import ShareModal from '../components/ShareModal.vue'
 import SortMenu from '../components/SortMenu.vue'
 import TagSearchBox from '../components/TagSearchBox.vue'
 
@@ -103,9 +104,42 @@ describe('MOD context menu', () => {
           mod_types: ['ui'],
           workshop_id: '123456',
         },
+        selectedModIds: ['published'],
+        eligibleUpdateIds: ['published'],
       },
     })
-    expect(wrapper.text()).toContain('更新到工坊')
-    expect(wrapper.text()).not.toContain('上传到工坊')
+    expect(wrapper.find('[data-testid="context-publish-update"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="context-publish-upload"]').exists()).toBe(false)
+  })
+})
+
+describe('official launcher profile actions', () => {
+  it('does not render the official launcher import for games that do not support it', () => {
+    const wrapper = mount(ShareModal, {
+      props: { open: true, canImportOfficialProfile: false },
+    })
+
+    expect(wrapper.find('[data-testid="share-import-official"]').exists()).toBe(false)
+  })
+})
+
+describe('Workshop collection import', () => {
+  it('aligns the collection input and import button in one control row', () => {
+    const wrapper = mount(ShareModal, { props: { open: true } })
+    const controls = wrapper.get('.share-collection-controls')
+
+    expect(controls.find('[data-testid="share-collection-input"]').exists()).toBe(true)
+    expect(controls.find('[data-testid="share-import-collection"]').exists()).toBe(true)
+    expect(wrapper.get('.share-collection-import > .field-help').exists()).toBe(true)
+  })
+
+  it('emits the pasted Workshop collection link for automatic import', async () => {
+    const wrapper = mount(ShareModal, { props: { open: true } })
+    const collectionUrl = 'https://steamcommunity.com/sharedfiles/filedetails/?id=123456'
+
+    await wrapper.get('[data-testid="share-collection-input"]').setValue(collectionUrl)
+    await wrapper.get('[data-testid="share-import-collection"]').trigger('click')
+
+    expect(wrapper.emitted('import-collection')).toEqual([[collectionUrl]])
   })
 })

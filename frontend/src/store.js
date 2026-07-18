@@ -15,6 +15,8 @@ import {
 } from './modSearch'
 
 let playsetWriteQueue = Promise.resolve()
+let collectionImportPollTimer = 0
+const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
 
 const defaultGameDataFeatures = () => ({
   unit_size: {
@@ -29,7 +31,19 @@ const defaultGameDataFeatures = () => ({
     pack_name: 'wyccc_dynamic_no_friendly_fire.pack',
     subscribed: false,
   },
+  unit_cap: {
+    workshop_id: '3766867060',
+    title: '动态单位容量 - Dynamic Unit Cap',
+    pack_name: 'wyccc_dynamic_unit_cap.pack',
+    subscribed: false,
+  },
 })
+
+const localizedSelectedGameName = settings => t(
+  settings?.selected_game === 'three_kingdoms'
+    ? 'settings.gameThreeKingdoms'
+    : 'settings.gameWarhammer3',
+)
 
 const enqueuePlaysetWrite = task => {
   const pending = playsetWriteQueue.catch(() => {}).then(task)
@@ -37,10 +51,19 @@ const enqueuePlaysetWrite = task => {
   return pending
 }
 
+const pendingWorkshopId = value => {
+  const match = String(value || '').match(/^pending:steam:(\d+):/)
+  return match?.[1] || ''
+}
+
+const sameIds = (left, right) => (
+  left.length === right.length && left.every((value, index) => value === right[index])
+)
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.7.0',
+    appVersion: '0.8.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -70,6 +93,7 @@ export const useAppStore = defineStore('app', {
     busy: '',
     workshopRefreshing: false,
     liveModRefreshing: false,
+    collectionImportSync: null,
     warnings: [],
     ignoredScanWarningCodes: [],
     gameUpdatedAt: 0,
@@ -85,6 +109,8 @@ export const useAppStore = defineStore('app', {
     toast: null,
     gameDataFeatures: defaultGameDataFeatures(),
     gameDataFeatureWarning: '',
+    workshopUpdateEligibility: new Set(),
+    workshopEligibilityRequestId: 0,
   }),
   getters: {
     modMap: (state) => new Map(state.mods.map(mod => [mod.id, mod])),
@@ -488,6 +514,7 @@ export const useAppStore = defineStore('app', {
       if (!playsetId || playsetId === this.currentPlaysetId) return this.currentPlayset
       await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.switchPlayset'), async () => {
+        this.stopCollectionImportDownloadSync()
         const data = await invoke('switch_playset', playsetId)
         this.applyPlaysetPayload(data)
         this.dirty = true
@@ -701,7 +728,10 @@ export const useAppStore = defineStore('app', {
       return this.withBusy(t('busy.launchGame'), async () => {
         const data = await invoke('launch_game', this.activeIds, this.orderToken)
         this.applyLaunchResult(data)
-        this.notify(t('toast.gameLaunched', { pid: data.process.pid }))
+        this.notify(t('toast.gameLaunched', {
+          game: localizedSelectedGameName(this.settings),
+          pid: data.process.pid,
+        }))
         return data
       })
     },
@@ -810,6 +840,8 @@ export const useAppStore = defineStore('app', {
         this.selectedId = ''
         this.selectedIds = []
         this.selectionAnchorId = ''
+        this.workshopEligibilityRequestId += 1
+        this.workshopUpdateEligibility = new Set()
         this.dirty = false
         const changelog = await invoke('get_changelog')
         this.changelog = changelog.items || []
@@ -825,20 +857,17 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
-    async checkForUpdates(manual = true, manifestUrl = null) {
+    async checkForUpdates(manual = true) {
       if (this.updateChecking) return this.updateInfo
       this.updateChecking = true
       const execute = async () => {
         try {
-          const data = manifestUrl === null
-            ? await invoke('check_for_updates', manual)
-            : await invoke('check_for_updates', manual, manifestUrl)
+          const data = await invoke('check_for_updates', manual)
           const localizedRelease = this.changelog.find(release => release.version === data.version)
           this.updateInfo = localizedRelease
             ? { ...data, entries: localizedRelease.entries || [] }
             : data
           if (data.checked_at) this.settings.last_update_check_at = data.checked_at
-          if (manifestUrl !== null && data.configured) this.settings.update_manifest_url = manifestUrl.trim()
           this.autoUpdateDue = false
           if (manual && !data.has_update) this.notify(t('toast.latestVersion', { version: this.appVersion }))
           return data
@@ -911,15 +940,18 @@ export const useAppStore = defineStore('app', {
       this.settings.last_seen_app_version = data.last_seen_app_version
       return data
     },
-    async detectPaths() {
+    async detectPaths(gameId = '') {
       return this.withBusy(t('busy.detectSteam'), async () => {
-        const data = await invoke('detect_paths')
+        const data = await invoke('detect_paths', gameId)
         this.settings = data.settings
         applyInterfaceLanguage(this.settings.language)
         this.paths = data.paths
-        const bootstrap = await invoke('get_bootstrap')
-        this.pathHealth = bootstrap.path_health
-        this.notify(t('toast.pathsDetected'))
+        this.pathHealth = data.path_health || {}
+        this.workshopEligibilityRequestId += 1
+        this.workshopUpdateEligibility = new Set()
+        if (data.found) this.notify(t('toast.pathsDetected', {
+          game: localizedSelectedGameName(this.settings),
+        }))
         return data
       })
     },
@@ -1070,6 +1102,42 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
+    async importWorkshopCollection(value) {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('busy.importWorkshopCollection'), async () => {
+        const data = await invoke('import_workshop_collection', value)
+        this.applyPlaysetPayload(data)
+        this.dirty = true
+        this.recordCurrentPlaysetChange()
+        const subscribed = data.subscribed_workshop_ids?.length || 0
+        if (subscribed) {
+          this.notify(t('toast.subscriptionAccepted', {
+            subscribed,
+            existing: '',
+          }))
+        }
+        const subscriptionFailures = data.subscription_failures?.length || 0
+        if (subscriptionFailures) {
+          this.notify(
+            t('toast.collectionSubscriptionPartial', { count: subscriptionFailures }),
+            'warning',
+          )
+        }
+        if ((data.pending_workshop_ids || []).length) {
+          this.startCollectionImportDownloadSync(
+            data.pending_workshop_ids,
+            data.subscription_failures,
+          )
+          this.notify(
+            t('toast.pendingDownloads', { count: data.pending_workshop_ids.length }),
+            'warning',
+          )
+        } else {
+          this.notify(t('toast.playsetUpdated', { name: localizedPlaysetName(data.current_playset) }))
+        }
+        return data
+      })
+    },
     async selectOfficialProfile() {
       return invoke('select_mod_profile')
     },
@@ -1119,13 +1187,85 @@ export const useAppStore = defineStore('app', {
         () => invoke('preview_delete_mod_files', modIds),
       )
     },
-    async applyExternalScan(data) {
+    startCollectionImportDownloadSync(pendingWorkshopIds, subscriptionFailures = []) {
+      const failedIds = new Set(
+        (subscriptionFailures || [])
+          .map(item => String(item?.workshop_id || ''))
+          .filter(value => /^\d+$/.test(value)),
+      )
+      const pendingIds = [...new Set((pendingWorkshopIds || []).map(String))]
+        .filter(value => /^\d+$/.test(value) && !failedIds.has(value))
+      if (!pendingIds.length) return
+      this.collectionImportSync = {
+        playsetId: this.currentPlaysetId,
+        pendingWorkshopIds: pendingIds,
+      }
+      this.scheduleCollectionImportDownloadRefresh()
+    },
+    stopCollectionImportDownloadSync() {
+      this.collectionImportSync = null
+      if (collectionImportPollTimer) {
+        window.clearTimeout(collectionImportPollTimer)
+        collectionImportPollTimer = 0
+      }
+    },
+    scheduleCollectionImportDownloadRefresh() {
+      if (collectionImportPollTimer || !this.collectionImportSync) return
+      collectionImportPollTimer = window.setTimeout(async () => {
+        collectionImportPollTimer = 0
+        await this.refreshCollectionImportDownloads()
+      }, COLLECTION_IMPORT_POLL_INTERVAL_MS)
+    },
+    updateCollectionImportProgress(data) {
+      const sync = this.collectionImportSync
+      if (!sync || sync.playsetId !== this.currentPlaysetId) return
+      const pendingIds = new Set(
+        (data.missing_enabled_ids || []).map(pendingWorkshopId).filter(Boolean),
+      )
+      const remaining = sync.pendingWorkshopIds.filter(id => pendingIds.has(id))
+      this.collectionImportSync = remaining.length
+        ? { ...sync, pendingWorkshopIds: remaining }
+        : null
+    },
+    async refreshCollectionImportDownloads() {
+      const sync = this.collectionImportSync
+      if (!sync) return null
+      if (sync.playsetId !== this.currentPlaysetId || this.runtime.running) {
+        this.stopCollectionImportDownloadSync()
+        return null
+      }
+      if (this.liveModRefreshing || this.workshopRefreshing || this.busy) {
+        this.scheduleCollectionImportDownloadRefresh()
+        return null
+      }
+      this.liveModRefreshing = true
+      try {
+        await this.flushPlaysetUpdates()
+        const previousActiveIds = [...this.activeIds]
+        const data = await invoke('scan_mods', false)
+        await this.applyExternalScan(data, { forcePlaysetOrder: true })
+        this.updateCollectionImportProgress(data)
+        if (!sameIds(previousActiveIds, this.activeIds)) {
+          this.dirty = true
+          this.recordCurrentPlaysetChange()
+        }
+        return data
+      } catch {
+        return null
+      } finally {
+        this.liveModRefreshing = false
+        this.scheduleCollectionImportDownloadRefresh()
+      }
+    },
+    async applyExternalScan(data, { forcePlaysetOrder = false } = {}) {
       if (!data) return
       const previousIds = [...this.activeIds]
       const installed = new Set((data.mods || []).map(mod => mod.id))
       this.mods = data.mods || []
       this.replaceActiveIds(
-        this.dirty ? previousIds.filter(id => installed.has(id)) : (data.enabled_order || []),
+        this.dirty && !forcePlaysetOrder
+          ? previousIds.filter(id => installed.has(id))
+          : (data.enabled_order || []),
       )
       this.reconcileInactiveOrder()
       this.missingEnabledIds = data.missing_enabled_ids || []
@@ -1148,7 +1288,16 @@ export const useAppStore = defineStore('app', {
       try {
         await this.flushPlaysetUpdates()
         const data = await invoke('scan_mods', false)
-        await this.applyExternalScan(data)
+        const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
+        const previousActiveIds = [...this.activeIds]
+        await this.applyExternalScan(data, { forcePlaysetOrder })
+        if (forcePlaysetOrder) {
+          this.updateCollectionImportProgress(data)
+          if (!sameIds(previousActiveIds, this.activeIds)) {
+            this.dirty = true
+            this.recordCurrentPlaysetChange()
+          }
+        }
         return data
       } catch (error) {
         this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
@@ -1220,6 +1369,28 @@ export const useAppStore = defineStore('app', {
         this.notify(t('toast.forceUpdateCompleted'))
         return data
       })
+    },
+    async refreshWorkshopUpdateEligibility(modIds) {
+      const requestId = ++this.workshopEligibilityRequestId
+      this.workshopUpdateEligibility = new Set()
+      const requestedIds = [...new Set(
+        (Array.isArray(modIds) ? modIds : [])
+          .map(id => String(id || '').trim())
+          .filter(Boolean),
+      )]
+      if (!requestedIds.length) return []
+      try {
+        const data = await invoke('get_workshop_update_eligibility', requestedIds)
+        if (requestId !== this.workshopEligibilityRequestId) return []
+        const eligible = Array.isArray(data?.eligible_mod_ids) ? data.eligible_mod_ids : []
+        this.workshopUpdateEligibility = new Set(eligible.map(id => String(id)))
+        return eligible
+      } catch {
+        if (requestId === this.workshopEligibilityRequestId) {
+          this.workshopUpdateEligibility = new Set()
+        }
+        return []
+      }
     },
     async loadWorkshopPublishCopy(modId, language) {
       try {

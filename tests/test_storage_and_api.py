@@ -10,9 +10,10 @@ from unittest.mock import patch
 
 from backend.api import API
 from backend.constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS, SOURCE_WORKSHOP
-from backend.models import ModAsset
+from backend.models import GamePaths, ModAsset
 from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
+from backend.start_options import GAME_DATA_PATCH_NAME, RUNTIME_PACK_NAME
 from backend.steamworks_bridge import SteamworksBridgeError
 from backend.storage import StateRepository
 from tests.helpers import make_asset, write_pack
@@ -251,6 +252,34 @@ class ApiContractTests(unittest.TestCase):
         return api, api.call("scan_mods", [False])
 
     @staticmethod
+    def _prepare_three_kingdoms_api(root: Path) -> tuple[API, dict]:
+        game = root / "Total War THREE KINGDOMS"
+        data = game / "data"
+        workshop = root / "steamapps" / "workshop" / "content" / "779340"
+        data.mkdir(parents=True)
+        workshop.mkdir(parents=True)
+        (game / "Three_Kingdoms.exe").write_bytes(b"")
+        (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+        write_pack(data / "data.pack")
+        api = API(root / "state")
+        saved = api.call(
+            "save_settings",
+            [{
+                "selected_game": "three_kingdoms",
+                "game_installations": {
+                    "three_kingdoms": {
+                        "game_path": str(game),
+                        "workshop_path": str(workshop),
+                    },
+                },
+                "fetch_workshop_metadata": False,
+            }],
+        )
+        if not saved["ok"]:
+            raise AssertionError(saved)
+        return api, api.call("scan_mods", [False])
+
+    @staticmethod
     def _feature_statuses(subscribed: bool = True) -> list[dict[str, object]]:
         return [
             {
@@ -343,16 +372,156 @@ class ApiContractTests(unittest.TestCase):
                     "title": "动态禁用友伤 - Dynamic No Friendly Fire",
                     "subscribed": False,
                 },
+                "unit_cap": {
+                    **items["unit_cap"],
+                    "subscribed": False,
+                },
             },
         )
         self.assertEqual(result["data"]["warning"], "")
         self.assertTrue(result["data"]["known"])
         self.assertEqual(result["data"]["source"], "live")
         query.assert_called_once_with(
-            [items["unit_size"]["workshop_id"], items["friendly_fire"]["workshop_id"]],
+            [
+                items["unit_size"]["workshop_id"],
+                items["friendly_fire"]["workshop_id"],
+                items["unit_cap"]["workshop_id"],
+            ],
             "schinese",
-            app_id="1142710",
+            app_id=1_142_710,
         )
+
+    def test_three_kingdoms_routes_steam_and_launch_without_wh3_runtime_packs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_three_kingdoms_api(root)
+            self.assertTrue(scan["ok"])
+            with (
+                patch(
+                    "backend.api.subscribe_workshop_items",
+                    return_value={"subscribed": ["123"]},
+                ) as subscribe,
+                patch("backend.api.launch_game", return_value={"pid": 7, "argument": ""}) as launch,
+                patch.object(api, "set_game_running"),
+            ):
+                subscribed = api.call("subscribe_workshop_items", [["123"]])
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+        self.assertTrue(subscribed["ok"])
+        self.assertEqual(subscribe.call_args.kwargs["app_id"], 779340)
+        self.assertTrue(launched["ok"])
+        self.assertEqual(launch.call_args.kwargs["executable_name"], "Three_Kingdoms.exe")
+        self.assertEqual(launch.call_args.kwargs["process_name"], "Three_Kingdoms.exe")
+        self.assertEqual(launched["data"]["game_data_patch"]["status"], "unsupported")
+
+    def test_detect_paths_selects_requested_game_and_returns_its_health(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War THREE KINGDOMS"
+            data = game / "data"
+            workshop = root / "workshop" / "content" / "779340"
+            data.mkdir(parents=True)
+            workshop.mkdir(parents=True)
+            (game / "Three_Kingdoms.exe").write_bytes(b"")
+            paths = GamePaths(
+                game_id="three_kingdoms",
+                game_path=str(game),
+                data_path=str(data),
+                workshop_path=str(workshop),
+            )
+            api = API(root / "state")
+            with (
+                patch.object(
+                    api.settings_service,
+                    "detect_and_save",
+                    return_value={"found": True, "paths": paths.to_dict()},
+                ) as detect,
+                patch.object(
+                    api.settings_service,
+                    "get_public",
+                    return_value={"selected_game": "three_kingdoms"},
+                ),
+                patch.object(api, "detect_game_running", return_value=False),
+                patch.object(api, "_sync_runtime_services"),
+            ):
+                result = api.call("detect_paths", ["three_kingdoms"])
+
+        self.assertTrue(result["ok"])
+        detect.assert_called_once_with("three_kingdoms")
+        self.assertTrue(result["data"]["path_health"]["game_ready"])
+
+    def test_cover_file_picker_is_not_exposed_by_the_directory_api(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            result = api.call("select_directory", ["preview"])
+
+        self.assertFalse(result["ok"])
+        self.assertIn("不支持", result["error"]["message"])
+
+    def test_workshop_update_eligibility_requires_matching_creator_and_allows_workshop_only_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = write_pack(root / "123" / "workshop_only.pack")
+            pack.with_suffix(".png").write_bytes(b"cover fixture")
+            workshop_only = ModAsset(
+                id="steam:123:workshop_only.pack",
+                pack_name="workshop_only.pack",
+                display_name="Workshop-only MOD",
+                path=str(pack),
+                directory=str(pack.parent),
+                source=SOURCE_WORKSHOP,
+                sources=[SOURCE_WORKSHOP],
+                workshop_id="123",
+                creator_id="765",
+            )
+            api = API(root / "state")
+            api._assets = {workshop_only.id: workshop_only}
+            with patch(
+                "backend.api.get_current_user",
+                return_value={"steam_id": "765", "name": "Owner"},
+            ):
+                eligible = api.call("get_workshop_update_eligibility", [[workshop_only.id]])
+            with patch(
+                "backend.api.get_current_user",
+                return_value={"steam_id": "999", "name": "Other"},
+            ):
+                ineligible = api.call("get_workshop_update_eligibility", [[workshop_only.id]])
+            with patch(
+                "backend.api.get_current_user",
+                side_effect=SteamworksBridgeError("Steam offline"),
+            ):
+                unavailable = api.call("get_workshop_update_eligibility", [[workshop_only.id]])
+
+            payload = {
+                "mode": "update",
+                "title": "Workshop-only MOD",
+                "description": "",
+                "change_note": "",
+                "language": "en-US",
+                "category": "units",
+                "visibility": 0,
+            }
+            with patch(
+                "backend.api.publish_workshop_item",
+                return_value={
+                    "workshop_id": "123",
+                    "owner_id": "765",
+                    "owner_name": "Owner",
+                },
+            ) as publish:
+                updated = api.call("publish_workshop_item", [workshop_only.id, payload])
+                uploaded = api.call(
+                    "publish_workshop_item",
+                    [workshop_only.id, {**payload, "mode": "upload"}],
+                )
+
+        self.assertTrue(eligible["ok"])
+        self.assertEqual(eligible["data"]["eligible_mod_ids"], [workshop_only.id])
+        self.assertEqual(ineligible["data"]["eligible_mod_ids"], [])
+        self.assertEqual(unavailable["data"]["eligible_mod_ids"], [])
+        self.assertTrue(updated["ok"])
+        self.assertEqual(publish.call_args_list[0].kwargs["workshop_id"], "123")
+        self.assertFalse(uploaded["ok"])
 
     def test_game_data_feature_status_retains_known_cache_after_refresh_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -408,6 +577,86 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(all(ensure.call_args.kwargs["subscription_state"].values()))
         query.assert_called_once()
         launch.assert_called_once()
+
+    def test_launch_stages_runtime_packs_in_data_when_portable_path_is_unicode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "中文目录" / "管理器"
+            root.mkdir(parents=True)
+            api, scan = self._prepare_launch_api(root)
+            patch_result = self._game_data_patch_result(root)
+            runtime_source = root / "state" / "runtime" / RUNTIME_PACK_NAME
+            write_pack(runtime_source)
+            runtime_result = {
+                "path": str(runtime_source),
+                "options": ["skip_intro_movies"],
+                "entry_count": 1,
+                "game_data": {},
+            }
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    return_value=self._feature_statuses(),
+                ),
+                patch("backend.api.ensure_game_data_patch", return_value=patch_result),
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value=runtime_result,
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+            data_path = root / "Total War WARHAMMER III" / "data"
+            content = launched["data"]["launch_plan"]["content"]
+            patch_target = data_path / GAME_DATA_PATCH_NAME
+            runtime_target = data_path / RUNTIME_PACK_NAME
+            patch_target_bytes = patch_target.read_bytes() if patch_target.is_file() else b""
+            runtime_target_bytes = runtime_target.read_bytes() if runtime_target.is_file() else b""
+            patch_source_bytes = Path(patch_result["path"]).read_bytes()
+            runtime_source_bytes = runtime_source.read_bytes()
+
+        self.assertTrue(launched["ok"])
+        self.assertEqual(launched["data"]["launch_plan"]["working_directories"], [])
+        self.assertNotIn("add_working_directory", content)
+        self.assertIn(f'mod "{GAME_DATA_PATCH_NAME}";', content)
+        self.assertIn(f'mod "{RUNTIME_PACK_NAME}";', content)
+        self.assertEqual(patch_target_bytes, patch_source_bytes)
+        self.assertEqual(runtime_target_bytes, runtime_source_bytes)
+
+    def test_launch_removes_stale_runtime_packs_from_data_when_options_are_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            data_path = root / "Total War WARHAMMER III" / "data"
+            stale_paths = [
+                write_pack(data_path / GAME_DATA_PATCH_NAME),
+                write_pack(data_path / RUNTIME_PACK_NAME),
+            ]
+            patch_result = self._game_data_patch_result(root, "zero_modification")
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    return_value=self._feature_statuses(),
+                ),
+                patch("backend.api.ensure_game_data_patch", return_value=patch_result),
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={
+                        "path": "",
+                        "options": [],
+                        "entry_count": 0,
+                        "game_data": {},
+                    },
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+            stale_exists_after_launch = [path.exists() for path in stale_paths]
+
+        self.assertTrue(launched["ok"])
+        self.assertEqual(stale_exists_after_launch, [False, False])
 
     def test_launch_logs_generated_reused_and_zero_modification_outcomes(self) -> None:
         for status in ("generated", "reused", "zero_modification"):
@@ -729,7 +978,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(result["data"]["suggested_language"], "en-US")
         self.assertEqual(result["data"]["effective_language"], "en-US")
         self.assertEqual(result["data"]["steam_language"], "schinese")
-        refresh.assert_called_once_with(["123"], "zh-CN")
+        refresh.assert_called_once_with(["123"], "zh-CN", app_id=1_142_710)
 
     def test_share_import_warns_subscribes_and_resolves_downloaded_workshop_mods(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -757,7 +1006,7 @@ class ApiContractTests(unittest.TestCase):
 
             self.assertTrue(preview["ok"])
             self.assertEqual(preview["data"]["unsubscribed"][0]["workshop_id"], "123")
-            query_status.assert_called_once_with(["123"], "schinese", app_id="1142710")
+            query_status.assert_called_once_with(["123"], "schinese", app_id=1_142_710)
 
             with patch(
                 "backend.api.subscribe_workshop_items",
@@ -769,7 +1018,7 @@ class ApiContractTests(unittest.TestCase):
             ) as subscribe:
                 accepted = api.call("subscribe_workshop_items", [["123"]])
             self.assertTrue(accepted["ok"])
-            subscribe.assert_called_once_with(["123"], app_id="1142710")
+            subscribe.assert_called_once_with(["123"], app_id=1_142_710)
 
             imported = api.call("import_share", [share_code])
             self.assertTrue(imported["ok"])
@@ -793,6 +1042,123 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(
                 api.state_repository.get_current_playset()["mod_ids"],
                 ["installed-id"],
+            )
+
+    def test_collection_import_subscribes_missing_items_and_preserves_collection_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api = API(root / "state")
+            installed = make_asset(
+                write_pack(root / "workshop" / "123" / "one.pack"),
+                "installed-id",
+                SOURCE_WORKSHOP,
+                "123",
+            )
+            api._assets = {installed.id: installed}
+            collection = {
+                "collection_id": "900",
+                "title": "My collection",
+                "references": [
+                    {"workshop_id": "123", "legacy_workshop_project": True},
+                    {"workshop_id": "456", "legacy_workshop_project": True},
+                ],
+            }
+            with (
+                patch("backend.api.fetch_workshop_collection", return_value=collection),
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    return_value=[
+                        {"workshop_id": "123", "title": "Installed", "subscribed": True},
+                        {"workshop_id": "456", "title": "Missing", "subscribed": False},
+                    ],
+                ),
+                patch(
+                    "backend.api.subscribe_workshop_items",
+                    return_value={
+                        "subscribed": [],
+                        "already_subscribed": [],
+                        "failed": [{"workshop_id": "456", "error": "access denied"}],
+                    },
+                ) as subscribe,
+            ):
+                imported = api.call(
+                    "import_workshop_collection",
+                    ["https://steamcommunity.com/sharedfiles/filedetails/?id=900"],
+                )
+                playset_order = api.state_repository.get_current_playset()["mod_ids"]
+
+        self.assertTrue(imported["ok"])
+        self.assertEqual(imported["data"]["collection"]["title"], "My collection")
+        self.assertEqual(imported["data"]["ordered_mod_ids"], [installed.id])
+        self.assertEqual(imported["data"]["pending_workshop_ids"], [])
+        self.assertEqual(imported["data"]["subscription_failures"][0]["workshop_id"], "456")
+        self.assertEqual(playset_order, [installed.id])
+        subscribe.assert_called_once_with(["456"], app_id=1_142_710)
+
+    def test_save_load_order_preserves_pending_workshop_items_for_download_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            workshop = root / "workshop" / "1142710"
+            data.mkdir(parents=True)
+            workshop.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            write_pack(data / "installed.pack")
+
+            api = API(root / "state")
+            saved_settings = api.call(
+                "save_settings",
+                [{
+                    "game_path": str(game),
+                    "workshop_path": str(workshop),
+                    "scan_data": True,
+                    "scan_modding": False,
+                    "scan_workshop": True,
+                    "scan_merged": False,
+                    "fetch_workshop_metadata": False,
+                }],
+            )
+            self.assertTrue(saved_settings["ok"])
+            scan = api.call("scan_mods", [False])
+            self.assertTrue(scan["ok"])
+            installed_id = next(
+                item["id"]
+                for item in scan["data"]["mods"]
+                if item["pack_name"] == "installed.pack"
+            )
+            pending_id = "pending:steam:456:downloaded.pack"
+            current_playset_id = api.state_repository.get_current_playset_id()
+            api.call("update_playset", [current_playset_id, [installed_id, pending_id]])
+
+            saved_order = api.call(
+                "save_load_order",
+                [[installed_id], scan["data"]["order_token"]],
+            )
+
+            self.assertTrue(saved_order["ok"])
+            self.assertEqual(
+                api.state_repository.get_current_playset()["mod_ids"],
+                [installed_id, pending_id],
+            )
+
+            write_pack(workshop / "456" / "downloaded.pack")
+            downloaded_scan = api.call("scan_mods", [False])
+            self.assertTrue(downloaded_scan["ok"])
+            downloaded_id = next(
+                item["id"]
+                for item in downloaded_scan["data"]["mods"]
+                if item["workshop_id"] == "456"
+            )
+            self.assertEqual(
+                downloaded_scan["data"]["enabled_order"],
+                [installed_id, downloaded_id],
+            )
+            self.assertEqual(
+                api.state_repository.get_current_playset()["mod_ids"],
+                [installed_id, downloaded_id],
             )
 
     def test_switching_playset_persists_its_order_through_the_next_scan(self) -> None:

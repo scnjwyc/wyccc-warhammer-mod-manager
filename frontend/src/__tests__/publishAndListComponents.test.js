@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import ModList from '../components/ModList.vue'
 import WorkshopPublishModal from '../components/WorkshopPublishModal.vue'
+import { LANGUAGE_OPTIONS, languageLabel } from '../languages'
 import { useAppStore } from '../store'
 
 const localMod = {
@@ -39,19 +40,17 @@ describe('visual-only list sorting guardrails', () => {
   })
 })
 
-describe('Workshop publish confirmation', () => {
-  it('requires explicit confirmation and emits data without contacting Steam', async () => {
+describe('Workshop publish dialog', () => {
+  it('uses the sibling cover automatically and emits without a confirmation checkbox', async () => {
     const wrapper = mount(WorkshopPublishModal, {
       global: { plugins: [createPinia()] },
       props: { open: true, mode: 'upload', mod: localMod, busy: '' },
     })
     const submit = wrapper.get('.primary-button')
-    expect(submit.attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[data-testid="publish-cover-path"]').element.value)
-      .toBe('G:/game/data/my_own_mod.png')
+    expect(wrapper.find('[data-testid="publish-cover-path"]').exists()).toBe(false)
+    expect(wrapper.find('.publish-confirmation').exists()).toBe(false)
     expect(wrapper.find('.path-input-row').exists()).toBe(false)
     await wrapper.get('input[type="text"][maxlength="128"]').setValue('My Workshop Mod')
-    await wrapper.get('.publish-confirmation input').setValue(true)
     expect(submit.attributes('disabled')).toBeUndefined()
     await submit.trigger('click')
     expect(wrapper.emitted('submit')[0][0]).toMatchObject({
@@ -101,17 +100,19 @@ describe('Workshop publish confirmation', () => {
     await flushPromises()
     await flushPromises()
     const language = wrapper.get('[data-testid="publish-language-select"]')
-    expect(language.element.value).toBe('en-US')
+    expect(language.get('.themed-select-value').text()).toBe(
+      languageLabel(LANGUAGE_OPTIONS.find(option => option.code === 'en-US')),
+    )
     expect(wrapper.get('input[type="text"][maxlength="128"]').element.value).toBe('English title')
     expect(wrapper.text()).toContain('更新日志')
     expect(wrapper.find('textarea[rows="3"]').element.value).toBe('')
 
-    await language.setValue('ru-RU')
+    await language.get('.themed-select-trigger').trigger('click')
+    await language.get('[data-value="ru-RU"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('input[type="text"][maxlength="128"]').element.value).toBe('Русский заголовок')
     expect(wrapper.find('textarea[rows="6"]').element.value).toBe('Русское описание')
 
-    await wrapper.get('.publish-confirmation input').setValue(true)
     await wrapper.get('.primary-button').trigger('click')
     expect(wrapper.emitted('submit')[0][0]).toMatchObject({
       mode: 'update',

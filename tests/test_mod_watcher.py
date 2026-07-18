@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from backend.api import API
 from backend.mod_watcher import DebouncedCallback, ModChangeMonitor, ModEventHandler
+from backend.start_options import GAME_DATA_PATCH_NAME, RUNTIME_PACK_NAME
 from tests.helpers import write_pack
 
 
@@ -44,6 +45,20 @@ class ModWatcherTests(unittest.TestCase):
         )
         data_handler.on_any_event(
             SimpleNamespace(event_type="created", src_path=r"C:\game\data\preview.png", is_directory=False)
+        )
+        data_handler.on_any_event(
+            SimpleNamespace(
+                event_type="created",
+                src_path=rf"C:\game\data\{GAME_DATA_PATCH_NAME}",
+                is_directory=False,
+            )
+        )
+        data_handler.on_any_event(
+            SimpleNamespace(
+                event_type="modified",
+                src_path=rf"C:\game\data\{RUNTIME_PACK_NAME}",
+                is_directory=False,
+            )
         )
         workshop_handler.on_any_event(
             SimpleNamespace(event_type="deleted", src_path=r"C:\workshop\123456", is_directory=True)

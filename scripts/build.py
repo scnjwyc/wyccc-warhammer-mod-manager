@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -105,10 +106,37 @@ def build_frontend(*, install: bool, tests: bool) -> None:
     run([pnpm, "build"], cwd=FRONTEND)
 
 
+def validate_frontend_bundle(static_root: Path) -> None:
+    root = Path(static_root).resolve(strict=False)
+    index_path = root / "index.html"
+    if not index_path.is_file():
+        raise SystemExit("missing frontend index.html")
+    source = index_path.read_text(encoding="utf-8")
+    asset_pattern = re.compile(r"(?:src|href)\s*=\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
+    for raw_reference in asset_pattern.findall(source):
+        reference = raw_reference.strip()
+        if (
+            not reference
+            or reference.startswith(("http:", "https:", "data:", "#", "/"))
+        ):
+            continue
+        relative_reference = reference.split("#", 1)[0].split("?", 1)[0]
+        if not relative_reference:
+            continue
+        asset_path = (root / relative_reference).resolve(strict=False)
+        try:
+            asset_path.relative_to(root)
+        except ValueError as exc:
+            raise SystemExit(f"frontend asset escapes bundle root: {reference}") from exc
+        if not asset_path.is_file():
+            raise SystemExit(f"missing frontend asset: {reference}")
+
+
 def package_desktop(output_dir: Path) -> Path:
     static_root = FRONTEND / "dist"
     if not (static_root / "index.html").is_file():
         raise SystemExit("frontend/dist 不存在，无法打包。")
+    validate_frontend_bundle(static_root)
     output_dir = output_dir.expanduser().resolve(strict=False)
     output_dir.mkdir(parents=True, exist_ok=True)
     icon_path = PACKAGING / "wmm.ico"

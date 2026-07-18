@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 
 from .game_data_settings import (
     normalize_single_entity_unit_mode,
+    normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
 )
 
@@ -495,6 +496,9 @@ def build_game_data_entries(
     multiplier = normalize_unit_scale_multiplier(
         settings.get("unit_model_multiplier", 1)
     )
+    recruitment_capacity_multiplier = normalize_unit_recruitment_capacity_multiplier(
+        settings.get("unit_recruitment_capacity_multiplier", 1)
+    )
     scale_lord_hero_health = _coerce_bool(
         settings.get("scale_lord_hero_health", False)
     )
@@ -507,10 +511,13 @@ def build_game_data_entries(
     disable_unit = _coerce_bool(settings.get("disable_unit_friendly_fire", False))
     disable_spell = _coerce_bool(settings.get("disable_spell_friendly_fire", False))
     scale_units = not math.isclose(multiplier, 1.0, rel_tol=0.0, abs_tol=1e-9)
+    adjust_recruitment_capacity = recruitment_capacity_multiplier != 1
 
     stats: dict[str, int | float] = {
         "unit_model_multiplier": multiplier,
+        "unit_recruitment_capacity_multiplier": recruitment_capacity_multiplier,
         "unit_rows_scaled": 0,
+        "unit_recruitment_capacity_rows_changed": 0,
         "land_rows_scaled": 0,
         "lord_hero_health_rows_scaled": 0,
         "single_entity_health_rows_scaled": 0,
@@ -522,9 +529,12 @@ def build_game_data_entries(
     }
     needed_tables: set[str] = set()
     output_tables: set[str] = set()
+    if scale_units or adjust_recruitment_capacity:
+        needed_tables.add("main_units_tables")
+        output_tables.add("main_units_tables")
     if scale_units:
-        needed_tables.update({"main_units_tables", "land_units_tables"})
-        output_tables.update({"main_units_tables", "land_units_tables"})
+        needed_tables.add("land_units_tables")
+        output_tables.add("land_units_tables")
         if scale_lord_hero_health or single_entity_health_mode:
             needed_tables.add("battle_entities_tables")
     if disable_unit or disable_spell:
@@ -593,6 +603,22 @@ def build_game_data_entries(
                     row = _patch_i32(row, "num_men", new_count)
                     if new_count != int(values.get("num_men") or 0):
                         stats["unit_rows_scaled"] = int(stats["unit_rows_scaled"]) + 1
+            if adjust_recruitment_capacity:
+                campaign_cap = int(values.get("campaign_cap") or 0)
+                new_campaign_cap = (
+                    -1
+                    if recruitment_capacity_multiplier == 0
+                    else (
+                        _scaled_i32(campaign_cap, recruitment_capacity_multiplier)
+                        if campaign_cap >= 0
+                        else campaign_cap
+                    )
+                )
+                row = _patch_i32(row, "campaign_cap", new_campaign_cap)
+                if new_campaign_cap != campaign_cap:
+                    stats["unit_recruitment_capacity_rows_changed"] = (
+                        int(stats["unit_recruitment_capacity_rows_changed"]) + 1
+                    )
             patched_by_table["main_units_tables"][key] = row
 
         missing_character_land_units = sorted(
@@ -645,6 +671,29 @@ def build_game_data_entries(
                     )
                     stats[stat_key] = int(stats[stat_key]) + 1
             patched_by_table["land_units_tables"][key] = row
+
+    elif adjust_recruitment_capacity:
+        for key, candidate in effective["main_units_tables"].items():
+            row = candidate.row
+            campaign_cap = int(row.values.get("campaign_cap") or 0)
+            new_campaign_cap = (
+                -1
+                if recruitment_capacity_multiplier == 0
+                else (
+                    _scaled_i32(campaign_cap, recruitment_capacity_multiplier)
+                    if campaign_cap >= 0
+                    else campaign_cap
+                )
+            )
+            patched_by_table["main_units_tables"][key] = _patch_i32(
+                row,
+                "campaign_cap",
+                new_campaign_cap,
+            )
+            if new_campaign_cap != campaign_cap:
+                stats["unit_recruitment_capacity_rows_changed"] = (
+                    int(stats["unit_recruitment_capacity_rows_changed"]) + 1
+                )
 
     if disable_unit or disable_spell:
         spell_explosions: set[str] = set()

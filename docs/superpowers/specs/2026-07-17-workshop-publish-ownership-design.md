@@ -1,85 +1,69 @@
-# 0.7.5 Workshop 发布与更新权限设计
+# 0.8.0 多游戏、Workshop 与启动可靠性设计
 
 ## 目标
 
-将 MOD 发布和更新流程收紧为固定封面文件与 Steam 所有权校验，同时让已订阅、但不在 `data` 目录中的自有 Workshop MOD 可以更新。
+将 WMM 从仅支持《全面战争：战锤 3》的固定配置调整为默认战锤 3、同时支持《全面战争：三国》的通用 MOD 管理器；完成 Workshop 发布和更新的 Steam 所有权校验；移除过时的软件更新通道；并在缺少 Microsoft Edge WebView2 Runtime 时给出可操作的启动提示，而不是显示空白窗口。
 
-## 范围
+## 范围与边界
 
-- 发布和更新弹窗不显示封面路径或封面选择控件。
-- 后端始终使用待上传 Pack 同目录、同名的 `.png` 文件作为 Workshop 预览图，并继续拒绝超过 `1 MiB` 的文件。
-- 发布和更新弹窗移除“确认拥有项目”的复选框；填写有效标题后即可提交。
-- 更新按钮只在当前 Steam 账号与该 Workshop 项目的 `creator_id` 相等时显示，不再以 Pack 是否位于 `data` 为前提。
-- `creator_id` 缺失、当前 Steam 账号无法读取或二者不匹配时，不显示更新按钮。
-- 作者昵称或头像获取失败不影响更新按钮；它们不是授权依据。
-- 源码版本、版本信息、README 和六种内置语言的更新日志同步为 `0.7.5`。
+- 默认游戏为《全面战争：战锤 3》，并支持《全面战争：三国》（Steam App ID `779340`）。
+- 三国保留扫描、启用/排序、Steam Workshop、启动游戏、发布和更新 MOD 等通用能力。
+- 仅《全面战争：战锤 3》显示“游戏数据修改”和“导入官方启动器”入口；后端也拒绝非战锤 3 对这两项功能的 RPC 调用。
+- 切换到三国时自动扫描 Steam 库；若找不到正确安装目录，保留该游戏选择并要求用户手动填写，不能回退或误用战锤 3 的目录。
+- 删除设置中的“软件更新通道”卡片、其自定义清单字段和后端覆盖逻辑；继续使用内置 Gitee/GitHub 更新来源、自动检查、手动检查与更新日志。
+- Workshop 发布和更新不显示封面路径、封面选择控件或“确认拥有项目”复选框。后端始终使用 Pack 同目录、同名 `.png`，并继续拒绝超过 `1 MiB` 的文件。
+- 已订阅但不在 `data` 的 MOD，只要 Steam `creator_id` 与当前 Steam 用户 64 位 ID 一致，就可显示并执行更新；缺失任一 ID、作者不匹配或身份查询失败时不显示更新按钮。作者昵称和头像只用于展示，失败不影响已取得的 `creator_id` 判断。
+- 源码版本、Python/前端包元数据、Windows 版本信息、README、版本一致性测试和六种内置语言更新日志同步为 `0.8.0`。不生成 EXE、不修改发布清单中的真实文件大小/哈希、不创建 Tag 或 Release。
 
-不在范围内：生成 EXE、修改带真实文件大小和 SHA-256 的更新清单、创建 Git tag 或发布 Release。
+## 多游戏架构
 
-## 授权规则
+采用游戏注册表，而不是在界面层覆盖单一 `game_path`。覆盖单一路径会在切换后丢失战锤 3 目录，并可能把错误的 Steam App ID 用于三国 Workshop；为每个游戏保存独立路径可避免这两类问题。
 
-一个 MOD 可在界面中显示“更新 MOD”按钮，当且仅当以下条件同时成立：
+新增不可变 `GameDefinition` 注册表，至少定义：内部 ID、显示名、Steam App ID、默认 Steam 安装目录、可执行文件名、进程名，以及 `supports_game_data_modification` 和 `supports_official_profile_import` 能力标志。战锤 3 定义为 `warhammer3` / `1142710` / `Warhammer3.exe`；三国定义为 `three_kingdoms` / `779340` / `Three_Kingdoms.exe`。`GamePaths` 携带当前游戏定义，使可执行文件、Steam manifest、Workshop 目录和进程检测不再硬编码战锤 3。
 
-1. MOD 有有效的 Workshop ID。
-2. 当前扫描结果中有非空的 `creator_id`。
-3. Steamworks 桥能读取当前 Steam 账号的 64 位 ID。
-4. `creator_id` 与当前 Steam ID 完全相等。
+设置迁移到 schema `12`：
 
-MOD 的来源（`data`、`workshop` 或两者同时存在）不参与上述判断。作者显示名 `author`、头像和个人资料请求仅用于展示，失败不会改变第 2 条已取得的 `creator_id`。
+```json
+{
+  "selected_game": "warhammer3",
+  "game_installations": {
+    "warhammer3": {"game_path": "", "workshop_path": ""},
+    "three_kingdoms": {"game_path": "", "workshop_path": ""}
+  }
+}
+```
 
-右键多选采用全有或全无的规则：只要当前选择中有一个 MOD 不满足授权规则，就不显示批量更新按钮。这样不会出现按钮写着多个项目、实际却跳过无权项目的情况。
+旧版 `game_path` 和 `workshop_path` 仅迁移到 `warhammer3`，再从持久化设置中移除。切换游戏时前端切换到该游戏自己的路径草稿；后端根据选中的游戏发现 Steam manifest、安装目录、`data` 与 `workshop/content/<app-id>`。三国未检测到时，`detect_paths` 返回 `found: false` 和空的三国路径，而不是抛出“未能定位战锤 3”错误或覆盖另一游戏的路径。目录健康检查使用所选游戏的可执行文件，扫描与启动在目录不完整时保持不可用。
 
-## 组件与数据流
+所有依赖 Steam App ID 的通用操作——元数据刷新、订阅、强制更新、分享码订阅、发布/更新——从当前 `GameDefinition` 读取 App ID。官方 `.twmods` 解析和游戏数据运行时 Pack 是战锤 3 专用：前端仅在能力标志为真时挂载入口，API 在其他游戏上返回清晰错误，启动三国时跳过战锤 3 的游戏数据/运行时 Pack 生成。
 
-### Steamworks 身份查询
+## Workshop 所有权与发布
 
-`steam_runtime/workshop_bridge.js` 增加只读的 `get_current_user` 操作，使用现有 `client.localplayer` API 返回当前 Steam 账号的 64 位 ID 和昵称。`backend/steamworks_bridge.py` 为它提供受控包装函数。
+`steam_runtime/workshop_bridge.js` 增加只读 `get_current_user` 操作，从现有 `client.localplayer` 返回当前 Steam 64 位 ID 与显示名。`backend/steamworks_bridge.py` 提供受控包装函数；`API.get_workshop_update_eligibility(mod_ids)` 一次查询当前用户，并仅返回具有有效 Workshop ID、非空 `creator_id` 且两者完全匹配的已扫描 MOD ID。
 
-`backend/api.py` 增加 `get_workshop_update_eligibility(mod_ids)` RPC：
+前端在右键菜单打开时请求所选 MOD 的资格。请求返回前资格集合为空；使用递增请求序号忽略过期结果。多选遵循全有或全无：只要所选项中有一个不符合资格，就不显示“更新 MOD”。上传仍要求 Data 来源且未关联 Workshop；更新接受 Data 或仅 Workshop 来源的 Pack，但最终上传前仍由 Steamworks bridge 查询真实项目所有者，防止陈旧前端资格或直接 RPC 绕过。
 
-- 一次读取当前 Steam ID；
-- 仅将有 Workshop ID、`creator_id` 非空且匹配的已扫描 MOD ID 放入 `eligible_mod_ids`；
-- Steam 身份查询失败时返回空的 `eligible_mod_ids`，而不是把失败当成授权；
-- 不把作者昵称或头像请求结果作为输入。
+发布窗口移除封面行、封面提示、`confirmed` 状态和复选框。提交按钮只受忙碌状态、语言加载和非空标题限制，提交负载不再包含 `preview_path`。`_require_workshop_cover` 在临时上传目录创建前固定解析同名 PNG、检查可读性和 `1_024 * 1_024` 字节上限，再将 Pack 与 PNG 一起暂存，并将该 PNG 传给 Steam。
 
-前端在打开某个 MOD 的右键菜单时请求当前选择的资格。请求返回之前资格集合为空，因此按钮不会短暂显示给无权项目。使用请求序号忽略已经过时的异步结果，避免用户快速切换右键目标时旧结果改变新菜单。
+## 软件更新通道
 
-### 右键菜单与提交
+自定义 `update_manifest_url` 不是隐藏字段：从默认设置、迁移/标准化、公开设置、`UpdateService.check` 参数、前端 Store 和 SettingsModal 中一起删除。已保存的旧字段会在 schema 12 规范化时丢弃。更新检查始终以现有内置清单源为准，保留自动检查、手动检查、忽略版本和更新日志。
 
-`ModContextMenu.vue` 将“上传 MOD”和“更新 MOD”拆开判断：
+## 启动可靠性与 WebView2
 
-- 上传仍要求 Pack 位于 `data` 且尚未关联 Workshop 项目。
-- 更新由 `canUpdateWorkshop` 属性控制，完全以资格 RPC 的结果为准。
+截图中的纯白内容区说明 Vue 根节点没有完成挂载，但目前没有受影响用户的 `app.log`，不能把它确定为单一原因。已知边界是：`index.html` 本身只有空的 `#app`，且 Vite 产物目标为 `chrome120`；缺失/损坏/过旧的 WebView2、前端资源缺失或渲染期异常都可能产生相同表象。
 
-`App.vue` 将资格集合传给右键菜单，并在处理 `publish-update` 操作时再次仅接受当前已获资格的选中项。已订阅的自有 MOD 即使只有 Workshop 来源，也可进入更新弹窗。
+启动前新增独立的 WebView2 检测模块，遵循 Microsoft Edge WebView2 Runtime 的注册表 `pv` 版本约定。在 Windows 上检测不到有效 Runtime 时：记录明确日志、显示原生“下载 / 退出”对话框，用户选择下载则打开微软官方 WebView2 下载页，随后安全退出，绝不创建主窗口。`run_desktop` 也会记录和捕获 WebView 启动失败。
 
-`WorkshopPublishModal.vue` 删除只读封面路径、封面帮助文字、`confirmed` 状态和确认复选框。提交按钮只受忙碌状态、语言加载状态和标题是否为空限制；提交负载继续不包含可由用户指定的 `preview_path`。
+前端入口提供默认可见的深色启动占位页；`window.onerror` 和未处理 Promise 拒绝会把占位页替换为可读的故障说明和诊断标识，避免纯白。构建脚本在打包前验证 `frontend/dist/index.html` 引用的本地 JS/CSS 资源均存在。上述措施能覆盖 Runtime 缺失和资源/渲染失败的可诊断性，但仍保留日志收集以确认具体事故原因。
 
-### 后端发布路径
+## 用户体验与本地化
 
-发布模式继续要求 `data` 来源，因为创建新 Workshop 项目只能从本地自有 MOD 发起。更新模式改为允许任何已扫描的关联 Workshop Pack 作为上传源，包括仅在 Workshop 目录中的 Pack。
-
-无论发布还是更新，`_require_workshop_cover(source_pack)` 都在临时上传目录创建前运行，固定寻找同目录同名 PNG 并校验不超过 `1 MiB`。实际调用 Steam 时仍使用该文件作为预览图。
-
-Steamworks 的现有更新路径继续在 `updateItem` 前查询 Workshop 项目所有者，并将项目所有者与当前 Steam ID 比较。这是最终授权边界：即使前端资格结果陈旧或 RPC 被绕过，Steam 仍拒绝无权更新。
-
-## 错误处理
-
-- 缺少同名 PNG、PNG 不可读取或大于 `1 MiB`：阻止上传并显示现有后端错误。
-- 无法读取当前 Steam ID、缺少 `creator_id` 或 ID 不匹配：静默视为无更新资格，不显示按钮。
-- 用户在资格查询完成后切换 Steam 账号，或远端项目所有者变化：提交时的 Steamworks 所有者校验拒绝更新并通过现有 toast 显示原因。
-- 新建 Workshop 项目后仍沿用 Steam 返回的协议接受提示，不引入新的人工所有权确认步骤。
-
-## 版本与文案
-
-将 `0.7.5` 同步到应用常量、Python/前端包元数据、Windows 版本信息、前端备用版本、README 和版本一致性测试。更新日志在中文、英文、韩文、俄文、日文和西班牙文中简洁说明：固定同名 PNG 封面校验、取消人工所有权勾选、以及自有已订阅 MOD 可更新。
-
-没有真实 0.7.5 EXE 时，`packaging/update-manifest.json` 保持已发布版本，避免写入虚假的下载链接、大小或哈希。
+设置窗口增加游戏选择器和按游戏变化的目录占位符、检测提示、手动填写说明。非战锤 3 时：主界面不渲染游戏数据修改按钮，分享窗口不渲染“导入官方启动器”按钮，已打开的相关对话框在切换后关闭。所有新增、删除或改名的可见文案同步中文、英文、韩文、俄文、日文和西班牙文。
 
 ## 验证
 
-- 前端组件测试确认封面行和确认复选框均不存在，标题有效时可提交，且提交负载没有 `preview_path`。
-- 前端菜单和应用测试确认：仅 Workshop 来源但 ID 匹配时可更新；有 `data` 来源但 ID 不匹配时不可更新；缺少 `creator_id` 时不可更新；昵称或头像失败不改变有 `creator_id` 的授权结果；混合多选不显示批量更新。
-- 后端和桥接测试确认当前 Steam ID 查询、资格 RPC 的失败收敛、仅 Workshop Pack 的更新路径，以及提交时的最终所有者校验。
-- 保留并运行同名 PNG 缺失和超大 PNG 拒绝测试。
-- 完成后运行后端测试、前端测试、前端生产构建、Ruff 和 `git diff --check`。
+- 后端测试覆盖 schema 11 到 12 的迁移、两游戏 Steam 路径发现、手动目录/可执行文件健康检查、当前游戏 App ID 透传、非战锤 3 专用 RPC 拒绝、三国启动不生成战锤 3 运行时 Pack，以及 WebView2 注册表检测和缺失 Runtime 的原生提示路径。
+- Steamworks/API 测试覆盖 `get_current_user`、资格查询失败收敛为空、作者 ID 匹配/不匹配、仅 Workshop 来源可更新、最终 Steam 所有者校验和同名 PNG 继续校验。
+- 前端测试覆盖游戏选择、未发现三国时的手动路径提示、非战锤 3 隐藏两项入口、删除更新通道/封面/确认复选框、资格异步竞态和多选全有或全无。
+- 最终运行后端测试、前端测试、前端生产构建、Ruff、Python 编译检查与 `git diff --check`；不运行打包或发布流程。

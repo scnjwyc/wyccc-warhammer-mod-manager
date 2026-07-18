@@ -13,6 +13,7 @@ from backend.api import API
 from backend.app_settings import default_data_dir
 from backend.launcher import is_game_running
 from backend.runtime import RuntimeCoordinator, localized_idle_url
+from backend.webview_runtime import ensure_webview2_runtime, show_startup_error
 
 
 _instance_mutex: int | None = None
@@ -153,6 +154,8 @@ def run_desktop(
     idle_url: str = "",
     initial_game_running: bool = False,
 ) -> int:
+    if not ensure_webview2_runtime():
+        return 3
     try:
         import webview
     except ImportError as exc:
@@ -168,16 +171,22 @@ def run_desktop(
         if initial_game_running
         else ui_url
     )
-    window = webview.create_window(
-        APP_NAME,
-        initial_url,
-        js_api=api,
-        width=1440,
-        height=900,
-        min_size=(1080, 680),
-        maximized=True,
-        background_color="#0b0909",
-    )
+    try:
+        window = webview.create_window(
+            APP_NAME,
+            initial_url,
+            js_api=api,
+            width=1440,
+            height=900,
+            min_size=(1080, 680),
+            maximized=True,
+            background_color="#0b0909",
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Unable to create the desktop window")
+        show_startup_error(f"Unable to create the application window:\n{exc}")
+        close_instance_handles()
+        return 4
     bind_window = getattr(api, "bind_window", None)
     if callable(bind_window):
         bind_window(window)
@@ -212,6 +221,10 @@ def run_desktop(
 
     try:
         webview.start(on_ready, debug=False)
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Desktop runtime stopped during startup")
+        show_startup_error(f"Unable to start the application window:\n{exc}")
+        return 4
     finally:
         activation_stop.set()
         coordinator.stop()

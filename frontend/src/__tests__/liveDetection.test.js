@@ -68,4 +68,26 @@ describe('live MOD detection', () => {
     await pending
     expect(store.workshopRefreshing).toBe(false)
   })
+
+  it('ignores a stale Workshop ownership response after a newer menu request', async () => {
+    let resolveFirst
+    let resolveSecond
+    invokeMock.mockImplementation((method, modIds) => {
+      if (method !== 'get_workshop_update_eligibility') throw new Error(`Unexpected RPC: ${method}`)
+      return new Promise(resolve => {
+        if (modIds[0] === 'first') resolveFirst = resolve
+        else resolveSecond = resolve
+      })
+    })
+    const store = useAppStore()
+
+    const first = store.refreshWorkshopUpdateEligibility(['first'])
+    const second = store.refreshWorkshopUpdateEligibility(['second'])
+    resolveSecond({ eligible_mod_ids: ['second'] })
+    await second
+    resolveFirst({ eligible_mod_ids: ['first'] })
+    await first
+
+    expect([...store.workshopUpdateEligibility]).toEqual(['second'])
+  })
 })

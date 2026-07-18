@@ -8,18 +8,27 @@ const props = defineProps({
   busy: { type: String, default: '' },
   unitSizeSubscribed: { type: Boolean, default: true },
   friendlyFireSubscribed: { type: Boolean, default: true },
+  unitCapacitySubscribed: { type: Boolean, default: true },
   unitSizeModName: { type: String, default: 'Dynamic Unit Size' },
   friendlyFireModName: { type: String, default: 'Dynamic No Friendly Fire' },
+  unitCapacityModName: { type: String, default: '动态单位容量 - Dynamic Unit Cap' },
 })
 
 const emit = defineEmits(['close', 'save'])
 const UNIT_MODEL_MULTIPLIER_MIN = 1
 const UNIT_MODEL_MULTIPLIER_MAX = 5
 const UNIT_MODEL_MULTIPLIER_STEPS = [1, 2, 3, 4, 5]
+const UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN = 1
+const UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MAX = 5
+const UNIT_RECRUITMENT_CAPACITY_UNLIMITED_SLIDER_VALUE = 6
+const UNLIMITED_LABEL = String.fromCharCode(0x221e)
+const MULTIPLIER_LABEL = String.fromCharCode(0xd7)
+const UNIT_RECRUITMENT_CAPACITY_STEPS = [1, 2, 3, 4, 5, UNLIMITED_LABEL]
 const SINGLE_ENTITY_UNIT_MODE_HEALTH = 'health'
 const SINGLE_ENTITY_UNIT_MODE_SCALE = 'scale'
 const draft = reactive({
   unit_model_multiplier: 1,
+  unit_recruitment_capacity_multiplier: 1,
   single_entity_unit_mode: SINGLE_ENTITY_UNIT_MODE_SCALE,
   scale_lord_hero_health: false,
   disable_unit_friendly_fire: false,
@@ -36,6 +45,16 @@ const normalizeMultiplier = value => {
   return Math.round(clamped)
 }
 
+const normalizeRecruitmentCapacityMultiplier = value => {
+  const numeric = Number(value)
+  if (numeric === 0) return 0
+  if (!Number.isFinite(numeric)) return 1
+  return Math.round(Math.max(
+    UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN,
+    Math.min(UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MAX, numeric),
+  ))
+}
+
 const normalizeSingleEntityUnitMode = value => (
   String(value || '').trim().toLowerCase() === SINGLE_ENTITY_UNIT_MODE_HEALTH
     ? SINGLE_ENTITY_UNIT_MODE_HEALTH
@@ -44,24 +63,34 @@ const normalizeSingleEntityUnitMode = value => (
 
 const unitSizeAvailable = computed(() => props.unitSizeSubscribed)
 const friendlyFireAvailable = computed(() => props.friendlyFireSubscribed)
+const unitCapacityAvailable = computed(() => props.unitCapacitySubscribed)
 const requirementMessage = modName => t('gameData.requiredModNotSubscribed', { mod: modName })
+const recruitmentCapacitySliderValue = computed({
+  get: () => (
+    normalizeRecruitmentCapacityMultiplier(draft.unit_recruitment_capacity_multiplier) === 0
+      ? UNIT_RECRUITMENT_CAPACITY_UNLIMITED_SLIDER_VALUE
+      : normalizeRecruitmentCapacityMultiplier(draft.unit_recruitment_capacity_multiplier)
+  ),
+  set: value => {
+    const numeric = Number(value)
+    draft.unit_recruitment_capacity_multiplier = (
+      numeric >= UNIT_RECRUITMENT_CAPACITY_UNLIMITED_SLIDER_VALUE
+        ? 0
+        : normalizeRecruitmentCapacityMultiplier(numeric)
+    )
+  },
+})
 
 const resetDraft = () => {
   draft.unit_model_multiplier = normalizeMultiplier(props.settings.unit_model_multiplier ?? 1)
+  draft.unit_recruitment_capacity_multiplier = normalizeRecruitmentCapacityMultiplier(
+    props.settings.unit_recruitment_capacity_multiplier ?? 1,
+  )
   draft.single_entity_unit_mode = normalizeSingleEntityUnitMode(props.settings.single_entity_unit_mode)
   draft.scale_lord_hero_health = !!props.settings.scale_lord_hero_health
   draft.disable_unit_friendly_fire = !!props.settings.disable_unit_friendly_fire
   draft.disable_spell_friendly_fire = !!props.settings.disable_spell_friendly_fire
 }
-
-const singleEntityUnitModeValue = computed({
-  get: () => (draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_HEALTH ? 0 : 1),
-  set: value => {
-    draft.single_entity_unit_mode = Number(value) === 0
-      ? SINGLE_ENTITY_UNIT_MODE_HEALTH
-      : SINGLE_ENTITY_UNIT_MODE_SCALE
-  },
-})
 
 watch(
   () => props.open,
@@ -81,6 +110,9 @@ watch(
 
 const currentSettings = () => ({
   unit_model_multiplier: normalizeMultiplier(draft.unit_model_multiplier),
+  unit_recruitment_capacity_multiplier: normalizeRecruitmentCapacityMultiplier(
+    draft.unit_recruitment_capacity_multiplier,
+  ),
   single_entity_unit_mode: normalizeSingleEntityUnitMode(draft.single_entity_unit_mode),
   scale_lord_hero_health: !!draft.scale_lord_hero_health,
   disable_unit_friendly_fire: !!draft.disable_unit_friendly_fire,
@@ -88,7 +120,7 @@ const currentSettings = () => ({
 })
 
 const submit = () => {
-  if (!unitSizeAvailable.value && !friendlyFireAvailable.value) return
+  if (!unitSizeAvailable.value && !friendlyFireAvailable.value && !unitCapacityAvailable.value) return
   emit('save', currentSettings())
 }
 
@@ -139,22 +171,34 @@ const submit = () => {
           <div class="single-entity-mode-control">
             <div class="single-entity-mode-row">
               <strong>{{ t('gameData.singleEntityUnitMode') }}</strong>
-              <div class="single-entity-mode-slider">
-                <input
-                  v-model.number="singleEntityUnitModeValue"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="1"
+              <div
+                class="single-entity-mode-toggle"
+                role="group"
+                :aria-label="t('gameData.singleEntityUnitMode')"
+                data-testid="single-entity-unit-mode"
+              >
+                <button
+                  type="button"
+                  class="single-entity-mode-choice"
+                  :class="{ active: draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_HEALTH }"
+                  :aria-pressed="draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_HEALTH"
                   :disabled="!!busy || !unitSizeAvailable"
-                  :aria-label="t('gameData.singleEntityUnitMode')"
-                  :aria-valuetext="singleEntityUnitModeValue === 0 ? t('gameData.singleEntityHealth') : t('gameData.singleEntityScale')"
-                  data-testid="single-entity-unit-mode"
-                />
-                <div class="single-entity-mode-labels" aria-hidden="true">
-                  <span>{{ t('gameData.singleEntityHealth') }}</span>
-                  <span>{{ t('gameData.singleEntityScale') }}</span>
-                </div>
+                  data-testid="single-entity-unit-mode-health"
+                  @click="draft.single_entity_unit_mode = SINGLE_ENTITY_UNIT_MODE_HEALTH"
+                >
+                  {{ t('gameData.singleEntityHealth') }}
+                </button>
+                <button
+                  type="button"
+                  class="single-entity-mode-choice"
+                  :class="{ active: draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_SCALE }"
+                  :aria-pressed="draft.single_entity_unit_mode === SINGLE_ENTITY_UNIT_MODE_SCALE"
+                  :disabled="!!busy || !unitSizeAvailable"
+                  data-testid="single-entity-unit-mode-scale"
+                  @click="draft.single_entity_unit_mode = SINGLE_ENTITY_UNIT_MODE_SCALE"
+                >
+                  {{ t('gameData.singleEntityScale') }}
+                </button>
               </div>
             </div>
             <small>{{ t('gameData.singleEntityUnitModeHelp') }}</small>
@@ -171,6 +215,36 @@ const submit = () => {
               <small>{{ t('gameData.scaleLordHeroHealthHelp') }}</small>
             </span>
           </label>
+        </section>
+
+        <section class="game-data-card multiplier-card unit-capacity-card" :class="{ unavailable: !unitCapacityAvailable }">
+          <div class="game-data-card-copy">
+            <strong>{{ t('gameData.unitRecruitmentCapacityMultiplier') }}</strong>
+            <small>{{ t('gameData.unitRecruitmentCapacityMultiplierHelp') }}</small>
+            <p v-if="!unitCapacityAvailable" class="game-data-requirement" data-testid="unit-capacity-requirement">
+              {{ requirementMessage(unitCapacityModName) }}
+            </p>
+          </div>
+          <div class="unit-scale-control">
+            <div class="unit-scale-slider-row">
+              <input
+                v-model.number="recruitmentCapacitySliderValue"
+                type="range"
+                :min="UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN"
+                :max="UNIT_RECRUITMENT_CAPACITY_UNLIMITED_SLIDER_VALUE"
+                step="1"
+                :disabled="!!busy || !unitCapacityAvailable"
+                :aria-label="t('gameData.unitRecruitmentCapacityMultiplier')"
+                data-testid="unit-recruitment-capacity-multiplier"
+              />
+              <output class="unit-scale-value" data-testid="unit-recruitment-capacity-value">
+                {{ normalizeRecruitmentCapacityMultiplier(draft.unit_recruitment_capacity_multiplier) === 0 ? UNLIMITED_LABEL : `${normalizeRecruitmentCapacityMultiplier(draft.unit_recruitment_capacity_multiplier)}${MULTIPLIER_LABEL}` }}
+              </output>
+            </div>
+            <div class="unit-scale-ticks" data-testid="unit-recruitment-capacity-ticks" aria-hidden="true">
+              <span v-for="step in UNIT_RECRUITMENT_CAPACITY_STEPS" :key="step">{{ step === UNLIMITED_LABEL ? step : `${step}${MULTIPLIER_LABEL}` }}</span>
+            </div>
+          </div>
         </section>
 
         <section class="game-data-card friendly-fire-card" :class="{ unavailable: !friendlyFireAvailable }">
@@ -205,7 +279,7 @@ const submit = () => {
             <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('close')">
               {{ t('common.cancel') }}
             </button>
-            <button type="submit" class="primary-button" :disabled="!!busy || (!unitSizeAvailable && !friendlyFireAvailable)">
+            <button type="submit" class="primary-button" :disabled="!!busy || (!unitSizeAvailable && !friendlyFireAvailable && !unitCapacityAvailable)">
               {{ busy || t('gameData.save') }}
             </button>
           </div>
@@ -220,7 +294,19 @@ const submit = () => {
 
 <style scoped>
 .game-data-modal {
-  width: min(700px, 94vw);
+  width: min(760px, 94vw);
+}
+
+.game-data-modal .eyebrow {
+  font-size: 13px;
+}
+
+.game-data-modal .modal-header h2 {
+  font-size: 22px;
+}
+
+.game-data-modal .modal-footer button {
+  font-size: 14px;
 }
 
 .game-data-body {
@@ -232,7 +318,7 @@ const submit = () => {
 .game-data-intro {
   margin: 0;
   color: #aa9a90;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -250,7 +336,7 @@ const submit = () => {
 .game-data-requirement {
   margin: 3px 0 0;
   color: #d69b65;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -270,14 +356,14 @@ const submit = () => {
 .character-health-toggle strong,
 .friendly-fire-card :deep(.switch-row strong) {
   color: #ead9ca;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .game-data-card-copy small,
 .character-health-toggle small,
 .friendly-fire-card :deep(.switch-row small) {
   color: #8d7f77;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -305,7 +391,7 @@ const submit = () => {
   border-radius: 4px;
   background: #0e0b0b;
   color: #f1d29a;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 800;
   text-align: center;
 }
@@ -315,7 +401,7 @@ const submit = () => {
   justify-content: space-between;
   margin-right: 66px;
   color: #75675f;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -335,31 +421,56 @@ const submit = () => {
 
 .single-entity-mode-row strong {
   color: #ead9ca;
-  font-size: 13px;
+  font-size: 16px;
 }
 
-.single-entity-mode-slider {
+.single-entity-mode-toggle {
   display: grid;
-  width: min(190px, 52%);
-  gap: 3px;
+  width: min(230px, 52%);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #594238;
+  border-radius: 5px;
+  background: #0e0b0b;
 }
 
-.single-entity-mode-slider input {
-  width: 100%;
-  margin: 0;
-  accent-color: #b87a3c;
+.single-entity-mode-choice {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid #3d2d29;
+  border-radius: 0;
+  background: transparent;
+  color: #897a71;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
-.single-entity-mode-labels {
-  display: flex;
-  justify-content: space-between;
-  color: #75675f;
-  font-size: 10px;
+.single-entity-mode-choice:first-child {
+  border-left: 0;
+}
+
+.single-entity-mode-choice:hover:not(:disabled) {
+  background: #2c211e;
+  color: #f3d29a;
+}
+
+.single-entity-mode-choice.active {
+  background: linear-gradient(135deg, #a76531, #c88b49);
+  box-shadow: inset 0 1px 0 rgb(255 234 192 / 22%);
+  color: #fff7e8;
+}
+
+.single-entity-mode-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .single-entity-mode-control small {
   color: #8d7f77;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -398,7 +509,7 @@ const submit = () => {
 .game-data-note p {
   margin: 0;
   color: #a99686;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.65;
 }
 
@@ -432,7 +543,7 @@ const submit = () => {
   margin: 0;
   max-width: min(520px, 100%);
   color: #d69b65;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
   text-align: left;
 }
@@ -448,7 +559,7 @@ const submit = () => {
     gap: 7px;
   }
 
-  .single-entity-mode-slider {
+  .single-entity-mode-toggle {
     width: 100%;
   }
 

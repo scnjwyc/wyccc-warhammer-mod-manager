@@ -34,8 +34,6 @@ from .constants import (
     INTERNAL_FEATURE_WORKSHOP_IDS,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
-    WH3_APP_ID,
-    WH3_EXECUTABLE,
 )
 from .file_operations import (
     build_delete_preview,
@@ -49,7 +47,8 @@ from .game_data_patch_state import (
 )
 from .launcher import is_game_running, launch_game
 from .load_order import LoadOrderService, current_order_path, file_token
-from .models import ModAsset
+from .games import GameDefinition
+from .models import GamePaths, ModAsset
 from .mod_profiles import existing_profile_directory, parse_mod_profile
 from .mod_watcher import ModChangeMonitor
 from .scanner import ModScanner
@@ -61,6 +60,7 @@ from .share import (
     resolve_share,
     resolve_share_with_pending,
 )
+from .workshop_collections import fetch_workshop_collection
 from .storage import StateRepository
 from .start_options import (
     GAME_DATA_PATCH_NAME,
@@ -69,6 +69,7 @@ from .start_options import (
 )
 from .steamworks_bridge import (
     SteamworksBridgeError,
+    get_current_user,
     perform_workshop_operation,
     publish_workshop_item,
     query_workshop_subscription_status,
@@ -87,6 +88,7 @@ logger = logging.getLogger(__name__)
 GAME_DATA_SETTING_KEYS = frozenset(
     {
         "unit_model_multiplier",
+        "unit_recruitment_capacity_multiplier",
         "single_entity_unit_mode",
         "scale_lord_hero_health",
         "disable_unit_friendly_fire",
@@ -196,6 +198,7 @@ class API:
             "export_share": self._export_share,
             "preview_import_share": self._preview_import_share,
             "import_share": self._import_share,
+            "import_workshop_collection": self._import_workshop_collection,
             "preview_mod_profile": self._preview_mod_profile,
             "import_mod_profile": self._import_mod_profile,
             "subscribe_workshop_items": self._subscribe_workshop_items,
@@ -212,6 +215,7 @@ class API:
             "unsubscribe_workshop_mod": self._unsubscribe_workshop_mod,
             "unsubscribe_workshop_mods": self._unsubscribe_workshop_mods,
             "force_update_workshop_mod": self._force_update_workshop_mod,
+            "get_workshop_update_eligibility": self._get_workshop_update_eligibility,
             "get_workshop_publish_copy": self._get_workshop_publish_copy,
             "publish_workshop_item": self._publish_workshop_item,
             "open_mod_in_rpfm": self._open_mod_in_rpfm,
@@ -231,6 +235,13 @@ class API:
 
     def interface_language(self) -> str:
         return str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+
+    def _active_game(self) -> GameDefinition:
+        return self.settings_service.selected_game_definition()
+
+    def _require_game_capability(self, capability: str, feature: str) -> None:
+        if not bool(getattr(self._active_game(), capability, False)):
+            raise ValueError(f"{feature} is only available for Total War: WARHAMMER III")
 
     def close(self) -> None:
         self.mod_monitor.stop()
@@ -302,7 +313,7 @@ class API:
             "app_version": APP_VERSION,
             "settings": settings,
             "paths": paths.to_dict(),
-            "path_health": self._path_health(paths.game_path, paths.data_path, paths.workshop_path),
+            "path_health": self._path_health(paths),
             "enabled_order": current_playset["mod_ids"],
             "playsets": self.state_repository.list_playsets(),
             "current_playset": current_playset,
@@ -317,6 +328,7 @@ class API:
         }
 
     def _get_game_data_feature_status(self) -> dict[str, Any]:
+        self._require_game_capability("supports_game_data_modification", "Game data modification")
         workshop_ids = [
             item["workshop_id"]
             for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
@@ -328,7 +340,7 @@ class API:
             statuses = query_workshop_subscription_status(
                 workshop_ids,
                 language,
-                app_id=WH3_APP_ID,
+                app_id=int(self._active_game().app_id),
             )
         except SteamworksBridgeError as exc:
             warning = f"无法刷新游戏数据功能的 Workshop 订阅状态：{exc}"
@@ -377,12 +389,8 @@ class API:
             "source": "live" if live_success else ("memory" if known else "unavailable"),
         }
 
-    def _check_for_updates(
-        self,
-        manual: bool = True,
-        manifest_url: str | None = None,
-    ) -> dict[str, Any]:
-        result = self.update_service.check(manual=bool(manual), manifest_url=manifest_url)
+    def _check_for_updates(self, manual: bool = True) -> dict[str, Any]:
+        result = self.update_service.check(manual=bool(manual))
         language = str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
         local_release = next(
             (
@@ -413,9 +421,24 @@ class API:
         self.settings_service.save({"last_seen_app_version": APP_VERSION})
         return {"last_seen_app_version": APP_VERSION}
 
-    def _detect_paths(self) -> dict[str, Any]:
-        result = self.settings_service.detect_and_save()
+    def _detect_paths(self, game_id: str = "") -> dict[str, Any]:
+        result = self.settings_service.detect_and_save(str(game_id or ""))
         result["settings"] = self.settings_service.get_public()
+        raw_paths = result.get("paths")
+        if isinstance(raw_paths, dict):
+            paths = GamePaths(
+                game_id=str(raw_paths.get("game_id") or self._active_game().id),
+                game_path=str(raw_paths.get("game_path") or ""),
+                data_path=str(raw_paths.get("data_path") or ""),
+                workshop_path=str(raw_paths.get("workshop_path") or ""),
+                steam_root=str(raw_paths.get("steam_root") or ""),
+                steam_library=str(raw_paths.get("steam_library") or ""),
+                detected_by=str(raw_paths.get("detected_by") or ""),
+            )
+        else:
+            paths = self.settings_service.resolve_game_paths()
+            result["paths"] = paths.to_dict()
+        result["path_health"] = self._path_health(paths)
         self._assets.clear()
         self._asset_aliases.clear()
         self._invalidate_game_executable_cache()
@@ -433,10 +456,11 @@ class API:
         return {
             "settings": settings,
             "paths": paths.to_dict(),
-            "path_health": self._path_health(paths.game_path, paths.data_path, paths.workshop_path),
+            "path_health": self._path_health(paths),
         }
 
     def _save_game_data_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
+        self._require_game_capability("supports_game_data_modification", "Game data modification")
         filtered = self._game_data_setting_changes(changes)
         self.settings_service.save(filtered)
         return {"settings": self.settings_service.get_public()}
@@ -490,9 +514,8 @@ class API:
         )
         return {}
 
-    @staticmethod
-    def _select_directory(kind: str) -> dict[str, str]:
-        if kind not in {"game", "workshop", "preview"}:
+    def _select_directory(self, kind: str) -> dict[str, str]:
+        if kind not in {"game", "workshop"}:
             raise ValueError("不支持的目录类型")
         try:
             import tkinter
@@ -501,26 +524,22 @@ class API:
             root = tkinter.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
-            if kind == "preview":
-                selected = filedialog.askopenfilename(
-                    title="选择 Workshop 预览图",
-                    filetypes=(
-                        ("图片文件", "*.png *.jpg *.jpeg"),
-                        ("PNG", "*.png"),
-                        ("JPEG", "*.jpg *.jpeg"),
-                        ("所有文件", "*.*"),
-                    ),
-                )
-            else:
-                title = "选择 Warhammer III 游戏目录" if kind == "game" else "选择 Workshop 目录"
-                selected = filedialog.askdirectory(title=title)
+            title = (
+                f"选择 {self._active_game().title} 游戏目录"
+                if kind == "game"
+                else "选择 Workshop 目录"
+            )
+            selected = filedialog.askdirectory(title=title)
             root.destroy()
             return {"path": str(selected or "")}
         except Exception as exc:
             raise ValueError(f"无法打开目录选择器：{exc}") from exc
 
-    @staticmethod
-    def _select_mod_profile() -> dict[str, str]:
+    def _select_mod_profile(self) -> dict[str, str]:
+        self._require_game_capability(
+            "supports_official_profile_import",
+            "Official launcher profile import",
+        )
         try:
             import tkinter
             from tkinter import filedialog
@@ -548,7 +567,7 @@ class API:
             scan_revision = self._mod_revision_value()
             settings = self.settings_service.get()
             paths = self.settings_service.resolve_game_paths()
-            health = self._path_health(paths.game_path, paths.data_path, paths.workshop_path)
+            health = self._path_health(paths)
             if not health["game_ready"]:
                 raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
             scan_result = self.scanner.scan(paths, settings, bool(refresh_workshop))
@@ -736,7 +755,24 @@ class API:
             expected_token or self._last_order_token,
             comparison_path,
         )
-        self.state_repository.update_current_playset(written_plan.ordered_mod_ids)
+        current_playset = self.state_repository.get_current_playset()
+        current_ids = self._canonicalize_mod_ids(current_playset["mod_ids"])
+        missing_ids = {
+            mod_id
+            for mod_id in current_ids
+            if mod_id not in self._assets
+        }
+        active_queue = list(written_plan.ordered_mod_ids)
+        playset_order: list[str] = []
+        for mod_id in current_ids:
+            if mod_id in missing_ids:
+                playset_order.append(mod_id)
+            elif active_queue:
+                playset_order.append(active_queue.pop(0))
+        playset_order.extend(active_queue)
+        self.state_repository.update_current_playset(
+            list(dict.fromkeys(playset_order))
+        )
         self._refresh_missing_dependency_warnings(written_plan.ordered_mod_ids)
         self.state_repository.set_active_order_filename(Path(written_plan.target_path).name)
         backup = None
@@ -780,6 +816,12 @@ class API:
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
             paths = self.settings_service.resolve_game_paths()
             settings = self.settings_service.get()
+            if not paths.game_definition.supports_game_data_modification:
+                return self._launch_game_without_runtime_packs(
+                    paths,
+                    saved,
+                    selected_save,
+                )
             subscription_state = self._resolve_game_data_subscription_state(settings)
             try:
                 game_data_patch = ensure_game_data_patch(
@@ -809,35 +851,44 @@ class API:
                 saved["plan"]["ordered_mod_ids"],
                 settings,
             )
+            data_root = Path(paths.data_path).resolve(strict=False)
+            game_data_path = self._stage_runtime_pack_in_data(
+                str(game_data_patch.get("path") or ""),
+                data_root,
+                GAME_DATA_PATCH_NAME,
+            )
+            runtime_path = self._stage_runtime_pack_in_data(
+                str(runtime.get("path") or ""),
+                data_root,
+                RUNTIME_PACK_NAME,
+            )
             launch_plan = saved["plan"]
             launch_path = saved["plan"]["target_path"]
 
             internal_assets: dict[str, ModAsset] = {}
             internal_ids: list[str] = []
-            game_data_path = Path(str(game_data_patch.get("path") or ""))
-            if game_data_patch.get("path") and game_data_path.is_file():
+            if game_data_path is not None:
                 game_data_id = "runtime:game-data-patch"
                 internal_assets[game_data_id] = ModAsset(
                     id=game_data_id,
                     pack_name=GAME_DATA_PATCH_NAME,
                     display_name="Wyccc 游戏数据补丁",
-                    path=str(game_data_path.resolve(strict=False)),
-                    directory=str(game_data_path.parent.resolve(strict=False)),
-                    source="runtime",
-                    sources=["runtime"],
+                    path=str(game_data_path),
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
                 )
                 internal_ids.append(game_data_id)
-            if runtime["path"]:
-                runtime_path = Path(runtime["path"])
+            if runtime_path is not None:
                 runtime_id = "runtime:start-options"
                 internal_assets[runtime_id] = ModAsset(
                     id=runtime_id,
                     pack_name=RUNTIME_PACK_NAME,
                     display_name="Wyccc 启动选项",
                     path=str(runtime_path),
-                    directory=str(runtime_path.parent),
-                    source="runtime",
-                    sources=["runtime"],
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
                 )
                 internal_ids.append(runtime_id)
 
@@ -857,6 +908,8 @@ class API:
                 paths.game_path,
                 launch_path,
                 str(selected_save["name"]) if selected_save else "",
+                executable_name=paths.game_definition.executable_name,
+                process_name=paths.game_definition.process_name,
             )
             self.set_game_running(True, force=True)
             return {
@@ -867,6 +920,43 @@ class API:
                 "launch_plan": launch_plan,
                 "save": selected_save,
             }
+
+    def _launch_game_without_runtime_packs(
+        self,
+        paths: GamePaths,
+        saved: dict[str, Any],
+        selected_save: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        launch_plan = saved["plan"]
+        process = launch_game(
+            paths.game_path,
+            str(launch_plan["target_path"]),
+            str(selected_save["name"]) if selected_save else "",
+            executable_name=paths.game_definition.executable_name,
+            process_name=paths.game_definition.process_name,
+        )
+        self.set_game_running(True, force=True)
+        return {
+            **saved,
+            "process": process,
+            "game_data_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "changed_inputs": [],
+                "entry_count": 0,
+                "options": [],
+                "game_data": {},
+            },
+            "runtime_options": {
+                "path": "",
+                "entry_count": 0,
+                "options": [],
+                "game_data": {},
+            },
+            "launch_plan": launch_plan,
+            "save": selected_save,
+        }
 
     def _continue_game(
         self,
@@ -938,13 +1028,16 @@ class API:
         if cached is not None:
             return cached
         paths = self.settings_service.resolve_game_paths()
-        executable = str(Path(paths.game_path) / WH3_EXECUTABLE) if paths.game_path else ""
+        executable = paths.executable_path
         with self._game_executable_lock:
             self._game_executable_cache = executable
         return executable
 
     def detect_game_running(self) -> bool:
-        return is_game_running(self.game_executable_path())
+        return is_game_running(
+            self.game_executable_path(),
+            process_name=self._active_game().process_name,
+        )
 
     def _current_runtime_running(self) -> bool:
         with self._runtime_lock:
@@ -1047,7 +1140,7 @@ class API:
                 statuses = query_workshop_subscription_status(
                     list(references_by_workshop_id),
                     language,
-                    app_id=WH3_APP_ID,
+                    app_id=int(self._active_game().app_id),
                 )
             except SteamworksBridgeError as exc:
                 raise ValueError(f"无法检查分享码中的 Workshop 订阅状态：{exc}") from exc
@@ -1088,7 +1181,104 @@ class API:
             "pending_workshop_ids": pending_workshop_ids,
         }
 
+    def _import_workshop_collection(self, collection_value: str) -> dict[str, Any]:
+        collection = fetch_workshop_collection(
+            collection_value,
+            app_id=int(self._active_game().app_id),
+        )
+        references = collection["references"]
+        workshop_ids = [str(reference["workshop_id"]) for reference in references]
+        language = steam_language_for_interface(
+            str(self.settings_service.get().get("language") or "")
+        )
+        try:
+            statuses = query_workshop_subscription_status(
+                workshop_ids,
+                language,
+                app_id=int(self._active_game().app_id),
+            )
+        except SteamworksBridgeError as exc:
+            raise ValueError(f"无法检查合集中的 Workshop 订阅状态：{exc}") from exc
+
+        subscription_by_workshop_id = {
+            str(item.get("workshop_id") or ""): bool(item.get("subscribed"))
+            for item in statuses
+            if str(item.get("workshop_id") or "").isdigit()
+        }
+        unsubscribed_ids = [
+            workshop_id
+            for workshop_id in dict.fromkeys(workshop_ids)
+            if not subscription_by_workshop_id.get(workshop_id, False)
+        ]
+        subscribed_ids: list[str] = []
+        already_subscribed_ids: list[str] = []
+        subscription_failures: list[dict[str, str]] = []
+        try:
+            for start in range(0, len(unsubscribed_ids), 200):
+                result = subscribe_workshop_items(
+                    unsubscribed_ids[start : start + 200],
+                    app_id=int(self._active_game().app_id),
+                )
+                subscribed_ids.extend(str(item) for item in result.get("subscribed", []))
+                already_subscribed_ids.extend(
+                    str(item) for item in result.get("already_subscribed", [])
+                )
+                failed = result.get("failed")
+                if isinstance(failed, list):
+                    for item in failed:
+                        if not isinstance(item, dict):
+                            continue
+                        workshop_id = str(item.get("workshop_id") or "").strip()
+                        if workshop_id.isdigit():
+                            subscription_failures.append(
+                                {
+                                    "workshop_id": workshop_id,
+                                    "error": str(item.get("error") or "").strip(),
+                                }
+                            )
+        except SteamworksBridgeError as exc:
+            raise ValueError(f"自动订阅合集 MOD 失败：{exc}") from exc
+
+        failed_workshop_ids = {
+            item["workshop_id"]
+            for item in subscription_failures
+        }
+        importable_references = [
+            reference
+            for reference in references
+            if str(reference.get("workshop_id") or "") not in failed_workshop_ids
+        ]
+        ordered_ids, missing = resolve_share_with_pending(
+            importable_references,
+            self._assets,
+        )
+        self.state_repository.update_current_playset(ordered_ids)
+        pending_workshop_ids = list(
+            dict.fromkeys(
+                str(reference.get("workshop_id") or "")
+                for reference in missing
+                if str(reference.get("workshop_id") or "").isdigit()
+            )
+        )
+        return {
+            **self._current_playset_payload(),
+            "collection": {
+                "collection_id": str(collection["collection_id"]),
+                "title": str(collection.get("title") or ""),
+                "item_count": len(references),
+            },
+            "missing": missing,
+            "pending_workshop_ids": pending_workshop_ids,
+            "subscribed_workshop_ids": list(dict.fromkeys(subscribed_ids)),
+            "already_subscribed_workshop_ids": list(dict.fromkeys(already_subscribed_ids)),
+            "subscription_failures": subscription_failures,
+        }
+
     def _preview_mod_profile(self, profile_path: str) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_official_profile_import",
+            "Official launcher profile import",
+        )
         parsed = parse_mod_profile(profile_path)
         references = parsed["references"]
         ordered_ids, missing = resolve_share(references, self._assets)
@@ -1103,7 +1293,7 @@ class API:
             statuses = query_workshop_subscription_status(
                 list(references_by_workshop_id),
                 language,
-                app_id=WH3_APP_ID,
+                app_id=int(self._active_game().app_id),
             )
         except SteamworksBridgeError as exc:
             raise ValueError(f"无法检查官方配置中的 Workshop 订阅状态：{exc}") from exc
@@ -1130,6 +1320,10 @@ class API:
         }
 
     def _import_mod_profile(self, profile_path: str, mode: str = "new") -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_official_profile_import",
+            "Official launcher profile import",
+        )
         if mode not in {"new", "replace"}:
             raise ValueError("官方配置导入模式无效")
         parsed = parse_mod_profile(profile_path)
@@ -1163,8 +1357,7 @@ class API:
             "pending_workshop_ids": pending_workshop_ids,
         }
 
-    @staticmethod
-    def _subscribe_workshop_items(workshop_ids: list[str]) -> dict[str, Any]:
+    def _subscribe_workshop_items(self, workshop_ids: list[str]) -> dict[str, Any]:
         if not isinstance(workshop_ids, list):
             raise ValueError("Workshop ID 列表无效")
         normalized = list(
@@ -1175,7 +1368,10 @@ class API:
         if len(normalized) > 200:
             raise ValueError("一次最多自动订阅 200 个 Workshop 项目")
         try:
-            return subscribe_workshop_items(normalized, app_id=WH3_APP_ID)
+            return subscribe_workshop_items(
+                normalized,
+                app_id=int(self._active_game().app_id),
+            )
         except SteamworksBridgeError as exc:
             raise ValueError(f"自动订阅 Workshop 项目失败：{exc}") from exc
 
@@ -1384,6 +1580,39 @@ class API:
             raise ValueError("Steam Workshop MOD 下载未完成")
         return result
 
+    def _get_workshop_update_eligibility(self, mod_ids: list[str]) -> dict[str, list[str]]:
+        if not isinstance(mod_ids, list):
+            return {"eligible_mod_ids": []}
+        candidates: list[ModAsset] = []
+        seen: set[str] = set()
+        for mod_id in mod_ids[:500]:
+            try:
+                asset = self._require_asset(str(mod_id))
+            except ValueError:
+                continue
+            if asset.id in seen:
+                continue
+            seen.add(asset.id)
+            candidates.append(asset)
+        if not candidates:
+            return {"eligible_mod_ids": []}
+        try:
+            current_user = get_current_user(app_id=int(self._active_game().app_id))
+        except SteamworksBridgeError:
+            return {"eligible_mod_ids": []}
+        steam_id = str(current_user.get("steam_id") or "").strip()
+        if not steam_id.isdigit():
+            return {"eligible_mod_ids": []}
+        return {
+            "eligible_mod_ids": [
+                asset.id
+                for asset in candidates
+                if asset.workshop_id.isdigit()
+                and bool(str(asset.creator_id or "").strip())
+                and str(asset.creator_id).strip() == steam_id
+            ]
+        }
+
     def _get_workshop_publish_copy(
         self,
         mod_id: str,
@@ -1396,6 +1625,7 @@ class API:
         item = self.workshop_service.refresh_localized(
             [asset.workshop_id],
             interface_language,
+            app_id=int(self._active_game().app_id),
         ).get(asset.workshop_id)
         if not isinstance(item, dict):
             raise ValueError("未能读取该 Workshop 项目的标题和描述")
@@ -1427,12 +1657,12 @@ class API:
         mod_id: str,
         publish_data: dict[str, Any],
     ) -> dict[str, Any]:
-        asset = self._require_publishable_asset(mod_id)
         if not isinstance(publish_data, dict):
             raise ValueError("工坊发布参数无效")
         mode = str(publish_data.get("mode") or "").strip()
         if mode not in {"upload", "update"}:
             raise ValueError("工坊发布模式无效")
+        asset = self._require_publishable_asset(mod_id, mode)
         if mode == "upload" and asset.workshop_id:
             raise ValueError("该 MOD 已关联 Workshop 项目，请使用更新功能")
         workshop_id = asset.workshop_id if mode == "update" else ""
@@ -1488,7 +1718,7 @@ class API:
                     visibility=visibility,
                     workshop_id=workshop_id,
                     language=steam_language,
-                    app_id=WH3_APP_ID,
+                    app_id=int(self._active_game().app_id),
                 )
         except SteamworksBridgeError as exc:
             raise ValueError(str(exc)) from exc
@@ -1506,10 +1736,13 @@ class API:
         asset.author = str(result.get("owner_name") or asset.author)
         return {"result": result, "mod": asset.to_dict()}
 
-    @staticmethod
-    def _run_workshop_operation(operation: str, workshop_id: str) -> dict[str, Any]:
+    def _run_workshop_operation(self, operation: str, workshop_id: str) -> dict[str, Any]:
         try:
-            return perform_workshop_operation(operation, workshop_id, app_id=WH3_APP_ID)
+            return perform_workshop_operation(
+                operation,
+                workshop_id,
+                app_id=int(self._active_game().app_id),
+            )
         except SteamworksBridgeError as exc:
             raise ValueError(str(exc)) from exc
 
@@ -1617,6 +1850,24 @@ class API:
         )
         return {**counts, "details": details}
 
+    def _stage_runtime_pack_in_data(
+        self,
+        source_value: str,
+        data_root: Path,
+        pack_name: str,
+    ) -> Path | None:
+        target = (data_root / pack_name).resolve(strict=False)
+        if not source_value:
+            target.unlink(missing_ok=True)
+            return None
+
+        source = Path(source_value)
+        if not source.is_file():
+            raise FileNotFoundError(f"运行时 Pack 不存在：{source}")
+        if source.resolve(strict=False) != target:
+            self._atomic_copy(source, target)
+        return target
+
     @staticmethod
     def _atomic_copy(source: Path, target: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1667,11 +1918,13 @@ class API:
             raise ValueError("该 MOD 不是 Workshop 项目")
         return asset
 
-    def _require_publishable_asset(self, mod_id: str) -> ModAsset:
+    def _require_publishable_asset(self, mod_id: str, mode: str) -> ModAsset:
         asset = self._require_asset(mod_id)
         sources = set(asset.sources or [asset.source])
-        if SOURCE_DATA not in sources:
+        if mode == "upload" and SOURCE_DATA not in sources:
             raise ValueError("只能上传 Data 目录中的自有 MOD")
+        if mode == "update" and not asset.workshop_id:
+            raise ValueError("Workshop update requires an associated item")
         return asset
 
     def _require_asset(self, mod_id: str) -> ModAsset:
@@ -1734,16 +1987,19 @@ class API:
             self.state_repository.get_active_order_filename(),
         )
 
-    @staticmethod
-    def _path_health(game_path: str, data_path: str, workshop_path: str) -> dict[str, Any]:
+    def _path_health(self, paths: GamePaths) -> dict[str, Any]:
+        game_path = paths.game_path
+        data_path = paths.data_path
+        workshop_path = paths.workshop_path
         game = Path(game_path) if game_path else Path()
         data = Path(data_path) if data_path else Path()
         workshop = Path(workshop_path) if workshop_path else Path()
-        game_ready = bool(game_path) and (game / "Warhammer3.exe").is_file() and data.is_dir()
+        executable = Path(paths.executable_path) if paths.executable_path else Path()
+        game_ready = bool(game_path) and executable.is_file() and data.is_dir()
         return {
             "game_ready": game_ready,
             "game_path_exists": bool(game_path) and game.is_dir(),
-            "executable_exists": bool(game_path) and (game / "Warhammer3.exe").is_file(),
+            "executable_exists": bool(game_path) and executable.is_file(),
             "data_path_exists": bool(data_path) and data.is_dir(),
             "workshop_path_exists": bool(workshop_path) and workshop.is_dir(),
         }

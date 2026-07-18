@@ -107,6 +107,70 @@ def _decode_kv_rules(payload: bytes) -> dict[str, float]:
 
 
 class GameDataPatchTests(unittest.TestCase):
+    def test_adjusts_campaign_recruitment_caps_and_can_make_them_unlimited(self) -> None:
+        source = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "limited_unit",
+                                "caste": "infantry",
+                                "land_unit": "land_limited",
+                                "campaign_cap": 2,
+                            },
+                            {
+                                "unit": "unlimited_unit",
+                                "caste": "infantry",
+                                "land_unit": "land_unlimited",
+                                "campaign_cap": -1,
+                            },
+                            {
+                                "unit": "zero_cap_unit",
+                                "caste": "infantry",
+                                "land_unit": "land_zero",
+                                "campaign_cap": 0,
+                            },
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        scaled = build_game_data_entries(
+            [source],
+            {"unit_recruitment_capacity_multiplier": 3},
+        )
+        scaled_rows = {
+            row["unit"]: row for row in _rows_for(scaled, "main_units_tables")
+        }
+        self.assertEqual(scaled_rows["limited_unit"]["campaign_cap"], 6)
+        self.assertEqual(scaled_rows["unlimited_unit"]["campaign_cap"], -1)
+        self.assertEqual(scaled_rows["zero_cap_unit"]["campaign_cap"], 0)
+        self.assertEqual(scaled.stats["unit_recruitment_capacity_rows_changed"], 1)
+
+        unlimited = build_game_data_entries(
+            [source],
+            {"unit_recruitment_capacity_multiplier": 0},
+        )
+        unlimited_rows = {
+            row["unit"]: row for row in _rows_for(unlimited, "main_units_tables")
+        }
+        self.assertEqual(unlimited_rows["limited_unit"]["campaign_cap"], -1)
+        self.assertEqual(unlimited_rows["unlimited_unit"]["campaign_cap"], -1)
+        self.assertEqual(unlimited_rows["zero_cap_unit"]["campaign_cap"], -1)
+        self.assertEqual(unlimited.stats["unit_recruitment_capacity_rows_changed"], 2)
+
+        disabled = build_game_data_entries(
+            [source],
+            {"unit_recruitment_capacity_multiplier": 1},
+        )
+        self.assertEqual(_rows_for(disabled, "main_units_tables"), [])
+
     def test_battle_entities_schema_covers_all_supported_wh3_versions(self) -> None:
         self.assertEqual(
             set(TABLE_SCHEMAS["battle_entities_tables"]),

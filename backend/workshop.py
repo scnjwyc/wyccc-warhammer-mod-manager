@@ -34,6 +34,7 @@ DETAILS_ENDPOINT = (
 PROFILE_ENDPOINT = "https://steamcommunity.com/profiles/{steam_id}?xml=1"
 
 CACHE_SCHEMA_VERSION = 7
+DEFAULT_WORKSHOP_APP_ID = 1_142_710
 ENGLISH_STEAM_LANGUAGE = "english"
 STEAM_LANGUAGE_BY_INTERFACE = {
     "zh-CN": "schinese",
@@ -91,6 +92,18 @@ def interface_language_for_steam(steam_language: str) -> str:
     )
 
 
+def _normalized_app_id(value: int | str) -> int:
+    try:
+        app_id = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_WORKSHOP_APP_ID
+    return app_id if app_id > 0 else DEFAULT_WORKSHOP_APP_ID
+
+
+def _record_app_id(record: dict[str, Any]) -> int:
+    return _normalized_app_id(record.get("app_id", DEFAULT_WORKSHOP_APP_ID))
+
+
 class WorkshopMetadataService:
     def __init__(self, cache_path: Path):
         self.store = AtomicJsonStore(cache_path, _default_cache)
@@ -127,6 +140,8 @@ class WorkshopMetadataService:
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> dict[str, dict[str, Any]]:
         cache = self.store.load()
         items = cache.get("items", {})
@@ -136,6 +151,7 @@ class WorkshopMetadataService:
         if not isinstance(authors, dict):
             authors = {}
 
+        requested_app_id = _normalized_app_id(app_id)
         requested_language = _steam_language(interface_language)
         result: dict[str, dict[str, Any]] = {}
         for workshop_id in workshop_ids:
@@ -143,6 +159,8 @@ class WorkshopMetadataService:
             if not isinstance(source, dict):
                 continue
             record = self._upgrade_item(source, workshop_id)
+            if _record_app_id(record) != requested_app_id:
+                continue
             localized = record.get("localized", {})
             english = localized.get(ENGLISH_STEAM_LANGUAGE, {})
             requested = localized.get(requested_language, {})
@@ -173,10 +191,28 @@ class WorkshopMetadataService:
             result[workshop_id] = item
         return result
 
+    def _prepare_items_for_app(
+        self,
+        items: dict[str, Any],
+        workshop_ids: list[str],
+        app_id: int | str,
+    ) -> None:
+        requested_app_id = _normalized_app_id(app_id)
+        for workshop_id in workshop_ids:
+            existing = items.get(workshop_id)
+            if isinstance(existing, dict) and _record_app_id(existing) == requested_app_id:
+                existing["app_id"] = requested_app_id
+                continue
+            record = self._upgrade_item({}, workshop_id)
+            record["app_id"] = requested_app_id
+            items[workshop_id] = record
+
     def refresh(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> dict[str, dict[str, Any]]:
         self.last_refresh_warning = ""
         ids = list(dict.fromkeys(item for item in workshop_ids if item.isdigit()))
@@ -195,42 +231,70 @@ class WorkshopMetadataService:
         if not isinstance(authors, dict):
             authors = {}
             cache["authors"] = authors
+        requested_app_id = _normalized_app_id(app_id)
+        self._prepare_items_for_app(items, ids, requested_app_id)
 
         try:
-            self._refresh_english_details(items, ids)
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                self._refresh_english_details(items, ids)
+            else:
+                self._refresh_english_details(items, ids, app_id=requested_app_id)
         except Exception as exc:
             logger.warning("Steam English Workshop metadata refresh failed: %s", exc)
 
         requested_language = _steam_language(interface_language)
         if requested_language != ENGLISH_STEAM_LANGUAGE:
-            self._refresh_localized_steamworks(
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                self._refresh_localized_steamworks(
+                    items,
+                    ids,
+                    requested_language,
+                    force=previous_schema < CACHE_SCHEMA_VERSION,
+                )
+            else:
+                self._refresh_localized_steamworks(
+                    items,
+                    ids,
+                    requested_language,
+                    force=previous_schema < CACHE_SCHEMA_VERSION,
+                    app_id=requested_app_id,
+                )
+
+        if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+            self._refresh_dependencies(
                 items,
                 ids,
                 requested_language,
                 force=previous_schema < CACHE_SCHEMA_VERSION,
             )
-
-        self._refresh_dependencies(
-            items,
-            ids,
-            requested_language,
-            force=previous_schema < CACHE_SCHEMA_VERSION,
-        )
+        else:
+            self._refresh_dependencies(
+                items,
+                ids,
+                requested_language,
+                force=previous_schema < CACHE_SCHEMA_VERSION,
+                app_id=requested_app_id,
+            )
 
         creator_ids = [
             str(items[workshop_id].get("creator_id") or "")
             for workshop_id in ids
             if isinstance(items.get(workshop_id), dict)
         ]
-        self._refresh_author_profiles(authors, creator_ids)
+        if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+            self._refresh_author_profiles(authors, creator_ids)
+        else:
+            self._refresh_author_profiles(authors, creator_ids, app_id=requested_app_id)
         cache["schema_version"] = CACHE_SCHEMA_VERSION
         self.store.save(cache)
-        return self.get_many(ids, interface_language)
+        return self.get_many(ids, interface_language, app_id=requested_app_id)
 
     def refresh_localized(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> dict[str, dict[str, Any]]:
         """Refresh only the localized publishing copy for the requested items."""
         self.last_refresh_warning = ""
@@ -242,30 +306,46 @@ class WorkshopMetadataService:
         if not isinstance(items, dict):
             items = {}
             cache["items"] = items
+        requested_app_id = _normalized_app_id(app_id)
+        self._prepare_items_for_app(items, ids, requested_app_id)
 
         try:
-            self._refresh_english_details(items, ids)
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                self._refresh_english_details(items, ids)
+            else:
+                self._refresh_english_details(items, ids, app_id=requested_app_id)
         except Exception as exc:
             logger.warning("Steam English Workshop publishing copy refresh failed: %s", exc)
             self.last_refresh_warning = f"英文工坊信息刷新失败，已保留缓存内容：{exc}"
 
         requested_language = _steam_language(interface_language)
         if requested_language != ENGLISH_STEAM_LANGUAGE:
-            self._refresh_localized_steamworks(
-                items,
-                ids,
-                requested_language,
-                force=True,
-            )
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                self._refresh_localized_steamworks(
+                    items,
+                    ids,
+                    requested_language,
+                    force=True,
+                )
+            else:
+                self._refresh_localized_steamworks(
+                    items,
+                    ids,
+                    requested_language,
+                    force=True,
+                    app_id=requested_app_id,
+                )
 
         cache["schema_version"] = CACHE_SCHEMA_VERSION
         self.store.save(cache)
-        return self.get_many(ids, interface_language)
+        return self.get_many(ids, interface_language, app_id=requested_app_id)
 
     def ensure_dependencies(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> dict[str, dict[str, Any]]:
         self.last_refresh_warning = ""
         ids = list(dict.fromkeys(item for item in workshop_ids if item.isdigit()))
@@ -276,10 +356,20 @@ class WorkshopMetadataService:
         if not isinstance(items, dict):
             items = {}
             cache["items"] = items
-        self._refresh_dependencies(items, ids, _steam_language(interface_language))
+        requested_app_id = _normalized_app_id(app_id)
+        self._prepare_items_for_app(items, ids, requested_app_id)
+        if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+            self._refresh_dependencies(items, ids, _steam_language(interface_language))
+        else:
+            self._refresh_dependencies(
+                items,
+                ids,
+                _steam_language(interface_language),
+                app_id=requested_app_id,
+            )
         cache["schema_version"] = CACHE_SCHEMA_VERSION
         self.store.save(cache)
-        return self.get_many(ids, interface_language)
+        return self.get_many(ids, interface_language, app_id=requested_app_id)
 
     def _refresh_dependencies(
         self,
@@ -288,6 +378,7 @@ class WorkshopMetadataService:
         steam_language: str,
         *,
         force: bool = False,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> None:
         now = int(time.time() * 1000)
         pending: list[str] = []
@@ -311,7 +402,15 @@ class WorkshopMetadataService:
             return
 
         try:
-            dependencies = query_workshop_dependencies(pending, steam_language)
+            requested_app_id = _normalized_app_id(app_id)
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                dependencies = query_workshop_dependencies(pending, steam_language)
+            else:
+                dependencies = query_workshop_dependencies(
+                    pending,
+                    steam_language,
+                    app_id=requested_app_id,
+                )
         except SteamworksBridgeError as exc:
             logger.warning("Steamworks Workshop dependency refresh failed: %s", exc)
             self.last_refresh_warning = DEPENDENCY_CACHE_WARNING
@@ -343,6 +442,8 @@ class WorkshopMetadataService:
         self,
         items: dict[str, Any],
         workshop_ids: list[str],
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> None:
         for start in range(0, len(workshop_ids), 100):
             chunk = workshop_ids[start : start + 100]
@@ -374,6 +475,7 @@ class WorkshopMetadataService:
                 record.update(
                     {
                         "workshop_id": workshop_id,
+                        "app_id": _normalized_app_id(app_id),
                         "title": str(detail.get("title") or ""),
                         "description": str(detail.get("description") or ""),
                         "creator_id": str(detail.get("creator") or ""),
@@ -402,6 +504,7 @@ class WorkshopMetadataService:
         steam_language: str,
         *,
         force: bool = False,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> None:
         now = int(time.time() * 1000)
         pending: list[str] = []
@@ -429,7 +532,15 @@ class WorkshopMetadataService:
             return
 
         try:
-            response = query_workshop_languages(pending, [steam_language])
+            requested_app_id = _normalized_app_id(app_id)
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                response = query_workshop_languages(pending, [steam_language])
+            else:
+                response = query_workshop_languages(
+                    pending,
+                    [steam_language],
+                    app_id=requested_app_id,
+                )
             language_items = response.get(steam_language, {})
         except SteamworksBridgeError as exc:
             logger.warning("Steamworks localized Workshop refresh failed: %s", exc)
@@ -663,6 +774,8 @@ class WorkshopMetadataService:
         self,
         authors: dict[str, Any],
         creator_ids: list[str],
+        *,
+        app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
     ) -> None:
         now = int(time.time() * 1000)
         normalized_ids = list(dict.fromkeys(item for item in creator_ids if item.isdigit()))
@@ -701,7 +814,14 @@ class WorkshopMetadataService:
         retained = 0
         failures: dict[str, AuthorProfileError] = {}
         try:
-            steam_result = query_steam_persona_names(pending)
+            requested_app_id = _normalized_app_id(app_id)
+            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                steam_result = query_steam_persona_names(pending)
+            else:
+                steam_result = query_steam_persona_names(
+                    pending,
+                    app_id=requested_app_id,
+                )
         except SteamFriendsError as exc:
             logger.warning(
                 "Steam Friends author refresh failed code=%s detail=%s",

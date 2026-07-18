@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { localizedPlaysetName, t } from './languages'
+import { executeKeyboardShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
 import { useAppStore } from './store'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
@@ -14,6 +15,7 @@ import SettingsModal from './components/SettingsModal.vue'
 import ShareModal from './components/ShareModal.vue'
 import SortMenu from './components/SortMenu.vue'
 import TagSearchBox from './components/TagSearchBox.vue'
+import ThemedSelect from './components/ThemedSelect.vue'
 import TypeManagerModal from './components/TypeManagerModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import WarningModal from './components/WarningModal.vue'
@@ -41,9 +43,16 @@ let updateTimer = 0
 
 const contextMod = computed(() => store.modMap.get(contextMenu.modId) || null)
 const contextModActive = computed(() => !!contextMod.value && store.activeIds.includes(contextMod.value.id))
+const activeGame = computed(() => store.settings.selected_game || 'warhammer3')
+const supportsWh3Tools = computed(() => activeGame.value === 'warhammer3')
 const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
 const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
+const unitCapFeature = computed(() => store.gameDataFeatures.unit_cap)
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
+const playsetOptions = computed(() => store.playsets.map(playset => ({
+  value: playset.id,
+  label: localizedPlaysetName(playset),
+})))
 const statusDisplay = computed(() => {
   if (store.busy) return { text: store.busy, kind: 'busy', spinning: true }
   if (store.workshopRefreshing) return { text: t('status.refreshingWorkshop'), kind: 'refresh', spinning: true }
@@ -52,6 +61,13 @@ const statusDisplay = computed(() => {
   if (store.orderSaveError || store.dirty) return { text: t('status.saveFailed'), kind: 'error', spinning: false }
   if (store.runtime.running) return { text: t('status.gameRunning'), kind: 'running', spinning: false }
   return { text: t('status.ready'), kind: 'ready', spinning: false }
+})
+
+watch(supportsWh3Tools, supported => {
+  if (supported) return
+  showGameDataModification.value = false
+  showOfficialProfileImport.value = false
+  officialProfilePreview.value = null
 })
 
 const initialize = async () => {
@@ -77,11 +93,10 @@ const initialize = async () => {
 
 const saveSettings = async changes => {
   await store.saveSettings(changes)
+  if (!store.pathHealth.game_ready) return
   showSettings.value = false
-  if (store.pathHealth.game_ready) {
-    await store.scan(false)
-    if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
-  }
+  await store.scan(false)
+  if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
 }
 
 const saveGameDataSettings = async changes => {
@@ -90,12 +105,13 @@ const saveGameDataSettings = async changes => {
 }
 
 const openGameDataModification = () => {
+  if (!supportsWh3Tools.value) return
   showGameDataModification.value = true
   void store.refreshGameDataFeatures().catch(() => {})
 }
 
-const detectPaths = async () => {
-  await store.detectPaths()
+const detectPaths = async gameId => {
+  await store.detectPaths(gameId)
   if (store.pathHealth.game_ready) {
     await store.scan(false)
     if (store.settings.fetch_workshop_metadata) void store.refreshWorkshopInBackground()
@@ -103,9 +119,9 @@ const detectPaths = async () => {
   }
 }
 
-const checkForUpdates = async manifestUrl => {
+const checkForUpdates = async () => {
   try {
-    const info = await store.checkForUpdates(true, manifestUrl)
+    const info = await store.checkForUpdates(true)
     if (!info?.has_update) return
     showSettings.value = false
     updateDialog.mode = 'update'
@@ -174,8 +190,8 @@ const deletePlayset = async () => {
   try { await store.deleteCurrentPlayset() } catch { /* shared toast */ }
 }
 
-const choosePlayset = async event => {
-  try { await store.switchPlayset(event.target.value) } catch { /* shared toast */ }
+const choosePlayset = async playsetId => {
+  try { await store.switchPlayset(playsetId) } catch { /* shared toast */ }
 }
 
 const openShare = async () => {
@@ -219,11 +235,24 @@ const importShare = async value => {
 }
 
 const openModContextMenu = payload => {
+  const requestedSelection = store.selectedIds.includes(payload.mod.id)
+    ? [...store.selectedIds]
+    : [payload.mod.id]
   contextMenu.open = true
   contextMenu.x = payload.x
   contextMenu.y = payload.y
   contextMenu.modId = payload.mod.id
+  void store.refreshWorkshopUpdateEligibility(requestedSelection)
   void store.selectMod({ id: payload.mod.id, preserveSelection: true })
+}
+
+const importWorkshopCollection = async value => {
+  try {
+    await store.importWorkshopCollection(value)
+    showShare.value = false
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
 }
 
 const selectedActionIds = modId => (
@@ -232,6 +261,9 @@ const selectedActionIds = modId => (
 
 const contextSelectionCount = computed(() => (
   contextMod.value ? selectedActionIds(contextMod.value.id).length : 1
+))
+const contextSelectionIds = computed(() => (
+  contextMod.value ? selectedActionIds(contextMod.value.id) : []
 ))
 
 const enableSelected = modId => store.enableMany(selectedActionIds(modId))
@@ -242,6 +274,54 @@ const toggleSingleMod = modId => (
     : store.enableMany([modId])
 )
 const handleListDrop = payload => store.handleModDrop(payload)
+
+const shortcutsBlocked = () => (
+  showGameDataModification.value
+  || showSettings.value
+  || showShare.value
+  || showTypeManager.value
+  || showWarnings.value
+  || showSaveGames.value
+  || showSaveModsComparison.value
+  || showOfficialProfileImport.value
+  || showDeleteMods.value
+  || updateDialog.open
+  || contextMenu.open
+  || workshopPublish.open
+)
+
+const notifyShortcutOutcome = outcome => {
+  const messageKey = {
+    'selection-required': 'app.shortcutSelectMod',
+    'workshop-required': 'app.shortcutWorkshopUnavailable',
+    'single-selection-required': 'app.rpfmBatchBlocked',
+  }[outcome.reason]
+  if (messageKey) store.notify(t(messageKey), 'warning')
+}
+
+const handleGlobalShortcut = event => {
+  const action = resolveKeyboardShortcut(event, {
+    enabled: Boolean(store.settings.keyboard_shortcuts_enabled),
+    blocked: shortcutsBlocked(),
+    shortcuts: store.settings.keyboard_shortcuts,
+  })
+  if (!action || store.busy) return
+  event.preventDefault()
+  void executeKeyboardShortcut(action, {
+    selectedMod: store.selectedMod,
+    selectedIds: store.selectedIds,
+    getMod: modId => store.modMap.get(modId),
+    activeIds: store.activeIds,
+    canLaunch: !store.busy && store.pathHealth.game_ready && !store.runtime.running,
+    openWorkshop: modId => store.openWorkshop(modId),
+    openRpfm: modId => store.openModInRpfm(modId),
+    enableMany: modIds => store.enableMany(modIds),
+    disableMany: modIds => store.disableMany(modIds),
+    launch: () => store.launch(),
+  }).then(notifyShortcutOutcome).catch(() => {
+    // Store actions surface failures through the shared toast.
+  })
+}
 
 const closeModContextMenu = () => {
   contextMenu.open = false
@@ -304,11 +384,17 @@ const handleContextAction = async ({ action, value, mod }) => {
       }
     } else if (action === 'publish-upload' || action === 'publish-update') {
       const mode = action === 'publish-update' ? 'update' : 'upload'
+      if (
+        mode === 'update'
+        && actionIds.some(modId => !store.workshopUpdateEligibility.has(modId))
+      ) return
       const targets = actionIds.filter(modId => {
         const target = store.modMap.get(modId)
         const sources = new Set(target?.sources?.length ? target.sources : [target?.source])
-        if (!target || !sources.has('data')) return false
-        return mode === 'update' ? !!target.workshop_id : !target.workshop_id
+        if (!target) return false
+        return mode === 'update'
+          ? !!target.workshop_id
+          : sources.has('data') && !target.workshop_id
       })
       if (!targets.length) return
       workshopPublish.open = true
@@ -475,6 +561,7 @@ const compareSaveMods = async saveName => {
 }
 
 const beginOfficialProfileImport = async () => {
+  if (!supportsWh3Tools.value) return
   try {
     const selected = await store.selectOfficialProfile()
     if (!selected.path) return
@@ -498,11 +585,13 @@ const importOfficialProfile = async ({ mode, subscribeMissing }) => {
 onMounted(() => {
   initialize()
   runtimeTimer = window.setInterval(() => store.refreshRuntime(), 1000)
+  window.addEventListener('keydown', handleGlobalShortcut)
 })
 
 onBeforeUnmount(() => {
   window.clearInterval(runtimeTimer)
   window.clearTimeout(updateTimer)
+  window.removeEventListener('keydown', handleGlobalShortcut)
 })
 </script>
 
@@ -519,19 +608,17 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="header-center">
-        <label class="playset-select">
+        <div class="playset-select">
           <span>{{ t('app.playset') }}</span>
-          <select
-            :value="store.currentPlaysetId"
+          <ThemedSelect
+            :model-value="store.currentPlaysetId"
+            :options="playsetOptions"
             :disabled="!!store.busy"
+            :aria-label="t('app.playset')"
             data-testid="playset-select"
             @change="choosePlayset"
-          >
-            <option v-for="playset in store.playsets" :key="playset.id" :value="playset.id">
-              {{ localizedPlaysetName(playset) }}
-            </option>
-          </select>
-        </label>
+          />
+        </div>
         <button type="button" class="header-button" :disabled="!!store.busy" @click="createPlayset">{{ t('app.newPlayset') }}</button>
         <button
           type="button"
@@ -668,6 +755,7 @@ onBeforeUnmount(() => {
           {{ t('app.openGameFolder') }}
         </button>
         <button
+          v-if="supportsWh3Tools"
           type="button"
           class="secondary-button sync-data-button"
           :disabled="!!store.busy || store.runtime.running"
@@ -733,13 +821,16 @@ onBeforeUnmount(() => {
     />
 
     <GameDataModificationModal
+      v-if="supportsWh3Tools"
       :open="showGameDataModification"
       :settings="store.settings"
       :busy="store.busy"
       :unit-size-subscribed="!!unitSizeFeature.subscribed"
       :friendly-fire-subscribed="!!friendlyFireFeature.subscribed"
+      :unit-capacity-subscribed="!!unitCapFeature.subscribed"
       :unit-size-mod-name="unitSizeFeature.title"
       :friendly-fire-mod-name="friendlyFireFeature.title"
+      :unit-capacity-mod-name="unitCapFeature.title"
       @close="showGameDataModification = false"
       @save="saveGameDataSettings"
     />
@@ -788,9 +879,11 @@ onBeforeUnmount(() => {
       :open="showShare"
       :export-value="shareValue"
       :busy="store.busy"
+      :can-import-official-profile="supportsWh3Tools"
       @close="showShare = false"
       @export="exportShare"
       @import="importShare"
+      @import-collection="importWorkshopCollection"
       @import-official="beginOfficialProfileImport"
     />
 
@@ -829,7 +922,10 @@ onBeforeUnmount(() => {
       :active="contextModActive"
       :types="store.modTypes"
       :selection-count="contextSelectionCount"
+      :selected-mod-ids="contextSelectionIds"
+      :eligible-update-ids="[...store.workshopUpdateEligibility]"
       :game-running="store.runtime.running"
+      :keyboard-shortcuts="store.settings.keyboard_shortcuts"
       @close="closeModContextMenu"
       @action="handleContextAction"
     />

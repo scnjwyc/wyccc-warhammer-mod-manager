@@ -164,6 +164,40 @@ describe('playset state', () => {
     expect(store.playsetOrderSnapshot()).toEqual(['b', pending, 'a'])
   })
 
+  it('activates each downloaded collection MOD in its reserved collection position', async () => {
+    const pending = 'pending:steam:456:'
+    invokeMock.mockImplementation(async method => {
+      expect(method).toBe('scan_mods')
+      return {
+        mods: [
+          { id: 'installed-id', pack_name: 'installed.pack' },
+          { id: 'downloaded-id', pack_name: 'downloaded.pack', workshop_id: '456' },
+        ],
+        enabled_order: ['installed-id', 'downloaded-id'],
+        missing_enabled_ids: [],
+        order_token: 'fresh-token',
+        warnings: [],
+        playsets: [{ ...defaultPlayset, mod_ids: ['installed-id', 'downloaded-id'] }],
+        current_playset: { ...defaultPlayset, mod_ids: ['installed-id', 'downloaded-id'] },
+      }
+    })
+    const store = useAppStore()
+    store.playsets = [{ ...defaultPlayset, mod_ids: ['installed-id', pending] }]
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['installed-id']
+    store.missingEnabledIds = [pending]
+    store.dirty = true
+    store.collectionImportSync = { playsetId: 'default', pendingWorkshopIds: ['456'] }
+    store.recordCurrentPlaysetChange = vi.fn(() => Promise.resolve())
+
+    await store.refreshCollectionImportDownloads()
+
+    expect(store.activeIds).toEqual(['installed-id', 'downloaded-id'])
+    expect(store.missingEnabledIds).toEqual([])
+    expect(store.collectionImportSync).toBeNull()
+    expect(store.recordCurrentPlaysetChange).toHaveBeenCalledOnce()
+  })
+
   it('reorders a batch as one group while preserving the selected order', () => {
     const store = useAppStore()
     store.activeIds = ['a', 'b', 'c', 'd', 'e']

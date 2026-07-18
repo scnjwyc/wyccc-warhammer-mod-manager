@@ -2,13 +2,14 @@
 
 [简体中文](README.md) | **English**
 
-A lightweight mod manager for Total War: WARHAMMER III.
+A lightweight mod manager that supports both Total War: WARHAMMER III and Total War: THREE KINGDOMS.
 
-The current version is `0.7.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `0.8.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 
 - Easy to set up and ready to use without complicated configuration.
+- Supports Total War: WARHAMMER III by default and Total War: THREE KINGDOMS through the game selector, with separately saved and automatically detected game paths.
 - Manage enabled and disabled mods at a glance. Supports Ctrl multi-selection, Shift range selection, batch drag-and-drop sorting, and direct movement between both lists.
 - Ctrl+A selects the current list, or only visible search results while searching. Low-overhead filesystem events keep Data and Workshop additions/removals in sync and can be disabled in Settings.
 - Automatic sorting helps new users avoid having to manage load order manually.
@@ -58,7 +59,7 @@ Requirements:
 - Python 3.11 or later
 - Node.js 22 or later
 - pnpm 11
-- The Steam edition of Total War: WARHAMMER III installed for real scanning and launching
+- The Steam edition of Total War: WARHAMMER III or Total War: THREE KINGDOMS installed for real scanning and launching
 
 ### Windows One-Click Entry Points
 

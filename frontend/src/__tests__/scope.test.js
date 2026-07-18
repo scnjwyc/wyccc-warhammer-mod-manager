@@ -109,12 +109,35 @@ describe('deliberately small product scope', () => {
     expect(settingsSource).toContain("t('settings.scanScope')")
   })
 
-  it('keeps the playset label clear of the native select border', () => {
+  it('keeps the playset label clear of the themed select border', () => {
     const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
 
     expect(stylesSource).toMatch(/\.playset-select\s*\{[^}]*gap:\s*10px/s)
     expect(stylesSource).toMatch(/\.playset-select > span\s*\{[^}]*white-space:\s*nowrap/s)
-    expect(stylesSource).toMatch(/\.playset-select select\s*\{[^}]*border:\s*1px solid #594238/s)
+    expect(stylesSource).toMatch(/\.playset-select \.themed-select\s*\{[^}]*width:\s*174px/s)
+  })
+
+  it('replaces native select popups with the shared themed dropdown', () => {
+    for (const relativePath of [
+      'src/App.vue',
+      'src/components/SettingsModal.vue',
+      'src/components/WorkshopPublishModal.vue',
+    ]) {
+      const source = read(resolve(frontendRoot, relativePath))
+      expect(source).not.toMatch(/<select\b/)
+      expect(source).toContain('ThemedSelect')
+    }
+  })
+
+  it('uses a larger readable type scale for settings tabs and changelog entries', () => {
+    const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
+
+    expect(stylesSource).toMatch(/\.settings-tab-copy strong\s*\{[^}]*font-size:\s*15px/s)
+    expect(stylesSource).toMatch(/\.settings-tab-copy small\s*\{[^}]*font-size:\s*12px/s)
+    expect(stylesSource).toMatch(/\.release-entry > header strong\s*\{[^}]*font-size:\s*19px/s)
+    expect(stylesSource).toMatch(/\.release-entry > header time\s*\{[^}]*font-size:\s*13px/s)
+    expect(stylesSource).toMatch(/\.change-entry h3\s*\{[^}]*font-size:\s*15px/s)
+    expect(stylesSource).toMatch(/\.change-entry li\s*\{[^}]*font-size:\s*14px/s)
   })
 
   it('centers the warning entry in the enabled-list heading instead of using a bottom strip', () => {

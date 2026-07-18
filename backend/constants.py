@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
@@ -18,7 +18,7 @@ LEGACY_MOD_WARNING_CODE_ALIASES = {
 
 # Built-in update manifests are checked together. Chinese users prefer Gitee
 # when both repositories publish the same version; all other languages prefer
-# GitHub. A custom manifest in Settings overrides both built-in sources.
+# GitHub.
 GITHUB_UPDATE_MANIFEST_URL = (
     "https://raw.githubusercontent.com/scnjwyc/wyccc-warhammer-mod-manager/"
     "main/packaging/update-manifest.json"
@@ -27,8 +27,6 @@ GITEE_UPDATE_MANIFEST_URL = (
     "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/"
     "raw/master/packaging/update-manifest.json"
 )
-DEFAULT_UPDATE_MANIFEST_URL = ""
-
 WH3_APP_ID = "1142710"
 WH3_GAME_FOLDER = "Total War WARHAMMER III"
 WH3_EXECUTABLE = "Warhammer3.exe"
@@ -46,15 +44,29 @@ GAME_DATA_FEATURE_WORKSHOP_ITEMS = {
         "title": "Dynamic No Friendly Fire",
         "pack_name": "wyccc_dynamic_no_friendly_fire.pack",
     },
+    "unit_cap": {
+        "workshop_id": "3766867060",
+        "title": "动态单位容量 - Dynamic Unit Cap",
+        "pack_name": "wyccc_dynamic_unit_cap.pack",
+    },
 }
 UNIT_MODEL_MULTIPLIER_MIN = 1
 UNIT_MODEL_MULTIPLIER_MAX = 5
+UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN = 1
+UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MAX = 5
+UNIT_RECRUITMENT_CAPACITY_UNLIMITED = 0
 INTERNAL_FEATURE_WORKSHOP_IDS = frozenset(
     item["workshop_id"] for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
 )
+INTERNAL_RUNTIME_PACK_NAMES = frozenset(
+    {
+        "!!!!wyccc_game_data_patch.pack",
+        "!!!!wyccc_runtime_options.pack",
+    }
+)
 INTERNAL_FEATURE_PACK_NAMES = frozenset(
     item["pack_name"].casefold() for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
-)
+) | INTERNAL_RUNTIME_PACK_NAMES
 
 CORE_VANILLA_PACKS = {
     "data.pack",

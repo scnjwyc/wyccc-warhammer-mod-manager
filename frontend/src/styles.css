@@ -49,7 +49,6 @@ body {
 
 button,
 input,
-select,
 textarea {
   font: inherit;
 }
@@ -58,14 +57,12 @@ button {
   color: inherit;
 }
 
-button,
-select {
+button {
   user-select: none;
 }
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible,
 textarea:focus-visible,
 [role='button']:focus-visible {
   outline: 2px solid var(--gold);
@@ -78,7 +75,6 @@ button:disabled {
 }
 
 input,
-select,
 textarea {
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -88,13 +84,11 @@ textarea {
 }
 
 input:hover,
-select:hover,
 textarea:hover {
   border-color: #4b3833;
 }
 
 input:focus,
-select:focus,
 textarea:focus {
   border-color: var(--gold-dark);
   box-shadow: 0 0 0 3px rgba(201, 167, 106, 0.1);
@@ -257,6 +251,7 @@ textarea {
 .header-button,
 .secondary-button,
 .primary-button,
+.danger-button,
 .continue-button,
 .launch-button,
 .enable-button,
@@ -271,6 +266,7 @@ textarea {
 .header-button:active,
 .secondary-button:active,
 .primary-button:active,
+.danger-button:active,
 .continue-button:active,
 .launch-button:active,
 .enable-button:active,
@@ -317,22 +313,9 @@ textarea {
   white-space: nowrap;
 }
 
-.playset-select select {
+.playset-select .themed-select {
   width: 174px;
-  height: 38px;
-  padding: 0 30px 0 13px;
-  border: 1px solid #594238;
-  background: #151010;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  color: #fff5e7;
   font-size: 14px;
-  font-weight: 700;
-}
-
-.playset-select option {
-  background: #211917;
-  color: #fff5e7;
-  font-weight: 700;
 }
 
 .path-warning {
@@ -1171,10 +1154,14 @@ textarea {
 
 .field-label input,
 .field-label textarea,
-.field-label select {
+.field-label .themed-select {
   width: 100%;
-  padding: 9px 10px;
   font-size: 12px;
+}
+
+.field-label input,
+.field-label textarea {
+  padding: 9px 10px;
 }
 
 .field-help {
@@ -1184,7 +1171,8 @@ textarea {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   min-height: 33px;
   padding: 0 12px;
   font-size: 11px;
@@ -1200,6 +1188,18 @@ textarea {
 .primary-button:hover:not(:disabled) {
   border-color: var(--gold-bright);
   background: linear-gradient(180deg, #a3834d, #705632);
+}
+
+.danger-button {
+  border-color: #9a4046;
+  background: linear-gradient(180deg, #913940, #5e2026);
+  color: #fff0ed;
+  font-weight: 700;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #e08080;
+  background: linear-gradient(180deg, #ab4b52, #76282f);
 }
 
 .primary-button.compact {
@@ -2006,6 +2006,32 @@ button.context-menu-item {
   text-shadow: none;
 }
 
+.context-menu-shortcut {
+  justify-self: end;
+  padding: 2px 5px;
+  border: 1px solid #675045;
+  border-radius: 3px;
+  background: rgba(22, 15, 14, 0.72);
+  color: #c9aa81;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.context-menu-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 4px;
+}
+
+.context-menu-trailing .context-menu-shortcut,
+.context-menu-trailing .context-menu-unavailable {
+  justify-self: auto;
+}
+
 .context-menu-divider {
   height: 1px;
   margin: 5px 7px;
@@ -2139,7 +2165,7 @@ button.context-menu-item {
   border-radius: 50%;
   color: #b89375;
   font-family: Cinzel, serif;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -2151,13 +2177,13 @@ button.context-menu-item {
 }
 
 .settings-tab-copy strong {
-  font-size: 13px;
+  font-size: 15px;
   letter-spacing: 0.035em;
 }
 
 .settings-tab-copy small {
   color: #756a64;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .settings-page-scroll {
@@ -2211,13 +2237,87 @@ button.context-menu-item {
   border-top: 1px solid #2d2422;
 }
 
+.shortcut-binding-list {
+  display: grid;
+  gap: 1px;
+  margin: 0 -14px;
+  padding: 0;
+  border-top: 1px solid #2d2422;
+  list-style: none;
+  transition: opacity 160ms ease;
+}
+
+.shortcut-binding-list.disabled {
+  opacity: 0.45;
+}
+
+.shortcut-binding-list li {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: minmax(116px, 0.8fr) minmax(0, 1.7fr);
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+  border-top: 1px solid #2d2422;
+  color: #c9bbb0;
+  font-size: 13px;
+}
+
+.shortcut-binding-list li:first-child {
+  border-top: 0;
+}
+
+.shortcut-binding-list kbd {
+  justify-self: start;
+  padding: 5px 8px;
+  border: 1px solid #675045;
+  border-bottom-color: #2e221e;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #342725, #201918);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05);
+  color: #e7cda9;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shortcut-capture-button {
+  justify-self: start;
+  min-width: 116px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shortcut-capture-button kbd {
+  display: inline-block;
+}
+
+.shortcut-capture-button.recording kbd {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 2px rgba(201, 167, 106, 0.16), inset 0 1px rgba(255, 255, 255, 0.05);
+  color: #ffe2ac;
+}
+
+.shortcut-capture-help,
+.shortcut-error {
+  margin: 10px 14px;
+}
+
+.shortcut-error {
+  color: #e5a28d;
+}
+
 .settings-modal .field-label > span {
   font-size: 14px;
 }
 
 .settings-modal .field-label input,
 .settings-modal .field-label textarea,
-.settings-modal .field-label select {
+.settings-modal .field-label .themed-select {
   font-size: 14px;
 }
 
@@ -2257,10 +2357,6 @@ button.context-menu-item {
   color: #a99b92;
   font-size: 12px;
   line-height: 1.6;
-}
-
-.software-update-settings .update-manifest-field {
-  margin-top: 14px;
 }
 
 .about-project-hero {
@@ -2608,18 +2704,18 @@ button.context-menu-item {
 
 .release-entry > header strong {
   color: var(--gold-bright);
-  font-size: 17px;
+  font-size: 19px;
 }
 
 .release-entry > header time {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .change-entry h3 {
   margin: 0 0 9px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .change-entry ul {
@@ -2632,12 +2728,12 @@ button.context-menu-item {
 
 .change-entry li {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr);
   align-items: start;
   gap: 9px;
   color: var(--text-soft);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .change-type {
@@ -2645,7 +2741,7 @@ button.context-menu-item {
   border: 1px solid #4a3932;
   border-radius: 3px;
   color: var(--gold);
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
 }
 
@@ -2672,7 +2768,7 @@ button.context-menu-item {
 .empty-changelog {
   margin: 8px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   text-align: center;
 }
 
@@ -3300,6 +3396,40 @@ button.context-menu-item {
   line-height: 1.6;
 }
 
+.share-collection-import {
+  display: block;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #49362f;
+}
+
+.share-collection-import .field-label {
+  margin-bottom: 6px;
+}
+
+.share-collection-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.share-collection-controls input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.share-collection-controls .secondary-button {
+  margin: 0;
+}
+
+.share-collection-import > .field-help {
+  display: block;
+  margin-top: 6px;
+}
+
 .toast {
   position: fixed;
   right: 22px;
@@ -3412,6 +3542,16 @@ button.context-menu-item {
 
   .about-wide-card {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .share-collection-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .share-collection-controls .secondary-button {
+    width: 100%;
   }
 }
 

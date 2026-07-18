@@ -1,49 +1,74 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.7.0",
-  "published_at": "2026-07-17",
+  "version": "0.8.0",
+  "published_at": "2026-07-18",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.7.0/Wyccc%27s%20Mod%20Manager.exe",
-    "sha256": "e3ab31441d6d6d4c70dba50356650c84d21662984779a23a97aaa05fe036bd28",
-    "size": 61934661
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.8.0/Wyccc%27s%20Mod%20Manager.exe",
+    "sha256": "6dae6a1491ebc8358f2ac5f2fe5c03e4f521c97d00783d6e52e17ee5e39bd89c",
+    "size": 61967145
   },
   "changelog": [
     {
-      "title": "游戏数据修改",
+      "title": "新增",
       "changes": [
         {
           "type": "feature",
-          "text": "新增单体单位调整规则设置，可在血量与规模之间切换；血量模式仅放大血量而不放大规模。"
+          "text": "新增《全面战争：三国》选择与路径检测；切换游戏后会保留各自目录。"
         },
         {
-          "type": "fix",
-          "text": "修复单位规模倍率滑条刻度与实际倍率不一致的问题。"
+          "type": "feature",
+          "text": "新增快捷键设置：Shift+W 打开工坊，Shift+R 用 RPFM 打开，Shift+E 切换启用状态，Shift+Enter 启动游戏。"
         },
         {
-          "type": "fix",
-          "text": "修复部分 MOD 的单位规模或领主与英雄血量未按倍率生效的问题。"
+          "type": "feature",
+          "text": "新增创意工坊 MOD 合集导入：自动订阅缺失 MOD，并按合集原有顺序写入当前播放集。"
+        },
+        {
+          "type": "feature",
+          "text": "游戏数据修改新增单位招募容量调节，可设置 1–5 倍或无限。"
         }
       ]
     },
     {
-      "title": "功能修复与调整",
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "发布窗口不再选择封面或确认所有权，自动使用与 Pack 同名 PNG 封面。"
+        },
+        {
+          "type": "improvement",
+          "text": "移除设置中的“软件更新通道”选项，更新检查统一使用内置来源。"
+        },
+        {
+          "type": "improvement",
+          "text": "快捷键支持自定义组合键，并会在右键菜单中显示对应快捷键。"
+        },
+        {
+          "type": "improvement",
+          "text": "统一下拉框主题样式，并放大设置页标签与更新日志文字。"
+        }
+      ]
+    },
+    {
+      "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复低消耗模式切换时偶发异常的问题。"
-        },
-        {
-          "type": "feature",
-          "text": "发布 MOD 时会将同名 PNG 封面与 Pack 一同上传，封面最大 1 MB。"
+          "text": "更新按钮只会对当前账号拥有的工坊项目显示；已订阅但不在 Data 中的自有 MOD 也可更新。"
         },
         {
           "type": "fix",
-          "text": "修复“启用存档中的 MOD”无法读取当前存档 MOD 列表的问题。"
+          "text": "启动前会检查必要运行组件，缺失时提供官方下载指引，减少空白窗口。"
         },
         {
-          "type": "feature",
-          "text": "新增西班牙语支持。"
+          "type": "fix",
+          "text": "修复“移入回收站”按钮样式显示不正确的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复了由中文路径导致的各种功能失效。"
         }
       ]
     }

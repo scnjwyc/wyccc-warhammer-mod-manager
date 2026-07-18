@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { localizedModTypeName, t } from '../languages'
+import { shortcutForAction } from '../keyboardShortcuts'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -10,7 +11,10 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   types: { type: Array, default: () => [] },
   selectionCount: { type: Number, default: 1 },
+  selectedModIds: { type: Array, default: () => [] },
+  eligibleUpdateIds: { type: Array, default: () => [] },
   gameRunning: { type: Boolean, default: false },
+  keyboardShortcuts: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['close', 'action'])
@@ -34,13 +38,30 @@ const submenuToLeft = computed(() => {
 const hasWorkshop = computed(() => !!props.mod?.workshop_id)
 const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.sources : [props.mod?.source]))
 const canCopyToData = computed(() => !!props.mod?.path && !sources.value.has('data'))
-const canPublish = computed(() => sources.value.has('data'))
+const selectedModIds = computed(() => [...new Set(
+  (Array.isArray(props.selectedModIds) ? props.selectedModIds : [])
+    .map(id => String(id || '').trim())
+    .filter(Boolean),
+)])
+const eligibleUpdateIds = computed(() => new Set(
+  (Array.isArray(props.eligibleUpdateIds) ? props.eligibleUpdateIds : [])
+    .map(id => String(id || '').trim())
+    .filter(Boolean),
+))
+const canUploadWorkshop = computed(() => sources.value.has('data') && !hasWorkshop.value)
+const canUpdateWorkshop = computed(() => (
+  hasWorkshop.value
+  && selectedModIds.value.length > 0
+  && selectedModIds.value.every(id => eligibleUpdateIds.value.has(id))
+))
 const deleteLabel = computed(() => (
   sources.value.has('data') && sources.value.has('workshop')
     ? t('context.deleteFromData')
     : t('context.deleteModFile')
 ))
-const hasSteamActions = computed(() => hasWorkshop.value || canPublish.value)
+const hasSteamActions = computed(() => (
+  hasWorkshop.value || canUploadWorkshop.value || canUpdateWorkshop.value
+))
 const isBatchSelection = computed(() => Number(props.selectionCount) > 1)
 const batchLabel = label => (
   isBatchSelection.value
@@ -51,6 +72,7 @@ const selectedTypes = computed(() => new Set(
   props.mod?.mod_types?.length ? props.mod.mod_types : [props.mod?.mod_type || 'unknown'],
 ))
 const ignoredWarningCodes = computed(() => new Set(props.mod?.ignored_warning_codes || []))
+const shortcutLabel = action => shortcutForAction(action, props.keyboardShortcuts)
 
 const run = (action, value = null, close = true) => {
   if (close) emit('close')
@@ -67,9 +89,10 @@ const run = (action, value = null, close = true) => {
     @contextmenu.prevent
   >
     <nav class="context-menu" :class="{ 'submenus-left': submenuToLeft }" :style="menuStyle" role="menu" :aria-label="t('context.aria')">
-      <button type="button" class="context-menu-item" role="menuitem" @click="run('toggle-active')">
+      <button type="button" class="context-menu-item" role="menuitem" data-testid="context-toggle-active" @click="run('toggle-active')">
         <span class="context-menu-icon">{{ active ? '⊘' : '✓' }}</span>
         <span>{{ batchLabel(active ? t('list.disable') : t('list.enable')) }}</span>
+        <kbd class="context-menu-shortcut">{{ shortcutLabel('toggle-active') }}</kbd>
       </button>
 
       <div class="context-menu-parent" data-testid="context-type-menu">
@@ -131,6 +154,7 @@ const run = (action, value = null, close = true) => {
       >
         <span class="context-menu-icon">↗</span>
         <span>{{ batchLabel(t('context.openWorkshopBrowser')) }}</span>
+        <kbd class="context-menu-shortcut">{{ shortcutLabel('open-workshop') }}</kbd>
       </button>
       <button
         v-if="hasWorkshop"
@@ -168,11 +192,23 @@ const run = (action, value = null, close = true) => {
           <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('force-update')">
             <span class="context-menu-icon">↻</span><span>{{ batchLabel(t('context.forceUpdate')) }}</span>
           </button>
-          <div v-if="hasWorkshop && canPublish" class="context-menu-divider"></div>
-          <button v-if="canPublish && !hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-upload')">
+          <div v-if="hasWorkshop && (canUploadWorkshop || canUpdateWorkshop)" class="context-menu-divider"></div>
+          <button
+            v-if="canUploadWorkshop"
+            type="button"
+            class="context-menu-item"
+            data-testid="context-publish-upload"
+            @click.stop="run('publish-upload')"
+          >
             <span class="context-menu-icon">↑</span><span>{{ batchLabel(t('context.uploadWorkshop')) }}</span>
           </button>
-          <button v-if="canPublish && hasWorkshop" type="button" class="context-menu-item" @click.stop="run('publish-update')">
+          <button
+            v-if="canUpdateWorkshop"
+            type="button"
+            class="context-menu-item"
+            data-testid="context-publish-update"
+            @click.stop="run('publish-update')"
+          >
             <span class="context-menu-icon">⇧</span><span>{{ batchLabel(t('context.updateWorkshop')) }}</span>
           </button>
         </div>
@@ -239,7 +275,10 @@ const run = (action, value = null, close = true) => {
       >
         <span class="context-menu-icon">R</span>
         <span>{{ t('context.openRpfm') }}</span>
-        <span v-if="isBatchSelection" class="context-menu-unavailable">{{ t('common.singleOnly') }}</span>
+        <span class="context-menu-trailing">
+          <kbd class="context-menu-shortcut">{{ shortcutLabel('open-rpfm') }}</kbd>
+          <span v-if="isBatchSelection" class="context-menu-unavailable">{{ t('common.singleOnly') }}</span>
+        </span>
       </button>
       <button type="button" class="context-menu-item" @click="run('toggle-hidden')">
         <span class="context-menu-icon">{{ mod.hidden ? '◉' : '◌' }}</span>

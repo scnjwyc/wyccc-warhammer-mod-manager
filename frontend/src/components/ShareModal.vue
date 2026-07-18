@@ -6,10 +6,12 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   exportValue: { type: String, default: '' },
   busy: { type: String, default: '' },
+  canImportOfficialProfile: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['close', 'export', 'import', 'import-official'])
+const emit = defineEmits(['close', 'export', 'import', 'import-collection', 'import-official'])
 const value = ref('')
+const collectionValue = ref('')
 
 watch(
   () => props.exportValue,
@@ -43,8 +45,39 @@ const copyValue = async () => {
           rows="10"
           :placeholder="t('share.placeholder')"
         ></textarea>
+        <div class="share-collection-import">
+          <label class="field-label" for="share-collection-input">
+            <span>{{ t('share.collectionInput') }}</span>
+          </label>
+          <div class="share-collection-controls">
+            <input
+              id="share-collection-input"
+              v-model="collectionValue"
+              type="text"
+              data-testid="share-collection-input"
+              :placeholder="t('share.collectionPlaceholder')"
+            />
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="!!busy || !collectionValue.trim()"
+              data-testid="share-import-collection"
+              @click="emit('import-collection', collectionValue)"
+            >
+              {{ t('share.importCollection') }}
+            </button>
+          </div>
+          <small class="field-help">{{ t('share.collectionHelp') }}</small>
+        </div>
         <div class="button-row">
-          <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('import-official')">
+          <button
+            v-if="canImportOfficialProfile"
+            type="button"
+            class="secondary-button"
+            :disabled="!!busy"
+            data-testid="share-import-official"
+            @click="emit('import-official')"
+          >
             {{ t('share.importOfficial') }}
           </button>
           <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('export')">

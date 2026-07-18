@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import aboutLogoUrl from '../assets/icon.svg'
 import donationQrUrl from '../assets/donate-qr.jpg'
 import {
@@ -9,7 +9,14 @@ import {
   languageLabel,
   t,
 } from '../languages'
+import {
+  KEYBOARD_SHORTCUTS,
+  formatShortcut,
+  normalizeShortcutMap,
+  shortcutFromKeyboardEvent,
+} from '../keyboardShortcuts'
 import { useAppStore } from '../store'
+import ThemedSelect from './ThemedSelect.vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -23,10 +30,59 @@ const store = useAppStore()
 const draft = reactive({})
 const activeTab = ref('basic')
 const donationOpen = ref(false)
+const shortcutCaptureId = ref('')
+const shortcutError = ref('')
+
+const GAME_OPTIONS = [
+  {
+    id: 'warhammer3',
+    labelKey: 'settings.gameWarhammer3',
+    gamePathPlaceholder: '...\\steamapps\\common\\Total War WARHAMMER III',
+    workshopPathPlaceholder: '...\\workshop\\content\\1142710',
+  },
+  {
+    id: 'three_kingdoms',
+    labelKey: 'settings.gameThreeKingdoms',
+    gamePathPlaceholder: '...\\steamapps\\common\\Total War THREE KINGDOMS',
+    workshopPathPlaceholder: '...\\workshop\\content\\779340',
+  },
+]
+
+const cloneGameInstallations = (installations, legacy = {}) => Object.fromEntries(
+  GAME_OPTIONS.map(game => {
+    const current = installations && typeof installations === 'object'
+      ? installations[game.id]
+      : null
+    const fallback = game.id === 'warhammer3' ? legacy : {}
+    return [game.id, {
+      game_path: String(current?.game_path || fallback.game_path || ''),
+      workshop_path: String(current?.workshop_path || fallback.workshop_path || ''),
+    }]
+  }),
+)
+
+const selectedGameOption = computed(() => (
+  GAME_OPTIONS.find(game => game.id === draft.selected_game) || GAME_OPTIONS[0]
+))
+const gameSelectOptions = computed(() => GAME_OPTIONS.map(game => ({
+  value: game.id,
+  label: t(game.labelKey),
+})))
+const languageSelectOptions = computed(() => LANGUAGE_OPTIONS.map(language => ({
+  value: language.code,
+  label: languageLabel(language),
+})))
+const activeInstallation = computed(() => (
+  draft.game_installations?.[selectedGameOption.value.id] || {}
+))
+const requiresThreeKingdomsManualPath = computed(() => (
+  selectedGameOption.value.id === 'three_kingdoms' && !props.health.game_ready
+))
 
 const tabs = [
   { id: 'basic', labelKey: 'settings.tabBasic', detailKey: 'settings.tabBasicDetail', marker: '01' },
   { id: 'features', labelKey: 'settings.tabFeatures', detailKey: 'settings.tabFeaturesDetail', marker: '02' },
+  { id: 'shortcuts', labelKey: 'settings.tabShortcuts', detailKey: 'settings.tabShortcutsDetail', marker: '⌘' },
   { id: 'ai', labelKey: 'settings.tabAi', detailKey: 'settings.tabAiDetail', marker: 'AI' },
   { id: 'about', labelKey: 'settings.tabAbout', detailKey: 'settings.tabAboutDetail', marker: '04' },
 ]
@@ -62,7 +118,20 @@ watch(
   () => {
     Object.keys(draft).forEach(key => delete draft[key])
     Object.assign(draft, props.settings)
+    draft.selected_game = GAME_OPTIONS.some(game => game.id === draft.selected_game)
+      ? draft.selected_game
+      : 'warhammer3'
+    draft.game_installations = cloneGameInstallations(
+      props.settings?.game_installations,
+      props.settings,
+    )
+    delete draft.game_path
+    delete draft.workshop_path
     if (!draft.language) draft.language = DEFAULT_LANGUAGE
+    if (typeof draft.keyboard_shortcuts_enabled !== 'boolean') draft.keyboard_shortcuts_enabled = true
+    draft.keyboard_shortcuts = normalizeShortcutMap(props.settings?.keyboard_shortcuts)
+    shortcutCaptureId.value = ''
+    shortcutError.value = ''
     draft.clear_ai_api_key = false
   },
   { immediate: true, deep: true },
@@ -79,9 +148,11 @@ watch(
 const browse = async kind => {
   const result = await store.selectDirectory(kind)
   if (!result.path) return
-  if (kind === 'game') draft.game_path = result.path
-  else draft.workshop_path = result.path
+  if (kind === 'game') activeInstallation.value.game_path = result.path
+  else activeInstallation.value.workshop_path = result.path
 }
+
+const detectSelectedGame = () => emit('detect', draft.selected_game)
 
 const openExternalUrl = async url => {
   try {
@@ -101,6 +172,40 @@ const copyText = async value => {
 }
 
 const previewLanguage = () => applyInterfaceLanguage(draft.language)
+
+const startShortcutCapture = shortcutId => {
+  shortcutCaptureId.value = shortcutId
+  shortcutError.value = ''
+}
+
+const captureShortcut = (event, shortcutId) => {
+  if (shortcutCaptureId.value !== shortcutId) return
+  if (event.key === 'Escape' && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+    shortcutCaptureId.value = ''
+    shortcutError.value = ''
+    event.preventDefault()
+    return
+  }
+  const combo = shortcutFromKeyboardEvent(event)
+  if (!combo) {
+    shortcutError.value = t('settings.shortcutInvalid')
+    event.preventDefault()
+    return
+  }
+  const conflict = KEYBOARD_SHORTCUTS.find(shortcut => (
+    shortcut.id !== shortcutId
+    && draft.keyboard_shortcuts?.[shortcut.id] === combo
+  ))
+  if (conflict) {
+    shortcutError.value = t('settings.shortcutConflict')
+    event.preventDefault()
+    return
+  }
+  draft.keyboard_shortcuts = { ...draft.keyboard_shortcuts, [shortcutId]: combo }
+  shortcutCaptureId.value = ''
+  shortcutError.value = ''
+  event.preventDefault()
+}
 
 const closeSettings = () => {
   applyInterfaceLanguage(props.settings.language || DEFAULT_LANGUAGE)
@@ -146,39 +251,66 @@ const closeSettings = () => {
               <p>{{ t('settings.basicIntro') }}</p>
             </div>
 
+            <div class="field-label">
+              <span>{{ t('settings.game') }}</span>
+              <ThemedSelect
+                v-model="draft.selected_game"
+                :options="gameSelectOptions"
+                :aria-label="t('settings.game')"
+                data-testid="game-select"
+                @change="detectSelectedGame"
+              />
+            </div>
+
             <div class="health-card" :class="{ healthy: health.game_ready }">
               <span class="health-dot"></span>
               <div>
                 <strong>{{ health.game_ready ? t('settings.pathValid') : t('settings.pathInvalid') }}</strong>
                 <p>{{ t('settings.pathRequirement') }}</p>
               </div>
-              <button type="button" class="secondary-button" :disabled="!!busy" @click="emit('detect')">
+              <button type="button" class="secondary-button" :disabled="!!busy" @click="detectSelectedGame">
                 {{ t('settings.autoDetectSteam') }}
               </button>
             </div>
 
-            <label class="field-label language-field">
+            <div class="field-label language-field">
               <span>{{ t('settings.interfaceLanguage') }}</span>
-              <select v-model="draft.language" data-testid="language-select" @change="previewLanguage">
-                <option v-for="language in LANGUAGE_OPTIONS" :key="language.code" :value="language.code">
-                  {{ languageLabel(language) }}
-                </option>
-              </select>
+              <ThemedSelect
+                v-model="draft.language"
+                :options="languageSelectOptions"
+                :aria-label="t('settings.interfaceLanguage')"
+                data-testid="language-select"
+                @change="previewLanguage"
+              />
               <small class="field-help">{{ t('settings.languageHelp') }}</small>
-            </label>
+            </div>
 
             <label class="field-label">
               <span>{{ t('settings.gameFolder') }}</span>
               <div class="path-input-row">
-                <input v-model="draft.game_path" type="text" placeholder="...\steamapps\common\Total War WARHAMMER III" />
+                <input
+                  v-model="activeInstallation.game_path"
+                  type="text"
+                  :placeholder="selectedGameOption.gamePathPlaceholder"
+                  data-testid="game-path-input"
+                />
                 <button type="button" class="secondary-button" @click="browse('game')">{{ t('common.browse') }}</button>
               </div>
             </label>
 
+            <p v-if="requiresThreeKingdomsManualPath" class="settings-page-note" data-testid="three-kingdoms-manual-path">
+              {{ t('settings.manualPathRequired') }}
+            </p>
+
             <label class="field-label">
               <span>{{ t('settings.workshopFolder') }}</span>
               <div class="path-input-row">
-                <input v-model="draft.workshop_path" type="text" placeholder="...\workshop\content\1142710" />
+                <input
+                  v-model="activeInstallation.workshop_path"
+                  type="text"
+                  :placeholder="selectedGameOption.workshopPathPlaceholder"
+                  data-testid="workshop-path-input"
+                />
                 <button type="button" class="secondary-button" @click="browse('workshop')">{{ t('common.browse') }}</button>
               </div>
             </label>
@@ -223,6 +355,39 @@ const closeSettings = () => {
               </label>
             </div>
             <p class="settings-page-note">{{ t('settings.runtimeNote') }}</p>
+          </section>
+
+          <section v-show="activeTab === 'shortcuts'" class="settings-page" data-testid="settings-page-shortcuts">
+            <div class="settings-page-heading">
+              <span class="eyebrow">{{ t('settings.shortcutsEyebrow') }}</span>
+              <h3>{{ t('settings.tabShortcuts') }}</h3>
+              <p>{{ t('settings.shortcutsIntro') }}</p>
+            </div>
+
+            <div class="settings-feature-card">
+              <label class="switch-row">
+                <input v-model="draft.keyboard_shortcuts_enabled" type="checkbox" data-testid="keyboard-shortcuts-enabled" />
+                <span><strong>{{ t('settings.shortcutsEnabled') }}</strong><small>{{ t('settings.shortcutsEnabledHelp') }}</small></span>
+              </label>
+              <p class="settings-page-note shortcut-capture-help">{{ t('settings.shortcutCaptureHelp') }}</p>
+              <ul class="shortcut-binding-list" :class="{ disabled: !draft.keyboard_shortcuts_enabled }">
+                <li v-for="shortcut in KEYBOARD_SHORTCUTS" :key="shortcut.id" :data-testid="`shortcut-${shortcut.id}`">
+                  <button
+                    type="button"
+                    class="shortcut-capture-button"
+                    :class="{ recording: shortcutCaptureId === shortcut.id }"
+                    :data-testid="`shortcut-input-${shortcut.id}`"
+                    :aria-label="t(shortcut.labelKey)"
+                    @click="startShortcutCapture(shortcut.id)"
+                    @keydown="captureShortcut($event, shortcut.id)"
+                  >
+                    <kbd>{{ shortcutCaptureId === shortcut.id ? t('settings.shortcutPressKeys') : (formatShortcut(draft.keyboard_shortcuts?.[shortcut.id]) || t('settings.shortcutUnset')) }}</kbd>
+                  </button>
+                  <span>{{ t(shortcut.labelKey) }}</span>
+                </li>
+              </ul>
+              <p v-if="shortcutError" class="settings-page-note shortcut-error" data-testid="shortcut-error">{{ shortcutError }}</p>
+            </div>
           </section>
 
           <section v-show="activeTab === 'ai'" class="settings-page" data-testid="settings-page-ai">
@@ -290,7 +455,7 @@ const closeSettings = () => {
                     type="button"
                     class="secondary-button update-check-button"
                     :disabled="!!busy"
-                    @click="emit('check-update', String(draft.update_manifest_url || '').trim())"
+                    @click="emit('check-update')"
                   >
                     {{ busy === t('busy.checkUpdates') ? busy : t('settings.checkUpdate') }}
                   </button>
@@ -333,20 +498,6 @@ const closeSettings = () => {
                     </span>
                   </div>
                 </div>
-              </article>
-
-              <article class="about-card about-wide-card software-update-settings">
-                <header><h4>{{ t('settings.updateChannel') }}</h4><p>{{ t('settings.updateChannelHelp') }}</p></header>
-                <label class="field-label update-manifest-field">
-                  <span>{{ t('settings.customManifest') }}</span>
-                  <input
-                    v-model="draft.update_manifest_url"
-                    type="url"
-                    data-testid="update-manifest-url"
-                    :placeholder="t('settings.manifestPlaceholder')"
-                  />
-                  <small class="field-help">{{ t('settings.manifestHelp') }}</small>
-                </label>
               </article>
 
               <article class="about-card about-wide-card donation-card">

@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 
 import { LANGUAGE_OPTIONS, languageLabel, normalizeLanguage, t } from '../languages'
 import { useAppStore } from '../store'
+import ThemedSelect from './ThemedSelect.vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -20,12 +21,10 @@ const draft = reactive({
   language: 'en-US',
   category: 'graphical',
   visibility: 0,
-  confirmed: false,
 })
 const languageLoading = ref(false)
 const languageMessage = ref('')
 let languageRequestId = 0
-const coverPath = computed(() => String(props.mod?.path || '').replace(/\.pack$/i, '.png'))
 
 const categories = [
   ['graphical', 'publish.categoryGraphical'],
@@ -38,6 +37,20 @@ const categories = [
   ['compilation', 'publish.categoryCompilation'],
   ['cheat', 'publish.categoryCheat'],
 ]
+const languageSelectOptions = computed(() => LANGUAGE_OPTIONS.map(language => ({
+  value: language.code,
+  label: languageLabel(language),
+})))
+const categorySelectOptions = computed(() => categories.map(category => ({
+  value: category[0],
+  label: t(category[1]),
+})))
+const visibilitySelectOptions = computed(() => [
+  { value: 0, label: t('publish.public') },
+  { value: 1, label: t('publish.friendsOnly') },
+  { value: 2, label: t('publish.private') },
+  { value: 3, label: t('publish.unlisted') },
+])
 
 watch(
   () => [props.open, props.mod?.id, props.mode],
@@ -51,7 +64,6 @@ watch(
       : 'en-US'
     draft.category = 'graphical'
     draft.visibility = 0
-    draft.confirmed = false
     languageMessage.value = ''
     languageRequestId += 1
     if (props.mode === 'update' && props.mod.workshop_id) {
@@ -94,7 +106,7 @@ async function loadWorkshopLanguage(language, allowEnglishDefault = false) {
 }
 
 const submit = () => {
-  if (!draft.confirmed || !draft.title.trim()) return
+  if (!draft.title.trim()) return
   emit('submit', {
     mode: props.mode,
     title: draft.title.trim(),
@@ -124,21 +136,19 @@ const submit = () => {
           <span>{{ t('publish.workshopId') }}</span>
           <input :value="mod.workshop_id" type="text" readonly />
         </label>
-        <label v-if="mode === 'update'" class="field-label publish-language-field">
+        <div v-if="mode === 'update'" class="field-label publish-language-field">
           <span>{{ t('publish.language') }}</span>
-          <select
+          <ThemedSelect
             v-model="draft.language"
+            :options="languageSelectOptions"
+            :aria-label="t('publish.language')"
             data-testid="publish-language-select"
             :disabled="!!busy || languageLoading"
             @change="loadWorkshopLanguage(draft.language)"
-          >
-            <option v-for="language in LANGUAGE_OPTIONS" :key="language.code" :value="language.code">
-              {{ languageLabel(language) }}
-            </option>
-          </select>
+          />
           <small class="field-help">{{ t('publish.languageHelp') }}</small>
           <small v-if="languageMessage" class="publish-language-status">{{ languageMessage }}</small>
-        </label>
+        </div>
         <label class="field-label">
           <span>{{ t('publish.title') }}</span>
           <input v-model="draft.title" type="text" maxlength="128" :disabled="languageLoading" />
@@ -151,36 +161,26 @@ const submit = () => {
           <span>{{ t('publish.changelog') }}</span>
           <textarea v-model="draft.change_note" rows="3" maxlength="8000"></textarea>
         </label>
-        <label class="field-label">
-          <span>{{ t('publish.preview') }}</span>
-          <input :value="coverPath" type="text" readonly data-testid="publish-cover-path" />
-          <small class="field-help">{{ t('publish.coverHelp') }}</small>
-        </label>
         <div class="publish-grid">
-          <label class="field-label">
+          <div class="field-label">
             <span>{{ t('publish.category') }}</span>
-            <select v-model="draft.category">
-              <option v-for="category in categories" :key="category[0]" :value="category[0]">{{ t(category[1]) }}</option>
-            </select>
-          </label>
-          <label class="field-label">
+            <ThemedSelect
+              v-model="draft.category"
+              :options="categorySelectOptions"
+              :aria-label="t('publish.category')"
+              data-testid="publish-category-select"
+            />
+          </div>
+          <div class="field-label">
             <span>{{ t('publish.visibility') }}</span>
-            <select v-model="draft.visibility">
-              <option :value="0">{{ t('publish.public') }}</option>
-              <option :value="1">{{ t('publish.friendsOnly') }}</option>
-              <option :value="2">{{ t('publish.private') }}</option>
-              <option :value="3">{{ t('publish.unlisted') }}</option>
-            </select>
-          </label>
+            <ThemedSelect
+              v-model="draft.visibility"
+              :options="visibilitySelectOptions"
+              :aria-label="t('publish.visibility')"
+              data-testid="publish-visibility-select"
+            />
+          </div>
         </div>
-        <label class="publish-confirmation">
-          <input v-model="draft.confirmed" type="checkbox" />
-          <span>
-            {{ mode === 'upload'
-              ? t('publish.confirmUpload')
-              : t('publish.confirmUpdate') }}
-          </span>
-        </label>
       </div>
 
       <footer class="modal-footer">
@@ -189,7 +189,7 @@ const submit = () => {
         <button
           type="button"
           class="primary-button"
-          :disabled="!!busy || !draft.confirmed || !draft.title.trim()"
+          :disabled="!!busy || languageLoading || !draft.title.trim()"
           @click="submit"
         >
           {{ busy || (mode === 'upload' ? t('publish.createUpload') : t('publish.submitUpdate')) }}

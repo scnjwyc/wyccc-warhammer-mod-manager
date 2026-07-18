@@ -25,12 +25,13 @@ describe('language settings', () => {
     })
     const select = wrapper.get('[data-testid="language-select"]')
 
-    expect(select.findAll('option').map(option => [option.attributes('value'), option.text()])).toEqual(
+    await select.get('.themed-select-trigger').trigger('click')
+    expect(select.findAll('.themed-select-option').map(option => [option.attributes('data-value'), option.text()])).toEqual(
       LANGUAGE_OPTIONS.map(language => [language.code, languageLabel(language)]),
     )
-    expect(select.element.value).toBe('ko-KR')
+    expect(select.get('.themed-select-value').text()).toBe(languageLabel(LANGUAGE_OPTIONS.find(language => language.code === 'ko-KR')))
 
-    await select.setValue('es-ES')
+    await select.get('[data-value="es-ES"]').trigger('click')
     await wrapper.get('.primary-button').trigger('click')
 
     expect(wrapper.emitted('save')[0][0].language).toBe('es-ES')
@@ -86,6 +87,93 @@ describe('language settings', () => {
     expect(wrapper.text()).not.toContain('Merged 目录')
   })
 
+  it('shows editable keyboard shortcuts and saves their enabled preference', async () => {
+    const wrapper = mount(SettingsModal, {
+      props: {
+        open: true,
+        settings: {
+          language: 'zh-CN',
+          keyboard_shortcuts_enabled: true,
+        },
+        health: {},
+      },
+      global: { plugins: [createPinia()] },
+    })
+
+    await wrapper.get('[data-testid="settings-tab-shortcuts"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="settings-page-shortcuts"]').isVisible()).toBe(true)
+    expect(wrapper.get('[data-testid="shortcut-open-workshop"]').text()).toContain('Shift + W')
+    expect(wrapper.get('[data-testid="shortcut-open-rpfm"]').text()).toContain('Shift + R')
+    expect(wrapper.get('[data-testid="shortcut-toggle-active"]').text()).toContain('Shift + E')
+    expect(wrapper.get('[data-testid="shortcut-launch-game"]').text()).toContain('Shift + Enter')
+
+    const workshopBinding = wrapper.get('[data-testid="shortcut-input-open-workshop"]')
+    await workshopBinding.trigger('click')
+    await workshopBinding.trigger('keydown', { key: 'k', ctrlKey: true, altKey: true })
+    expect(workshopBinding.text()).toContain('Ctrl + Alt + K')
+
+    const rpfmBinding = wrapper.get('[data-testid="shortcut-input-open-rpfm"]')
+    await rpfmBinding.trigger('click')
+    await rpfmBinding.trigger('keydown', { key: 'k', ctrlKey: true, altKey: true })
+    expect(wrapper.get('[data-testid="shortcut-error"]').text()).toContain('该快捷键已被其他功能使用')
+    expect(rpfmBinding.text()).toContain('请按下新的快捷键')
+    await rpfmBinding.trigger('keydown', { key: 'Escape' })
+    expect(rpfmBinding.text()).toContain('Shift + R')
+
+    await wrapper.get('[data-testid="keyboard-shortcuts-enabled"]').setValue(false)
+    await wrapper.get('.modal-footer .primary-button').trigger('click')
+
+    expect(wrapper.emitted('save').at(-1)[0]).toMatchObject({
+      keyboard_shortcuts_enabled: false,
+      keyboard_shortcuts: expect.objectContaining({ 'open-workshop': 'Ctrl+Alt+K' }),
+    })
+  })
+
+  it('switches to Three Kingdoms, keeps per-game paths, and requests detection for that game', async () => {
+    const wrapper = mount(SettingsModal, {
+      props: {
+        open: true,
+        settings: {
+          language: 'zh-CN',
+          selected_game: 'warhammer3',
+          game_installations: {
+            warhammer3: {
+              game_path: 'D:/Steam/steamapps/common/Total War WARHAMMER III',
+              workshop_path: 'D:/Steam/steamapps/workshop/content/1142710',
+            },
+            three_kingdoms: { game_path: '', workshop_path: '' },
+          },
+        },
+        health: { game_ready: false },
+      },
+      global: { plugins: [createPinia()] },
+    })
+
+    const game = wrapper.get('[data-testid="game-select"]')
+    await game.get('.themed-select-trigger').trigger('click')
+    await game.get('[data-value="three_kingdoms"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="game-path-input"]').attributes('placeholder')).toContain('Total War THREE KINGDOMS')
+    expect(wrapper.get('[data-testid="workshop-path-input"]').attributes('placeholder')).toContain('779340')
+    expect(wrapper.get('[data-testid="three-kingdoms-manual-path"]').exists()).toBe(true)
+    expect(wrapper.emitted('detect').at(-1)).toEqual(['three_kingdoms'])
+
+    await wrapper.get('[data-testid="game-path-input"]').setValue('D:/Steam/steamapps/common/Total War THREE KINGDOMS')
+    await wrapper.get('.modal-footer .primary-button').trigger('click')
+    expect(wrapper.emitted('save').at(-1)[0]).toMatchObject({
+      selected_game: 'three_kingdoms',
+      game_installations: {
+        warhammer3: {
+          game_path: 'D:/Steam/steamapps/common/Total War WARHAMMER III',
+        },
+        three_kingdoms: {
+          game_path: 'D:/Steam/steamapps/common/Total War THREE KINGDOMS',
+        },
+      },
+    })
+  })
+
   it('uses the selected language as the content language', () => {
     for (const language of LANGUAGE_OPTIONS) {
       expect(contentLanguageFor(language.code)).toBe(language.code)
@@ -99,14 +187,13 @@ describe('language settings', () => {
     applyInterfaceLanguage('zh-CN')
   })
 
-  it('exposes automatic checks, the manifest channel and changelog actions', async () => {
+  it('exposes automatic checks and changelog actions without a custom channel', async () => {
     const wrapper = mount(SettingsModal, {
       props: {
         open: true,
         settings: {
           language: 'zh-CN',
           check_updates_automatically: true,
-          update_manifest_url: 'https://updates.example.test/manifest.json',
         },
         health: {},
       },
@@ -114,11 +201,9 @@ describe('language settings', () => {
     })
 
     await wrapper.get('[data-testid="auto-update-check"]').setValue(false)
-    await wrapper.get('[data-testid="update-manifest-url"]').setValue('https://cdn.example.test/latest.json')
     await wrapper.get('.update-check-button').trigger('click')
-    expect(wrapper.emitted('check-update')[0][0]).toBe('https://cdn.example.test/latest.json')
-    expect(wrapper.text()).toContain('中文优先使用 Gitee，其他语言优先使用 GitHub')
-    expect(wrapper.text()).toContain('两个仓库都会检查')
+    expect(wrapper.emitted('check-update')[0]).toEqual([])
+    expect(wrapper.find('[data-testid="update-manifest-url"]').exists()).toBe(false)
 
     const changelogButton = wrapper.findAll('button').find(button => button.text() === '更新日志')
     await changelogButton.trigger('click')
@@ -127,18 +212,17 @@ describe('language settings', () => {
     await wrapper.get('.modal-footer .primary-button').trigger('click')
     expect(wrapper.emitted('save')[0][0]).toMatchObject({
       check_updates_automatically: false,
-      update_manifest_url: 'https://cdn.example.test/latest.json',
     })
+    expect(wrapper.emitted('save')[0][0]).not.toHaveProperty('update_manifest_url')
   })
 
-  it('allows checking both built-in repositories with an empty custom channel', async () => {
+  it('checks the built-in repositories without exposing a custom channel field', async () => {
     const wrapper = mount(SettingsModal, {
       props: {
         open: true,
         settings: {
           language: 'zh-CN',
           check_updates_automatically: true,
-          update_manifest_url: '',
         },
         health: {},
       },
@@ -149,11 +233,11 @@ describe('language settings', () => {
     expect(button.attributes('disabled')).toBeUndefined()
     await button.trigger('click')
 
-    expect(wrapper.emitted('check-update')[0][0]).toBe('')
-    expect(wrapper.get('[data-testid="update-manifest-url"]').attributes('placeholder')).toContain('Gitee 与 GitHub')
+    expect(wrapper.emitted('check-update')[0]).toEqual([])
+    expect(wrapper.find('[data-testid="update-manifest-url"]').exists()).toBe(false)
   })
 
-  it('splits settings into four pages and exposes the project support page', async () => {
+  it('splits settings into five pages and exposes the project support page', async () => {
     const wrapper = mount(SettingsModal, {
       props: {
         open: true,
@@ -166,6 +250,7 @@ describe('language settings', () => {
     expect(wrapper.findAll('.settings-tab-button').map(button => button.text())).toEqual([
       expect.stringContaining('基础设置'),
       expect.stringContaining('功能'),
+      expect.stringContaining('快捷键'),
       expect.stringContaining('AI 集成'),
       expect.stringContaining('关于项目'),
     ])

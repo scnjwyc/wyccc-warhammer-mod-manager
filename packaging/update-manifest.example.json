@@ -10,12 +10,26 @@
   },
   "changelog": [
     {
-      "title": "本次更新",
+      "title": "新增",
       "changes": [
         {
           "type": "feature",
           "text": "在这里填写新增功能。"
-        },
+        }
+      ]
+    },
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "在这里填写体验调整。"
+        }
+      ]
+    },
+    {
+      "title": "修复",
+      "changes": [
         {
           "type": "fix",
           "text": "在这里填写问题修复。"

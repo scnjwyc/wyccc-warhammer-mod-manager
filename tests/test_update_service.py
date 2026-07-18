@@ -50,7 +50,7 @@ class UpdateServiceTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "app": "Wyccc's Mod Manager",
-                        "version": "0.7.1",
+                        "version": "0.8.1",
                         "published_at": "2026-07-15",
                         "download": {
                             "url": executable.name,
@@ -68,8 +68,8 @@ class UpdateServiceTests(unittest.TestCase):
                 encoding="utf-8",
             )
             settings = SettingsService(root / "state")
-            settings.save({"update_manifest_url": manifest.as_uri()})
             service = UpdateService(root / "state", settings)
+            service.preferred_repository_sources = lambda _language: (("fixture", manifest.as_uri()),)
 
             checked = service.check(manual=False)
             self.assertTrue(checked["has_update"])
@@ -77,12 +77,12 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["entries"][0]["changes"][0]["type"], "feature")
             self.assertGreater(settings.get()["last_update_check_at"], 0)
 
-            downloaded = service.download("0.7.1")
+            downloaded = service.download("0.8.1")
             self.assertEqual(downloaded["status"], "ready")
             self.assertTrue(Path(downloaded["local_path"]).is_file())
             self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
 
-            service.ignore("0.7.1")
+            service.ignore("0.8.1")
             ignored = service.check(manual=False)
             self.assertFalse(ignored["has_update"])
             self.assertTrue(ignored["ignored"])
@@ -98,7 +98,7 @@ class UpdateServiceTests(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "version": "0.7.1",
+                        "version": "0.8.1",
                         "download_url": executable.name,
                         "sha256": "0" * 64,
                         "size": executable.stat().st_size,
@@ -107,8 +107,8 @@ class UpdateServiceTests(unittest.TestCase):
                 encoding="utf-8",
             )
             settings = SettingsService(root / "state")
-            settings.save({"update_manifest_url": manifest.as_uri()})
             service = UpdateService(root / "state", settings)
+            service.preferred_repository_sources = lambda _language: (("fixture", manifest.as_uri()),)
             service.check()
 
             with self.assertRaisesRegex(ValueError, "SHA-256"):
@@ -116,15 +116,12 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertFalse(any((root / "state" / "updates").glob("*.part")))
 
-    def test_automatic_check_respects_toggle_url_and_daily_interval(self) -> None:
+    def test_automatic_check_respects_toggle_and_daily_interval(self) -> None:
         settings = {
             "check_updates_automatically": True,
-            "update_manifest_url": "https://updates.example.test/manifest.json",
             "last_update_check_at": 100,
         }
         self.assertFalse(UpdateService.should_check_automatically(settings, now=200))
-        self.assertTrue(UpdateService.should_check_automatically(settings, now=100 + 86400))
-        settings["update_manifest_url"] = ""
         self.assertTrue(UpdateService.should_check_automatically(settings, now=100 + 86400))
         settings["check_updates_automatically"] = False
         self.assertFalse(UpdateService.should_check_automatically(settings, now=999999))
@@ -132,7 +129,7 @@ class UpdateServiceTests(unittest.TestCase):
     def test_chinese_checks_gitee_then_github_and_prefers_gitee_on_a_tie(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             settings = SettingsService(Path(temporary))
-            settings.save({"language": "zh-CN", "update_manifest_url": ""})
+            settings.save({"language": "zh-CN"})
             service = UpdateService(Path(temporary), settings)
             calls: list[str] = []
 
@@ -151,13 +148,13 @@ class UpdateServiceTests(unittest.TestCase):
     def test_non_chinese_checks_github_first_but_uses_a_newer_gitee_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             settings = SettingsService(Path(temporary))
-            settings.save({"language": "en-US", "update_manifest_url": ""})
+            settings.save({"language": "en-US"})
             service = UpdateService(Path(temporary), settings)
             calls: list[str] = []
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 calls.append(url)
-                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.7.1"
+                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.8.1"
                 return self._manifest(version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
@@ -165,19 +162,19 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertEqual(calls, [GITHUB_UPDATE_MANIFEST_URL, GITEE_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(checked["version"], "0.7.1")
+            self.assertEqual(checked["version"], "0.8.1")
             self.assertTrue(checked["has_update"])
 
     def test_repository_check_falls_back_when_the_preferred_source_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             settings = SettingsService(Path(temporary))
-            settings.save({"language": "zh-CN", "update_manifest_url": ""})
+            settings.save({"language": "zh-CN"})
             service = UpdateService(Path(temporary), settings)
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 if url == GITEE_UPDATE_MANIFEST_URL:
                     raise OSError("Gitee unavailable")
-                return self._manifest("0.7.1"), url
+                return self._manifest("0.8.1"), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
                 checked = service.check(manual=True)
@@ -186,10 +183,10 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["sources_checked"], ["gitee", "github"])
             self.assertTrue(checked["has_update"])
 
-    def test_blank_manual_override_clears_custom_channel_and_uses_repositories(self) -> None:
+    def test_check_rejects_custom_channel_overrides_and_uses_repositories(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             settings = SettingsService(Path(temporary))
-            settings.save({"language": "zh-CN", "update_manifest_url": "https://custom.example.test/update.json"})
+            settings.save({"language": "zh-CN"})
             service = UpdateService(Path(temporary), settings)
 
             with patch.object(
@@ -197,10 +194,17 @@ class UpdateServiceTests(unittest.TestCase):
                 "_read_json",
                 side_effect=lambda url: (self._manifest("0.5.0"), url),
             ):
-                checked = service.check(manual=True, manifest_url="")
+                checked = service.check(manual=True)
 
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(settings.get()["update_manifest_url"], "")
+            self.assertNotIn("update_manifest_url", settings.get())
+            with patch.object(
+                service,
+                "_read_json",
+                side_effect=lambda url: (self._manifest("0.5.0"), url),
+            ):
+                with self.assertRaises(TypeError):
+                    service.check(manual=True, manifest_url="https://custom.example.test/update.json")
 
     def test_installer_script_waits_replaces_restarts_and_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -9,7 +9,43 @@
     <title>Wyccc's Mod Manager</title>
   </head>
   <body>
+    <style>
+      #startup-fallback {
+        align-items: center;
+        background: #0b0909;
+        color: #f5e9e5;
+        display: flex;
+        font-family: system-ui, sans-serif;
+        inset: 0;
+        justify-content: center;
+        padding: 24px;
+        position: fixed;
+        text-align: center;
+      }
+      #startup-fallback > div {
+        background: #201817;
+        border: 1px solid #6a3b36;
+        border-radius: 12px;
+        max-width: 520px;
+        padding: 28px;
+      }
+      #startup-fallback h1 { font-size: 20px; margin: 0 0 10px; }
+      #startup-fallback p { color: #cdbab5; line-height: 1.55; margin: 0; }
+    </style>
+    <div id="startup-fallback" role="alert">
+      <div><h1>Starting Wyccc's Mod Manager</h1><p>Please wait while the interface loads.</p></div>
+    </div>
     <div id="app"></div>
+    <script>
+      window.__wmmShowStartupError = function (detail) {
+        var fallback = document.getElementById('startup-fallback')
+        if (!fallback) return
+        fallback.innerHTML = '<div><h1>The interface could not start</h1><p>Please restart the app. If this continues, install Microsoft Edge WebView2 Runtime and check the application log.</p></div>'
+        if (detail) console.error(detail)
+      }
+      window.addEventListener('error', function (event) { window.__wmmShowStartupError(event.error || event.message) })
+      window.addEventListener('unhandledrejection', function (event) { window.__wmmShowStartupError(event.reason) })
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

@@ -5,6 +5,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Protocol
 
+from .constants import INTERNAL_FEATURE_PACK_NAMES
+
 try:
     from watchdog.events import FileSystemEvent, FileSystemEventHandler
     from watchdog.observers import Observer
@@ -87,7 +89,7 @@ class ModEventHandler(FileSystemEventHandler):
     def _is_relevant(self, raw_path: str, is_directory: bool) -> bool:
         path = Path(raw_path)
         if not is_directory and path.suffix.casefold() == ".pack":
-            return True
+            return path.name.casefold() not in INTERNAL_FEATURE_PACK_NAMES
         if not self.workshop or not is_directory:
             return False
         return path.name.isdigit() or path.parent.name.isdigit()

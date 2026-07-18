@@ -18,6 +18,7 @@ from .game_data import (
 )
 from .game_data_settings import (
     normalize_single_entity_unit_mode,
+    normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
 )
 from .models import ModAsset
@@ -324,11 +325,22 @@ def _effective_game_data_settings(
     friendly_fire_available = (
         GAME_DATA_FEATURE_WORKSHOP_ITEMS["friendly_fire"]["workshop_id"] in subscribed_ids
     )
+    unit_cap_available = (
+        GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_cap"]["workshop_id"] in subscribed_ids
+    )
     unit_multiplier = normalize_unit_scale_multiplier(
         settings.get("unit_model_multiplier", 1)
     )
+    unit_recruitment_capacity_multiplier = (
+        normalize_unit_recruitment_capacity_multiplier(
+            settings.get("unit_recruitment_capacity_multiplier", 1)
+        )
+    )
     return {
         "unit_model_multiplier": unit_multiplier if unit_size_available else 1,
+        "unit_recruitment_capacity_multiplier": (
+            unit_recruitment_capacity_multiplier if unit_cap_available else 1
+        ),
         "single_entity_unit_mode": (
             normalize_single_entity_unit_mode(
                 settings.get("single_entity_unit_mode", "scale")
@@ -356,6 +368,7 @@ def _game_data_enabled(settings: dict[str, int | bool | str]) -> bool:
             rel_tol=0.0,
             abs_tol=1e-9,
         )
+        or int(settings["unit_recruitment_capacity_multiplier"]) != 1
         or bool(settings["disable_unit_friendly_fire"])
         or bool(settings["disable_spell_friendly_fire"])
     )
@@ -374,6 +387,8 @@ def _enabled_game_data_options(settings: dict[str, int | bool | str]) -> list[st
             options.append("single_entity_unit_mode")
         if settings["scale_lord_hero_health"]:
             options.append("scale_lord_hero_health")
+    if int(settings["unit_recruitment_capacity_multiplier"]) != 1:
+        options.append("unit_recruitment_capacity_multiplier")
     if settings["disable_unit_friendly_fire"]:
         options.append("disable_unit_friendly_fire")
     if settings["disable_spell_friendly_fire"]:
@@ -386,6 +401,7 @@ def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
         int(stats.get(key, 0))
         for key in (
             "unit_rows_scaled",
+            "unit_recruitment_capacity_rows_changed",
             "land_rows_scaled",
             "lord_hero_health_rows_scaled",
             "single_entity_health_rows_scaled",

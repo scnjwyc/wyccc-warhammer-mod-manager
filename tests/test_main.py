@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 from backend.changelog import CHANGELOG_STRUCTURE, CHANGELOG_TEXT, get_all_changelogs
 from backend.constants import APP_NAME, APP_VERSION
 from backend.update_service import is_newer_version
+from backend.webview_runtime import get_webview2_runtime_status
 from main import ensure_single_instance
 from main import main as run_app
 from main import resolve_runtime_data_dir, run_desktop
@@ -23,6 +24,7 @@ from scripts.build import (
     EXECUTABLE_NAME,
     PYINSTALLER_BUNDLE_NAME,
     package_desktop,
+    validate_frontend_bundle,
 )
 
 
@@ -42,7 +44,7 @@ class PackagedRuntimeTests(unittest.TestCase):
     def test_desktop_window_starts_maximized(self) -> None:
         fake_window = Mock()
         fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
-        with patch.dict(sys.modules, {"webview": fake_webview}):
+        with patch("main.ensure_webview2_runtime", return_value=True), patch.dict(sys.modules, {"webview": fake_webview}):
             result = run_desktop(object(), "file:///index.html")
 
         self.assertEqual(result, 0)
@@ -53,7 +55,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         fake_window = Mock()
         fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
         api = Mock()
-        with patch.dict(sys.modules, {"webview": fake_webview}):
+        with patch("main.ensure_webview2_runtime", return_value=True), patch.dict(sys.modules, {"webview": fake_webview}):
             result = run_desktop(
                 api,
                 "file:///index.html",
@@ -79,6 +81,38 @@ class PackagedRuntimeTests(unittest.TestCase):
         close_handle.assert_called_once_with(123)
         signal.assert_called_once_with()
 
+    def test_missing_webview2_opens_download_guidance_without_creating_a_window(self) -> None:
+        fake_webview = SimpleNamespace(create_window=Mock(), start=Mock())
+        with (
+            patch("main.ensure_webview2_runtime", return_value=False),
+            patch.dict(sys.modules, {"webview": fake_webview}),
+        ):
+            result = run_desktop(object(), "file:///index.html")
+
+        self.assertEqual(result, 3)
+        fake_webview.create_window.assert_not_called()
+
+    def test_valid_webview2_registry_version_is_available(self) -> None:
+        with patch(
+            "backend.webview_runtime._read_runtime_versions",
+            return_value=["123.0.2420.81"],
+        ):
+            status = get_webview2_runtime_status()
+
+        self.assertTrue(status.available)
+        self.assertEqual(status.version, "123.0.2420.81")
+
+    def test_frontend_bundle_validation_rejects_a_missing_index_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            dist = Path(temporary) / "dist"
+            dist.mkdir()
+            (dist / "index.html").write_text(
+                '<script type="module" src="./assets/missing.js"></script>',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SystemExit, "missing frontend asset"):
+                validate_frontend_bundle(dist)
+
     def test_windows_release_branding_and_default_output_directory(self) -> None:
         self.assertEqual(APP_NAME, "Wyccc's Mod Manager")
         self.assertEqual(EXECUTABLE_NAME, "Wyccc's Mod Manager")
@@ -103,17 +137,17 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.7.0")
+        self.assertEqual(APP_VERSION, "0.8.0")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.7.0'", frontend_store)
-        self.assertIn("filevers=(0, 7, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.7.0')", version_info)
-        self.assertIn("`0.7.0`", readme)
-        self.assertIn("`0.7.0`", readme_en)
+        self.assertIn("appVersion: '0.8.0'", frontend_store)
+        self.assertIn("filevers=(0, 8, 0, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.8.0')", version_info)
+        self.assertIn("`0.8.0`", readme)
+        self.assertIn("`0.8.0`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], APP_VERSION)
+        self.assertEqual(update_manifest["version"], "0.8.0")
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
@@ -126,11 +160,11 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:7]],
-            ["0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+            [release["version"] for release in changelog[:8]],
+            ["0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
         )
-        self.assertEqual(changelog[1]["version"], "0.6.5")
-        previous_release = changelog[2]
+        self.assertEqual(changelog[1]["version"], "0.7.0")
+        previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
         self.assertIn("即时 MOD 增删检测", str(previous_release))
@@ -138,9 +172,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("Windows 回收站", str(previous_release))
         for donation_term in ("捐赠", "二维码", "收款码", "打赏"):
             self.assertNotIn(donation_term, str(changelog[0]))
-        self.assertIn("Data", str(changelog[4]))
-        self.assertIn("Gitee", str(changelog[5]))
-        self.assertNotIn("Gitee", str(changelog[6]))
+        self.assertIn("Data", str(next(release for release in changelog if release["version"] == "0.3.0")))
+        self.assertIn("Gitee", str(next(release for release in changelog if release["version"] == "0.2.0")))
+        self.assertNotIn("Gitee", str(next(release for release in changelog if release["version"] == "0.1.0")))
 
     def test_changelog_is_available_in_every_built_in_language(self) -> None:
         languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
@@ -148,16 +182,20 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:7]],
-                ["0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
+                [release["version"] for release in releases[:8]],
+                ["0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 2)
-            self.assertEqual(len(releases[1]["entries"]), 3)
-            self.assertEqual(len(releases[2]["entries"]), 4)
-            self.assertIn("Dynamic Unit Size", str(releases[2]))
-            self.assertIn("Dynamic No Friendly Fire", str(releases[2]))
-            self.assertNotIn("wyccc_dynamic_unit_size.pack", str(releases[2]))
-            self.assertNotIn("wyccc_dynamic_no_friendly_fire.pack", str(releases[2]))
+            self.assertEqual(len(releases[0]["entries"]), 3)
+            release_070 = next(release for release in releases if release["version"] == "0.7.0")
+            release_065 = next(release for release in releases if release["version"] == "0.6.5")
+            release_060 = next(release for release in releases if release["version"] == "0.6.0")
+            self.assertEqual(len(release_070["entries"]), 2)
+            self.assertEqual(len(release_065["entries"]), 3)
+            self.assertEqual(len(release_060["entries"]), 3)
+            self.assertIn("Dynamic Unit Size", str(release_060))
+            self.assertIn("Dynamic No Friendly Fire", str(release_060))
+            self.assertNotIn("wyccc_dynamic_unit_size.pack", str(release_060))
+            self.assertNotIn("wyccc_dynamic_no_friendly_fire.pack", str(release_060))
         titles = {
             language: releases[0]["entries"][0]["title"]
             for language, releases in localized.items()
@@ -167,7 +205,8 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("游戏数据修改", str(localized["zh-CN"]))
         self.assertIn("订阅", str(localized["zh-CN"]))
         self.assertIn("恢复缺失的工坊 MOD 文件", str(localized["zh-CN"]))
-        self.assertIn("Game data modification", str(localized["en-US"]))
+        self.assertIn("修复了由中文路径导致的各种功能失效", str(localized["zh-CN"]))
+        self.assertIn("Game Data Modification", str(localized["en-US"]))
         self.assertIn("저소비 모드", str(localized["ko-KR"]))
         self.assertIn("режим низкого потребления", str(localized["ru-RU"]))
         self.assertIn("低消費モード", str(localized["ja-JP"]))
@@ -181,7 +220,8 @@ class PackagedRuntimeTests(unittest.TestCase):
             "es-ES": "de 0,5× a 5×",
         }
         for language, expected_range in expected_multiplier_ranges.items():
-            self.assertIn(expected_range, str(localized[language][2]), language)
+            release_060 = next(release for release in localized[language] if release["version"] == "0.6.0")
+            self.assertIn(expected_range, str(release_060), language)
         expected_patch_generation = {
             "zh-CN": "一键生成补丁",
             "en-US": "generate the patch",
@@ -191,7 +231,8 @@ class PackagedRuntimeTests(unittest.TestCase):
             "es-ES": "generar el parche",
         }
         for language, expected_text in expected_patch_generation.items():
-            self.assertIn(expected_text, str(localized[language][2]), language)
+            release_060 = next(release for release in localized[language] if release["version"] == "0.6.0")
+            self.assertIn(expected_text, str(release_060), language)
         expected_automatic_updates = {
             "zh-CN": "保存更改时也会自动更新",
             "en-US": "automatic updates when changes are saved",
@@ -201,7 +242,8 @@ class PackagedRuntimeTests(unittest.TestCase):
             "es-ES": "se actualiza automáticamente al guardar los cambios",
         }
         for language, expected_text in expected_automatic_updates.items():
-            self.assertIn(expected_text, str(localized[language][2]), language)
+            release_060 = next(release for release in localized[language] if release["version"] == "0.6.0")
+            self.assertIn(expected_text, str(release_060), language)
 
     def test_060_changelog_is_concise_and_describes_user_benefits(self) -> None:
         languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
@@ -222,8 +264,8 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
 
         for language in languages:
-            release = get_all_changelogs(language)[2]
-            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3, 3, 4, 4])
+            release = next(release for release in get_all_changelogs(language) if release["version"] == "0.6.0")
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [10, 2, 2])
             visible_copy = " ".join(
                 [entry["title"] for entry in release["entries"]]
                 + [
@@ -260,7 +302,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
 
         for language in languages:
-            release = get_all_changelogs(language)[1]
+            release = next(release for release in get_all_changelogs(language) if release["version"] == "0.6.5")
             self.assertEqual(release["version"], "0.6.5")
             self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3, 2, 1])
             visible_copy = " ".join(
@@ -279,7 +321,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                 for change in entry["changes"]:
                     self.assertLessEqual(len(change["text"]), 160, language)
 
-        chinese = str(get_all_changelogs("zh-CN")[1])
+        chinese = str(next(release for release in get_all_changelogs("zh-CN") if release["version"] == "0.6.5"))
         self.assertIn("自动校验", chinese)
         self.assertIn("1–5", chinese)
         self.assertIn("领主与英雄血量", chinese)
@@ -306,7 +348,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
 
         for language in languages:
-            release = get_all_changelogs(language)[0]
+            release = next(release for release in get_all_changelogs(language) if release["version"] == "0.7.0")
             self.assertEqual(release["version"], "0.7.0")
             self.assertEqual(
                 [len(entry["changes"]) for entry in release["entries"]],
@@ -328,7 +370,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                 for change in entry["changes"]:
                     self.assertLessEqual(len(change["text"]), 160, language)
 
-        chinese = str(get_all_changelogs("zh-CN")[0])
+        chinese = str(next(release for release in get_all_changelogs("zh-CN") if release["version"] == "0.7.0"))
         self.assertIn("单体单位调整规则", chinese)
         self.assertIn("低消耗模式切换", chinese)
         self.assertIn("单位规模倍率滑条刻度", chinese)
@@ -338,8 +380,69 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("西班牙语", chinese)
         self.assertNotIn("桌面生成 data 文件夹", chinese)
 
-        spanish = str(get_all_changelogs("es-ES")[0])
+        spanish = str(next(release for release in get_all_changelogs("es-ES") if release["version"] == "0.7.0"))
         self.assertIn("compatibilidad con español", spanish)
+
+    def test_080_changelog_is_concise_and_covers_games_workshop_and_startup(self) -> None:
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
+        expected_keys = {
+            "v080_added_title",
+            "v080_three_kingdoms",
+            "v080_shortcuts",
+            "v080_workshop_collection_import",
+            "v080_recruitment_capacity",
+            "v080_adjusted_title",
+            "v080_publish_simplified",
+            "v080_update_channel",
+            "v080_editable_shortcuts",
+            "v080_themed_controls",
+            "v080_fixed_title",
+            "v080_workshop_ownership",
+            "v080_startup_guidance",
+            "v080_recycle_button",
+            "v080_unicode_paths",
+        }
+        implementation_terms = (
+            "webview2",
+            "steamworks",
+            "runtime db",
+            "backend",
+            "бэкенд",
+        )
+
+        structure_keys = {
+            key
+            for title_key, changes in CHANGELOG_STRUCTURE[0]["entries"]
+            for key in (title_key, *(text_key for _change_type, text_key in changes))
+        }
+        self.assertSetEqual(structure_keys, expected_keys)
+
+        for language in languages:
+            release = get_all_changelogs(language)[0]
+            self.assertEqual(release["version"], "0.8.0")
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [4, 4, 4])
+            visible_copy = " ".join(
+                [entry["title"] for entry in release["entries"]]
+                + [
+                    change["text"]
+                    for entry in release["entries"]
+                    for change in entry["changes"]
+                ]
+            )
+            folded = visible_copy.casefold()
+            for term in implementation_terms:
+                self.assertNotIn(term.casefold(), folded, f"{language}: {term}")
+            for entry in release["entries"]:
+                self.assertLessEqual(len(entry["title"]), 60, language)
+                for change in entry["changes"]:
+                    self.assertLessEqual(len(change["text"]), 180, language)
+
+        chinese = str(get_all_changelogs("zh-CN")[0])
+        self.assertIn("全面战争：三国", chinese)
+        self.assertIn("当前账号", chinese)
+        self.assertIn("同名 PNG 封面", chinese)
+        self.assertIn("必要运行组件", chinese)
+        self.assertIn("快捷键设置", chinese)
 
     def test_agents_requires_concise_function_focused_changelogs(self) -> None:
         agents = (
@@ -350,9 +453,13 @@ class PackagedRuntimeTests(unittest.TestCase):
             "更新日志必须简洁明了，只介绍用户可见的功能与修复，不描述实现细节。",
             agents,
         )
+        self.assertIn(
+            "更新日志统一按“新增”“调整”“修复”三类归类；每个版本的中英文及其他内置语言条目必须使用同一分类结构，且仅记录用户可见的变化。",
+            agents,
+        )
 
     def test_desktop_mode_requires_pywebview(self) -> None:
-        with patch.dict(sys.modules, {"webview": None}):
+        with patch("main.ensure_webview2_runtime", return_value=True), patch.dict(sys.modules, {"webview": None}):
             with self.assertRaisesRegex(RuntimeError, "desktop mode"):
                 run_desktop(object(), "file:///index.html")
 

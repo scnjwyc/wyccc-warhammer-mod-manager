@@ -139,11 +139,20 @@ class ModScanner:
         metadata: dict[str, dict] = {}
         if workshop_ids:
             interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
-            metadata = self.workshop_metadata.get_many(workshop_ids, interface_language)
+            app_id = int(paths.game_definition.app_id)
+            metadata = self.workshop_metadata.get_many(
+                workshop_ids,
+                interface_language,
+                app_id=app_id,
+            )
             if refresh_workshop:
                 try:
                     metadata.update(
-                        self.workshop_metadata.refresh(workshop_ids, interface_language)
+                        self.workshop_metadata.refresh(
+                            workshop_ids,
+                            interface_language,
+                            app_id=app_id,
+                        )
                     )
                     refresh_warning = str(
                         getattr(self.workshop_metadata, "last_refresh_warning", "") or ""

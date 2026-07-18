@@ -117,6 +117,16 @@ const addQueryResult = (target, queryResult) => {
   }
 };
 
+const ensureWorkshopSubscription = async (workshop, itemId) => {
+  const workshopId = itemId.toString();
+  const subscribedIds = new Set(
+    (workshop.getSubscribedItems() || []).map(value => value.toString()),
+  );
+  if (subscribedIds.has(workshopId)) return false;
+  await workshop.subscribe(itemId);
+  return true;
+};
+
 const queryLanguage = async (client, ids, language, warnings) => {
   const items = {};
   for (let start = 0; start < ids.length; start += QUERY_CHUNK_SIZE) {
@@ -170,6 +180,18 @@ const main = async () => {
     ? require("./steamworks_dependencies")
     : require("./steamworks");
   const client = steamworks.init(appId);
+  if (operation === "get_current_user") {
+    const steamId = client.localplayer.getSteamId()?.steamId64?.toString?.() || "";
+    if (!/^\d+$/.test(steamId)) throw new Error("Current Steam user is unavailable");
+    writeResultAndExit({
+      ok: true,
+      result: {
+        steam_id: steamId,
+        name: String(client.localplayer.getName() || ""),
+      },
+    }, 0);
+    return;
+  }
   if (operation === "query_subscriptions") {
     const ids = [...new Set((request?.ids || []).map(String))]
       .filter(value => /^\d+$/.test(value));
@@ -202,13 +224,18 @@ const main = async () => {
     );
     const subscribed = [];
     const alreadySubscribed = [];
+    const failed = [];
     for (const id of ids) {
       if (existing.has(id)) {
         alreadySubscribed.push(id);
         continue;
       }
-      await client.workshop.subscribe(BigInt(id));
-      subscribed.push(id);
+      try {
+        await client.workshop.subscribe(BigInt(id));
+        subscribed.push(id);
+      } catch (error) {
+        failed.push({ workshop_id: id, error: String(error) });
+      }
     }
     writeResultAndExit({
       ok: true,
@@ -216,6 +243,7 @@ const main = async () => {
         operation,
         subscribed,
         already_subscribed: alreadySubscribed,
+        failed,
         accepted: true,
       },
     }, 0);
@@ -281,6 +309,7 @@ const main = async () => {
       }
       throw error;
     }
+    const subscriptionAdded = await ensureWorkshopSubscription(client.workshop, itemId);
     writeResultAndExit({
       ok: true,
       result: {
@@ -291,6 +320,8 @@ const main = async () => {
         owner_name: ownerName,
         needs_to_accept_agreement: needsToAcceptAgreement,
         language,
+        subscribed: true,
+        subscription_added: subscriptionAdded,
       },
     }, 0);
     return;
