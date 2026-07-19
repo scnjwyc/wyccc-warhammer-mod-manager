@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.8.3",
+  "version": "0.8.5",
   "published_at": "2026-07-19",
   "download": {
-    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.3/Wyccc.s.Mod.Manager.exe",
+    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.5/Wyccc%27s%20Mod%20Manager.exe",
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "e58e9b9676673f0bd70dd06db32ff5f6e1c4395a0039fe21d939c8e87db0dfd5",
-    "size": 62060522
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size": 1
   },
   "changelog": [
     {
@@ -16,6 +16,14 @@
         {
           "type": "fix",
           "text": "修复游戏本体或创意工坊目录含中文等非 ASCII 字符时无法启动的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复游戏数据修改对于 ATC、SFO 等大修 MOD 作用不正常的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复 Steam 好友昵称含特殊字符时程序无法启动的问题。"
         }
       ]
     }

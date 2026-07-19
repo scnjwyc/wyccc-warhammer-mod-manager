@@ -325,10 +325,16 @@ def run_steam_friends_worker(
     input_stream: Any | None = None,
     output_stream: Any | None = None,
 ) -> int:
-    source = input_stream or sys.stdin
-    target = output_stream or sys.stdout
+    source = input_stream if input_stream is not None else sys.stdin
+    target = output_stream if output_stream is not None else sys.stdout
     try:
-        request = json.loads(source.read())
+        source_buffer = getattr(source, "buffer", None) if input_stream is None else None
+        request_text = (
+            source_buffer.read().decode("utf-8")
+            if source_buffer is not None
+            else source.read()
+        )
+        request = json.loads(request_text)
         if not isinstance(request, dict) or not isinstance(request.get("steam_ids"), list):
             raise ValueError("Steam Friends worker request is invalid")
         root_value = str(request.get("root") or "").strip()
@@ -352,10 +358,17 @@ def run_steam_friends_worker(
             "code": "steam_unavailable",
             "error": str(exc) or "Steam Friends worker request is invalid",
         }
-    target.write(
-        f"{_WORKER_RESULT_PREFIX}{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n"
+    result = (
+        f"{_WORKER_RESULT_PREFIX}"
+        f"{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n"
     )
-    target.flush()
+    target_buffer = getattr(target, "buffer", None) if output_stream is None else None
+    if target_buffer is not None:
+        target_buffer.write(result.encode("utf-8"))
+        target_buffer.flush()
+    else:
+        target.write(result)
+        target.flush()
     return 0
 
 

@@ -61,6 +61,42 @@ class FakeSteamDll:
 
 
 class SteamFriendsTests(unittest.TestCase):
+    def test_worker_uses_utf8_transport_on_a_gbk_system(self) -> None:
+        request_payload = json.dumps(
+            {
+                "steam_ids": ["76561198000000008"],
+                "app_id": 1_142_710,
+                "root": r"C:\游戏",
+                "timeout_seconds": 0.25,
+                "poll_interval": 0.01,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        source = io.TextIOWrapper(io.BytesIO(request_payload), encoding="gbk")
+        destination_buffer = io.BytesIO()
+        destination = io.TextIOWrapper(destination_buffer, encoding="gbk")
+        dll = FakeSteamDll(
+            names_after_callbacks={"76561198000000008": (1, "☼")}
+        )
+
+        with (
+            patch("backend.steam_friends.sys.stdin", source),
+            patch("backend.steam_friends.sys.stdout", destination),
+            patch("backend.steam_friends._load_library", return_value=dll) as loader,
+        ):
+            try:
+                exit_code = run_steam_friends_worker()
+            except UnicodeError as exc:
+                self.fail(f"worker leaked UTF-8 text through the GBK transport: {exc}")
+
+        destination.flush()
+        payload = json.loads(
+            destination_buffer.getvalue().decode("utf-8").split("=", 1)[1]
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["names"], {"76561198000000008": "☼"})
+        self.assertEqual(loader.call_args.args[0], Path(r"C:\游戏"))
+
     def test_worker_serializes_the_in_process_steam_result(self) -> None:
         request = io.StringIO(
             json.dumps(
