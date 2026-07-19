@@ -6,8 +6,8 @@
   "download": {
     "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.5/Wyccc%27s%20Mod%20Manager.exe",
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "size": 1
+    "sha256": "acbaa260c8d4ceccb223b0434c59b66e0382c078aad0de2de07d42f2d4518245",
+    "size": 62060524
   },
   "changelog": [
     {
