@@ -355,6 +355,43 @@ textarea {
   position: relative;
   grid-column: 2;
   width: min(560px, 48vw);
+  display: flex;
+  gap: 6px;
+}
+
+.tag-search-box {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search-highlight-button {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #4e3b34;
+  border-radius: 4px;
+  background: #0b0909;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-highlight-button:hover,
+.search-highlight-button.active {
+  border-color: #a67a3d;
+  background: #211a13;
+  color: #e2bd74;
+}
+
+.search-highlight-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
 }
 
 .search-box {
@@ -1370,6 +1407,16 @@ textarea {
     linear-gradient(90deg, rgba(132, 31, 36, 0.25), transparent 82%),
     #211817;
   box-shadow: inset 3px 0 0 var(--crimson-bright);
+}
+
+.mod-row.search-match {
+  border-color: #a67a3d;
+  background: linear-gradient(90deg, rgba(166, 122, 61, 0.18), transparent 82%);
+  box-shadow: inset 3px 0 0 #d4a74d;
+}
+
+.mod-row.search-muted:not(.selected) {
+  opacity: 0.32;
 }
 
 .mod-row.dragging {

@@ -13,6 +13,7 @@ const props = defineProps({
   selectionCount: { type: Number, default: 1 },
   selectedModIds: { type: Array, default: () => [] },
   eligibleUpdateIds: { type: Array, default: () => [] },
+  aiEnabled: { type: Boolean, default: false },
   gameRunning: { type: Boolean, default: false },
   keyboardShortcuts: { type: Object, default: () => ({}) },
 })
@@ -21,7 +22,7 @@ const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = props.mod?.workshop_id ? 540 : 500
+  const height = (props.mod?.workshop_id ? 540 : 500) + (showAiGenerate.value ? 44 : 0)
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -63,6 +64,7 @@ const hasSteamActions = computed(() => (
   hasWorkshop.value || canUploadWorkshop.value || canUpdateWorkshop.value
 ))
 const isBatchSelection = computed(() => Number(props.selectionCount) > 1)
+const showAiGenerate = computed(() => props.aiEnabled && isBatchSelection.value)
 const batchLabel = label => (
   isBatchSelection.value
     ? t('context.batchLabel', { label, count: Number(props.selectionCount) })
@@ -294,6 +296,16 @@ const run = (action, value = null, close = true) => {
         <span class="context-menu-icon">⇩</span>
         <span>{{ batchLabel(t('context.copyToData')) }}</span>
         <span v-if="!canCopyToData" class="context-menu-unavailable">{{ t('context.inData') }}</span>
+      </button>
+      <button
+        v-if="showAiGenerate"
+        type="button"
+        class="context-menu-item"
+        data-testid="context-generate-user-data"
+        @click="run('generate-user-data')"
+      >
+        <span class="context-menu-icon">AI</span>
+        <span>{{ batchLabel(t('context.aiGenerate')) }}</span>
       </button>
     </nav>
   </div>

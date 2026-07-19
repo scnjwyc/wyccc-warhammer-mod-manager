@@ -118,6 +118,29 @@ describe('ModContextMenu', () => {
     expect(wrapper.find('[data-testid="context-publish-update"]').exists()).toBe(false)
   })
 
+  it('offers AI generation only for an AI-configured batch selection', async () => {
+    const wrapper = mount(ModContextMenu, {
+      props: {
+        open: true,
+        mod,
+        types,
+        aiEnabled: true,
+        selectionCount: 3,
+      },
+    })
+
+    const action = wrapper.get('[data-testid="context-generate-user-data"]')
+    expect(action.text()).toContain('AI生成（3项）')
+    await action.trigger('click')
+    expect(wrapper.emitted('action')[0][0]).toMatchObject({
+      action: 'generate-user-data',
+      mod,
+    })
+
+    await wrapper.setProps({ aiEnabled: false })
+    expect(wrapper.find('[data-testid="context-generate-user-data"]').exists()).toBe(false)
+  })
+
   it('shows batch counts on top-level actions and disables the RPFM action', async () => {
     const wrapper = mount(ModContextMenu, {
       props: {

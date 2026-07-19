@@ -92,6 +92,59 @@ describe('anchored mod selection', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('X:/data/b.pack\nX:/data/a.pack')
   })
 
+  it('generates user data sequentially and continues after a failed MOD', async () => {
+    const store = useAppStore()
+    store.mods = ['a', 'b', 'c'].map(id => ({ id, pack_name: `${id}.pack` }))
+    invokeMock
+      .mockResolvedValueOnce({ id: 'a', pack_name: 'a.pack', alias: 'A', notes: 'first' })
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+      .mockResolvedValueOnce({ id: 'c', pack_name: 'c.pack', alias: 'C', notes: 'third' })
+
+    await expect(store.generateModUserDataMany(['a', 'b', 'a', 'c'])).resolves.toEqual({
+      succeeded: ['a', 'c'],
+      failed: ['b'],
+    })
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['generate_mod_user_data', 'a'],
+      ['generate_mod_user_data', 'b'],
+      ['generate_mod_user_data', 'c'],
+    ])
+    expect(store.mods.map(mod => mod.alias || '')).toEqual(['A', '', 'C'])
+  })
+
+  it('persists highlight search mode and keeps nonmatching MODs visible', async () => {
+    const store = useAppStore()
+    store.settings = { language: 'zh-CN', search_highlight_mode: true }
+    store.mods = [
+      { id: 'active-match', effective_name: 'Alpha', pack_name: 'alpha.pack' },
+      { id: 'active-muted', effective_name: 'Gamma', pack_name: 'gamma.pack' },
+      { id: 'inactive-muted', effective_name: 'Beta', pack_name: 'beta.pack' },
+      { id: 'inactive-match', effective_name: 'Alphabet', pack_name: 'alphabet.pack' },
+    ]
+    store.activeIds = ['active-match', 'active-muted']
+    store.searchTokens = [{ type: 'text', value: 'Alpha' }]
+    invokeMock.mockImplementation(method => {
+      if (method === 'save_settings') {
+        return Promise.resolve({
+          settings: { language: 'zh-CN', search_highlight_mode: false },
+          paths: {},
+          path_health: {},
+        })
+      }
+      return Promise.resolve({ items: [] })
+    })
+
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-match', 'active-muted'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-muted', 'inactive-match'])
+    expect(store.activeSearchMatchIds).toEqual(['active-match'])
+    expect(store.inactiveSearchMatchIds).toEqual(['inactive-match'])
+
+    await store.setSearchHighlightMode(false)
+    expect(invokeMock).toHaveBeenCalledWith('save_settings', { search_highlight_mode: false })
+    expect(store.settings.search_highlight_mode).toBe(false)
+  })
+
   it('moves a multi-selection as one ordered block', () => {
     const store = useAppStore()
     store.activeIds = ['a', 'b', 'c', 'd', 'e']

@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.8.2",
+        "date": "2026-07-19",
+        "entries": (
+            (
+                "v082_added_title",
+                (
+                    ("feature", "v082_batch_ai_generation"),
+                    ("feature", "v082_search_highlight"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.8.1",
         "date": "2026-07-18",
         "entries": (
@@ -235,6 +248,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v082_added_title": "新增",
+        "v082_batch_ai_generation": "右键菜单现可为多个已选 MOD 批量使用 AI 生成别名和备注。",
+        "v082_search_highlight": "搜索新增高亮模式：保留完整列表、淡化非结果，并跳转到首个结果。",
         "v081_fixed_title": "修复",
         "v081_friendly_fire": "已在“游戏数据修改”面板恢复“移除友伤”设置。",
         "v081_game_scoped_playsets": "播放集现按游戏分开保存和显示，战锤 3 与三国互不混用。",
@@ -346,6 +362,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v082_added_title": "Added",
+        "v082_batch_ai_generation": "The context menu can now use AI to generate aliases and notes for multiple selected MODs.",
+        "v082_search_highlight": "Search now offers a highlight mode that keeps the full list visible, dims nonmatches, and jumps to the first result.",
         "v081_fixed_title": "Fixes",
         "v081_friendly_fire": "Restored the Remove Friendly Fire setting in Game Data Modification.",
         "v081_game_scoped_playsets": "Playsets are now stored and shown separately for each game, so WARHAMMER III and THREE KINGDOMS no longer mix.",
@@ -457,6 +476,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v082_added_title": "추가",
+        "v082_batch_ai_generation": "이제 우클릭 메뉴에서 여러 선택한 MOD의 별칭과 메모를 AI로 일괄 생성할 수 있습니다.",
+        "v082_search_highlight": "검색 결과 강조 모드가 추가되어 전체 목록을 유지하고 비일치 항목을 흐리게 하며 첫 결과로 이동합니다.",
         "v081_fixed_title": "수정",
         "v081_friendly_fire": "게임 데이터 수정 화면에 아군 오사 제거 설정을 복원했습니다.",
         "v081_game_scoped_playsets": "플레이세트를 게임별로 따로 저장하고 표시하여 WARHAMMER III와 THREE KINGDOMS가 섞이지 않습니다.",
@@ -568,6 +590,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v082_added_title": "Добавлено",
+        "v082_batch_ai_generation": "В контекстном меню теперь можно с помощью ИИ создать псевдонимы и заметки для нескольких выбранных MOD.",
+        "v082_search_highlight": "Поиск получил режим подсветки: полный список остаётся видимым, несовпадения приглушаются, выполняется переход к первому результату.",
         "v081_fixed_title": "Исправления",
         "v081_friendly_fire": "В панели изменения игровых данных восстановлена настройка отключения дружественного огня.",
         "v081_game_scoped_playsets": "Наборы модов теперь сохраняются и отображаются отдельно для каждой игры: WARHAMMER III и THREE KINGDOMS не смешиваются.",
@@ -679,6 +704,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v082_added_title": "追加",
+        "v082_batch_ai_generation": "右クリックメニューから、選択した複数の MOD の別名とメモを AI で一括生成できるようになりました。",
+        "v082_search_highlight": "検索結果の強調表示モードを追加し、一覧を維持したまま非該当項目を薄く表示して最初の結果へ移動します。",
         "v081_fixed_title": "修正",
         "v081_friendly_fire": "ゲームデータ変更画面に「味方への攻撃を無効化」設定を復元しました。",
         "v081_game_scoped_playsets": "プレイセットをゲームごとに保存・表示するようにし、WARHAMMER III と THREE KINGDOMS が混在しなくなりました。",
@@ -790,6 +818,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v082_added_title": "Añadido",
+        "v082_batch_ai_generation": "El menú contextual ahora puede usar IA para generar alias y notas para varios MOD seleccionados.",
+        "v082_search_highlight": "La búsqueda incluye un modo de resaltado que conserva la lista completa, atenúa los demás MOD y salta al primer resultado.",
         "v081_fixed_title": "Correcciones",
         "v081_friendly_fire": "Se restauró el ajuste para eliminar el fuego amigo en Modificación de datos del juego.",
         "v081_game_scoped_playsets": "Los conjuntos se guardan y se muestran por juego para que WARHAMMER III y THREE KINGDOMS no se mezclen.",

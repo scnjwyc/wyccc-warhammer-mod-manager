@@ -49,6 +49,11 @@ const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
 const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
 const unitCapFeature = computed(() => store.gameDataFeatures.unit_cap)
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
+const searchFocusId = computed(() => (
+  store.searchHighlightActive
+    ? store.inactiveSearchMatchIds[0] || store.activeSearchMatchIds[0] || ''
+    : ''
+))
 const playsetOptions = computed(() => store.playsets.map(playset => ({
   value: playset.id,
   label: localizedPlaysetName(playset),
@@ -274,6 +279,13 @@ const toggleSingleMod = modId => (
     : store.enableMany([modId])
 )
 const handleListDrop = payload => store.handleModDrop(payload)
+const toggleSearchHighlight = async () => {
+  try {
+    await store.setSearchHighlightMode(!store.searchHighlightMode)
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
 
 const shortcutsBlocked = () => (
   showGameDataModification.value
@@ -451,6 +463,8 @@ const handleContextAction = async ({ action, value, mod }) => {
         const sources = new Set(current?.sources?.length ? current.sources : [current?.source])
         if (current && !sources.has('data')) await store.copyModToData(current.id)
       }
+    } else if (action === 'generate-user-data') {
+      await store.generateModUserDataMany(actionIds)
     }
   } catch {
     // Store actions surface failures through the shared toast.
@@ -660,6 +674,21 @@ onBeforeUnmount(() => {
           @update:tokens="store.setSearchTokens"
           @update:logic="store.setSearchLogic"
         />
+        <button
+          type="button"
+          class="search-highlight-button"
+          :class="{ active: store.searchHighlightMode }"
+          :aria-pressed="store.searchHighlightMode"
+          :title="t('search.highlightMode')"
+          :aria-label="t('search.highlightMode')"
+          data-testid="search-highlight-button"
+          @click="toggleSearchHighlight"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="5.5"></circle>
+            <path d="m15.2 15.2 4.3 4.3M11 8.5v5M8.5 11h5"></path>
+          </svg>
+        </button>
         <SortMenu
           :mode="store.sortMode"
           :descending="store.sortDescending"
@@ -713,6 +742,9 @@ onBeforeUnmount(() => {
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
         :visual-sorted="store.sortMode !== 'priority'"
+        :search-active="store.searchHighlightActive"
+        :search-match-ids="store.inactiveSearchMatchIds"
+        :search-focus-id="searchFocusId"
         @select="store.selectMod"
         @enable="enableSelected"
         @toggle-active="toggleSingleMod"
@@ -731,6 +763,9 @@ onBeforeUnmount(() => {
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
         :visual-sorted="store.sortMode !== 'priority'"
+        :search-active="store.searchHighlightActive"
+        :search-match-ids="store.activeSearchMatchIds"
+        :search-focus-id="searchFocusId"
         :warning-count="store.warningCount"
         @select="store.selectMod"
         @disable="disableSelected"
@@ -924,6 +959,7 @@ onBeforeUnmount(() => {
       :selection-count="contextSelectionCount"
       :selected-mod-ids="contextSelectionIds"
       :eligible-update-ids="[...store.workshopUpdateEligibility]"
+      :ai-enabled="!!store.settings.ai_enabled"
       :game-running="store.runtime.running"
       :keyboard-shortcuts="store.settings.keyboard_shortcuts"
       @close="closeModContextMenu"

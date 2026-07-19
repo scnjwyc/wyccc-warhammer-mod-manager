@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.8.1',
+    appVersion: '0.8.2',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -162,26 +162,53 @@ export const useAppStore = defineStore('app', {
     selectedMod() {
       return this.modMap.get(this.selectedId) || null
     },
-    activeMods() {
+    searchActive: state => state.searchTokens.length > 0,
+    searchHighlightMode: state => Boolean(state.settings?.search_highlight_mode),
+    searchHighlightActive() {
+      return this.searchActive && this.searchHighlightMode
+    },
+    activeDisplayMods() {
       const mods = this.activeIds
         .map(id => this.modMap.get(id))
         .filter(Boolean)
         .filter(mod => this.showHidden || !mod.hidden)
-        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
       return sortDisplayedMods(mods, this.sortMode, this.sortDescending)
     },
-    inactiveMods() {
+    inactiveDisplayMods() {
       const active = new Set(this.activeIds)
       const mods = this.mods
         .filter(mod => !active.has(mod.id))
         .filter(mod => this.showHidden || !mod.hidden)
-        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
       const sorted = sortDisplayedMods(mods, this.sortMode, this.sortDescending)
       if (!this.inactiveOrderCustomized) return sorted
       const rank = new Map(this.inactiveOrderIds.map((id, index) => [id, index]))
       return [...mods].sort((left, right) => (
         (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
         - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+      ))
+    },
+    activeSearchMatchIds() {
+      if (!this.searchActive) return []
+      return this.activeDisplayMods
+        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
+        .map(mod => mod.id)
+    },
+    inactiveSearchMatchIds() {
+      if (!this.searchActive) return []
+      return this.inactiveDisplayMods
+        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
+        .map(mod => mod.id)
+    },
+    activeMods() {
+      if (this.searchHighlightActive) return this.activeDisplayMods
+      return this.activeDisplayMods.filter(mod => (
+        matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap)
+      ))
+    },
+    inactiveMods() {
+      if (this.searchHighlightActive) return this.inactiveDisplayMods
+      return this.inactiveDisplayMods.filter(mod => (
+        matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap)
       ))
     },
   },
@@ -965,12 +992,32 @@ export const useAppStore = defineStore('app', {
       this.notify(t('toast.modInfoSaved'))
     },
     async generateModUserData(modId) {
+      return this.withBusy(t('busy.aiGenerate'), () => this.generateModUserDataDirect(modId))
+    },
+    async generateModUserDataDirect(modId) {
+      const updated = await invoke('generate_mod_user_data', modId)
+      const index = this.mods.findIndex(mod => mod.id === updated.id)
+      if (index >= 0) this.mods[index] = updated
+      this.notify(t('toast.aiSaved'))
+      return updated
+    },
+    async generateModUserDataMany(modIds) {
+      const ids = [...new Set((Array.isArray(modIds) ? modIds : [])
+        .map(id => String(id || '').trim())
+        .filter(Boolean))]
       return this.withBusy(t('busy.aiGenerate'), async () => {
-        const updated = await invoke('generate_mod_user_data', modId)
-        const index = this.mods.findIndex(mod => mod.id === updated.id)
-        if (index >= 0) this.mods[index] = updated
-        this.notify(t('toast.aiSaved'))
-        return updated
+        const succeeded = []
+        const failed = []
+        for (const modId of ids) {
+          try {
+            await this.generateModUserDataDirect(modId)
+            succeeded.push(modId)
+          } catch (error) {
+            failed.push(modId)
+            this.notify(error.message || String(error), 'error')
+          }
+        }
+        return { succeeded, failed }
       })
     },
     setSearchTokens(tokens) {
@@ -978,6 +1025,9 @@ export const useAppStore = defineStore('app', {
     },
     setSearchLogic(logic) {
       this.searchLogic = logic === 'OR' ? 'OR' : 'AND'
+    },
+    async setSearchHighlightMode(enabled) {
+      return this.saveSettings({ search_highlight_mode: Boolean(enabled) })
     },
     setSortMode(mode) {
       if (!SORT_OPTIONS.some(option => option.id === mode)) return

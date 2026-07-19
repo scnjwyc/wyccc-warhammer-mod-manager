@@ -156,6 +156,7 @@ const entries = {
   'search.ascending': ['升序', 'Ascending', '오름차순', 'По возрастанию', '昇順'],
   'search.descending': ['降序', 'Descending', '내림차순', 'По убыванию', '降順'],
   'search.displayOnly': ['仅改变列表显示，不修改实际加载顺序。', 'Only changes the display; the actual load order is unchanged.', '목록 표시만 바뀌며 실제 로드 순서는 변경되지 않습니다.', 'Меняется только отображение; фактический порядок загрузки не изменяется.', '一覧表示のみ変更し、実際の読み込み順は変更しません。'],
+  'search.highlightMode': ['高亮搜索结果', 'Highlight search results', '검색 결과 강조', 'Подсветить результаты поиска', '検索結果を強調'],
 
   'details.sourceWorkshop': ['STEAM 创意工坊', 'Steam Workshop', 'Steam 창작마당', 'Мастерская Steam', 'Steam ワークショップ'],
   'details.sourceData': ['游戏 Data', 'Game Data', '게임 Data', 'Data игры', 'ゲーム Data'],
@@ -188,6 +189,7 @@ const entries = {
 
   'context.aria': ['MOD 操作', 'MOD actions', 'MOD 작업', 'Действия с MOD', 'MOD 操作'],
   'context.batchLabel': ['{label}（{count}项）', '{label} ({count} items)', '{label}({count}개)', '{label} ({count} эл.)', '{label}（{count}件）'],
+  'context.aiGenerate': ['AI生成', 'Generate with AI', 'AI 생성', 'Создать с ИИ', 'AI 生成'],
   'context.editType': ['修改类型', 'Change type', '유형 변경', 'Изменить тип', '種類を変更'],
   'context.manageTypes': ['类型管理', 'Manage types', '유형 관리', 'Управление типами', '種類を管理'],
   'context.moveTo': ['移动到', 'Move to', '이동', 'Переместить', '移動先'],
@@ -711,6 +713,7 @@ const spanishEntries = {
   "search.ascending": "Ascendente",
   "search.descending": "Descendente",
   "search.displayOnly": "Sólo cambia la visualización; el orden de carga real no cambia.",
+  "search.highlightMode": "Resaltar resultados de búsqueda",
   "details.sourceWorkshop": "Steam Taller",
   "details.sourceData": "Datos del juego",
   "details.authorUnavailable": "Nombre del autor no disponible",
@@ -741,6 +744,7 @@ const spanishEntries = {
   "details.showSpoiler": "Mostrar contenido oculto",
   "context.aria": "MOD acciones",
   "context.batchLabel": "{label} ({count} artículos)",
+  "context.aiGenerate": "Generar con IA",
   "context.editType": "Tipo de cambio",
   "context.manageTypes": "Administrar tipos",
   "context.moveTo": "Mover a",
@@ -1164,6 +1168,7 @@ Object.assign(spanishEntries, {
   'search.displaySort': 'Orden de visualización de la lista',
   'search.displaySortTitle': 'Orden de visualización: {label}',
   'search.displayOnly': 'Solo cambia la visualización; el orden de carga real no cambia.',
+  'search.highlightMode': 'Resaltar resultados de búsqueda',
 
   'details.sourceWorkshop': 'Taller de Steam',
   'details.workshopId': 'ID del Taller',
@@ -1175,6 +1180,7 @@ Object.assign(spanishEntries, {
   'details.emptyHelp': 'Aquí aparecerán el nombre del Pack, el origen, la ruta y la información del Taller.',
 
   'context.aria': 'Acciones de MOD',
+  'context.aiGenerate': 'Generar con IA',
   'context.steamActions': 'Acciones de Steam',
   'context.openWorkshopBrowser': 'Abrir Taller (navegador)',
   'context.openWorkshopClient': 'Abrir Taller (cliente de Steam)',

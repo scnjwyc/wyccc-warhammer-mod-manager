@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 
 import ModList from '../ModList.vue'
@@ -72,6 +73,31 @@ describe('ModList previews and source collisions', () => {
     expect(wrapper.get('.mod-row').classes()).toContain('hidden-mod')
     expect(wrapper.get('.hidden-badge').text()).toBe('已隐藏')
     expect(wrapper.get('[data-testid="mod-warning-badge"]').attributes('title')).toContain('需要检查兼容性')
+  })
+
+  it('highlights matches, mutes nonmatches, and focuses the first result', async () => {
+    const second = { ...duplicateMod, id: 'second', pack_name: 'second.pack' }
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const wrapper = mount(ModList, {
+        props: {
+          title: 'Mods',
+          mods: [duplicateMod, second],
+          searchActive: true,
+          searchMatchIds: [second.id],
+          searchFocusId: second.id,
+        },
+      })
+
+      await nextTick()
+      expect(wrapper.findAll('.mod-row')[0].classes()).toContain('search-muted')
+      expect(wrapper.findAll('.mod-row')[1].classes()).toContain('search-match')
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView
+    }
   })
 
   it('emits modifier keys and the visible order for anchored multi-selection', async () => {

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { localizeBackendMessage, t } from '../languages'
 
 const props = defineProps({
@@ -13,6 +13,9 @@ const props = defineProps({
   typeMap: { type: Object, default: () => ({}) },
   visualSorted: { type: Boolean, default: false },
   warningCount: { type: Number, default: 0 },
+  searchActive: { type: Boolean, default: false },
+  searchMatchIds: { type: Array, default: () => [] },
+  searchFocusId: { type: String, default: '' },
 })
 
 const emit = defineEmits([
@@ -28,6 +31,7 @@ const emit = defineEmits([
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
+const rowElements = new Map()
 
 const positionOf = modId => props.orderIds.indexOf(modId) + 1
 const sourcesOf = mod => [...new Set(mod.sources?.length ? mod.sources : [mod.source])]
@@ -38,6 +42,12 @@ const sourceLabel = source => ({
 const authorOf = mod => mod.author?.trim() || (mod.workshop_id ? t('list.authorUnavailable') : t('list.localFile'))
 const typesOf = mod => [...new Set(mod.mod_types?.length ? mod.mod_types : [mod.mod_type || 'unknown'])]
 const isSelected = modId => props.selectedIds.includes(modId) || props.selectedId === modId
+const isSearchMatch = modId => props.searchActive && props.searchMatchIds.includes(modId)
+const isSearchMuted = modId => props.searchActive && !isSearchMatch(modId)
+const setRowElement = (modId, element) => {
+  if (element) rowElements.set(modId, element)
+  else rowElements.delete(modId)
+}
 const warningsOf = mod => (mod.warnings || []).filter(
   warning => props.active || warning?.code !== 'missing_dependency',
 )
@@ -129,6 +139,15 @@ const onDrop = (event, targetId = '') => {
   }
   clearDragging()
 }
+
+watch(
+  () => props.searchFocusId,
+  modId => {
+    if (!modId) return
+    nextTick(() => rowElements.get(modId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
+  },
+  { flush: 'post', immediate: true },
+)
 </script>
 
 <template>
@@ -162,6 +181,7 @@ const onDrop = (event, targetId = '') => {
       <div
         v-for="mod in mods"
         :key="mod.id"
+        :ref="element => setRowElement(mod.id, element)"
         class="mod-row"
         :class="{
           selected: isSelected(mod.id),
@@ -169,6 +189,8 @@ const onDrop = (event, targetId = '') => {
           'source-duplicate': mod.cross_source_duplicate,
           'hidden-mod': mod.hidden,
           'visual-sorted': visualSorted,
+          'search-match': isSearchMatch(mod.id),
+          'search-muted': isSearchMuted(mod.id),
         }"
         role="button"
         tabindex="0"
