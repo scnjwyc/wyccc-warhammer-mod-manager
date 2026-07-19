@@ -1,34 +1,21 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "published_at": "2026-07-19",
   "download": {
-    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.2/Wyccc.s.Mod.Manager.exe",
+    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.3/Wyccc.s.Mod.Manager.exe",
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "3d8f8b5f4e686fc7c08d3a17eaf76147395eb48ec008e3c94811ec6b7f8b537e",
-    "size": 61980982
+    "sha256": "e58e9b9676673f0bd70dd06db32ff5f6e1c4395a0039fe21d939c8e87db0dfd5",
+    "size": 62060522
   },
   "changelog": [
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "右键菜单现可为多个已选 MOD 批量使用 AI 生成别名和备注。"
-        },
-        {
-          "type": "feature",
-          "text": "搜索新增高亮模式：保留完整列表、淡化非结果，并跳转到首个结果。"
-        }
-      ]
-    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复切换高亮搜索模式后 AI 生成找不到 MOD 的问题，无需重新扫描即可继续使用。"
+          "text": "修复游戏本体或创意工坊目录含中文等非 ASCII 字符时无法启动的问题。"
         }
       ]
     }

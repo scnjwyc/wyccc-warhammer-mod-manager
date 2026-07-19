@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from backend.api import API
 from backend.constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS, SOURCE_WORKSHOP
+from backend.launch_paths import LaunchPathMap
 from backend.models import GamePaths, ModAsset
 from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
@@ -572,6 +573,63 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(launch.call_args.kwargs["executable_name"], "Three_Kingdoms.exe")
         self.assertEqual(launch.call_args.kwargs["process_name"], "Three_Kingdoms.exe")
         self.assertEqual(launched["data"]["game_data_patch"]["status"], "unsupported")
+
+    def test_launch_uses_ascii_aliases_when_game_and_workshop_paths_are_non_ascii(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "中文 Steam 库"
+            api, _ = self._prepare_three_kingdoms_api(root)
+            game = root / "Total War THREE KINGDOMS"
+            workshop = root / "steamapps" / "workshop" / "content" / "779340"
+            workshop_pack = write_pack(workshop / "123" / "workshop.pack")
+            scan = api.call("scan_mods", [False])
+            workshop_id = next(
+                mod["id"]
+                for mod in scan["data"]["mods"]
+                if mod["path"] == str(workshop_pack.resolve())
+            )
+            mapping = LaunchPathMap(
+                (
+                    (game.resolve(), "Z:\\"),
+                    (workshop.resolve(), "Y:\\"),
+                )
+            )
+
+            def write_without_accessing_the_alias(
+                plan, *_args, **_kwargs
+            ):
+                return plan, "", "alias-token"
+
+            with (
+                patch.object(api.launch_path_aliases, "prepare", return_value=mapping),
+                patch.object(
+                    api.load_order,
+                    "write_plan",
+                    side_effect=write_without_accessing_the_alias,
+                ),
+                patch(
+                    "backend.api.launch_game",
+                    return_value={"pid": 7, "argument": ""},
+                ) as launch,
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call(
+                    "launch_game",
+                    [[workshop_id], scan["data"]["order_token"]],
+                )
+
+        self.assertTrue(launched["ok"])
+        self.assertEqual(launch.call_args.args[0], "Z:\\")
+        self.assertEqual(launch.call_args.args[1], r"Z:\used_mods.txt")
+        self.assertIn(
+            'add_working_directory "Y:\\123";',
+            launched["data"]["launch_plan"]["content"],
+        )
+        self.assertFalse(
+            any(
+                ord(character) > 127
+                for character in launched["data"]["launch_plan"]["content"]
+            )
+        )
 
     def test_detect_paths_selects_requested_game_and_returns_its_health(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

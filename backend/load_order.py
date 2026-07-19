@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 from .constants import SOURCE_DATA
@@ -79,6 +80,8 @@ class LoadOrderService:
         assets: dict[str, ModAsset],
         ordered_mod_ids: list[str],
         target_name: str = "used_mods.txt",
+        *,
+        path_mapper: Callable[[str | Path], str] | None = None,
     ) -> LaunchPlan:
         if not game_path:
             raise ValueError("尚未设置游戏目录")
@@ -109,14 +112,19 @@ class LoadOrderService:
             key = os.path.normcase(str(directory))
             if key not in seen_directories:
                 seen_directories.add(key)
-                working_directories.append(str(directory))
+                working_directories.append(
+                    path_mapper(directory) if path_mapper else str(directory)
+                )
 
         lines = [f'add_working_directory "{directory}";' for directory in working_directories]
         lines.extend(f'mod "{asset.pack_name}";' for asset in selected)
         content = "\r\n".join(lines)
         if content:
             content += "\r\n"
-        target_path = str((Path(game_path) / target_name).resolve(strict=False))
+        target_root = path_mapper(game_path) if path_mapper else str(
+            Path(game_path).resolve(strict=False)
+        )
+        target_path = str(Path(target_root) / target_name)
         return LaunchPlan(
             ordered_mod_ids=[asset.id for asset in selected],
             working_directories=working_directories,

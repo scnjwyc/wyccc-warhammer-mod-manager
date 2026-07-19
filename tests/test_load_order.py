@@ -11,6 +11,41 @@ from tests.helpers import make_asset, write_pack
 
 
 class LoadOrderTests(unittest.TestCase):
+    def test_build_plan_renders_ascii_aliases_for_unicode_game_and_workshop_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "中文 Steam 库"
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            workshop_root = root / "steamapps" / "workshop" / "content" / "1142710"
+            workshop_item = workshop_root / "123"
+            pack = write_pack(workshop_item / "workshop.pack")
+            asset = make_asset(pack, "workshop", SOURCE_WORKSHOP, "123")
+            game.mkdir(parents=True)
+
+            game_root = game.resolve()
+            resolved_workshop_root = workshop_root.resolve()
+
+            def map_path(path: str | Path) -> str:
+                candidate = Path(path).resolve(strict=False)
+                if candidate.is_relative_to(game_root):
+                    return str(Path("Z:\\") / candidate.relative_to(game_root))
+                if candidate.is_relative_to(resolved_workshop_root):
+                    return str(Path("Y:\\") / candidate.relative_to(resolved_workshop_root))
+                return str(candidate)
+
+            plan = LoadOrderService(root / "backups").build_plan(
+                str(game),
+                str(data),
+                {asset.id: asset},
+                [asset.id],
+                path_mapper=map_path,
+            )
+
+        self.assertEqual(plan.target_path, r"Z:\used_mods.txt")
+        self.assertEqual(plan.working_directories, [r"Y:\123"])
+        self.assertIn('add_working_directory "Y:\\123";', plan.content)
+        self.assertFalse(any(ord(character) > 127 for character in plan.content))
+
     def test_build_write_and_import_used_mods(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

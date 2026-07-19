@@ -46,6 +46,7 @@ from .game_data_patch_state import (
     load_manifest_subscription_state,
 )
 from .launcher import is_game_running, launch_game
+from .launch_paths import LaunchPathAliases
 from .load_order import LoadOrderService, current_order_path, file_token
 from .games import GameDefinition
 from .models import GamePaths, ModAsset
@@ -131,6 +132,7 @@ class API:
         self.workshop_service = WorkshopMetadataService(self.data_dir / "workshop_cache.json")
         self.scanner = ModScanner(self.workshop_service)
         self.load_order = LoadOrderService(self.data_dir / "backups")
+        self.launch_path_aliases = LaunchPathAliases()
         self.save_games = SaveGameService()
         self._assets: dict[str, ModAsset] = {}
         self._asset_aliases: dict[str, str] = {}
@@ -722,12 +724,17 @@ class API:
 
     def _preview_load_order(self, ordered_mod_ids: list[str]) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        path_map = self.launch_path_aliases.prepare(
+            paths.game_path,
+            paths.workshop_path,
+        )
         ordered_mod_ids = self._canonicalize_mod_ids(ordered_mod_ids)
         plan = self.load_order.build_plan(
             paths.game_path,
             paths.data_path,
             self._assets,
             ordered_mod_ids,
+            path_mapper=path_map.map_path,
         )
         return plan.to_dict()
 
@@ -745,6 +752,10 @@ class API:
         expected_token: str = "",
     ) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        path_map = self.launch_path_aliases.prepare(
+            paths.game_path,
+            paths.workshop_path,
+        )
         game_id = paths.game_id
         ordered_mod_ids = self._canonicalize_mod_ids(ordered_mod_ids)
         plan = self.load_order.build_plan(
@@ -752,6 +763,7 @@ class API:
             paths.data_path,
             self._assets,
             ordered_mod_ids,
+            path_mapper=path_map.map_path,
         )
         comparison_path = self._active_order_path(paths.game_path)
         previous_order = self.load_order.import_order_file(
@@ -823,6 +835,10 @@ class API:
             selected_save = self.save_games.require(save_name) if save_name else None
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
             paths = self.settings_service.resolve_game_paths()
+            path_map = self.launch_path_aliases.prepare(
+                paths.game_path,
+                paths.workshop_path,
+            )
             settings = self.settings_service.get()
             if not paths.game_definition.supports_game_data_modification:
                 return self._launch_game_without_runtime_packs(
@@ -908,12 +924,13 @@ class API:
                     runtime_assets,
                     [*saved["plan"]["ordered_mod_ids"], *internal_ids],
                     target_name="wyccc_launch_mods.txt",
+                    path_mapper=path_map.map_path,
                 )
                 self.load_order._atomic_write(Path(runtime_plan.target_path), runtime_plan.content)
                 launch_plan = runtime_plan.to_dict()
                 launch_path = runtime_plan.target_path
             process = launch_game(
-                paths.game_path,
+                path_map.map_path(paths.game_path),
                 launch_path,
                 str(selected_save["name"]) if selected_save else "",
                 executable_name=paths.game_definition.executable_name,
@@ -936,8 +953,12 @@ class API:
         selected_save: dict[str, Any] | None,
     ) -> dict[str, Any]:
         launch_plan = saved["plan"]
-        process = launch_game(
+        path_map = self.launch_path_aliases.prepare(
             paths.game_path,
+            paths.workshop_path,
+        )
+        process = launch_game(
+            path_map.map_path(paths.game_path),
             str(launch_plan["target_path"]),
             str(selected_save["name"]) if selected_save else "",
             executable_name=paths.game_definition.executable_name,

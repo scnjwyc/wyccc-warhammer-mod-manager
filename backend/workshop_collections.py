@@ -5,6 +5,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from .constants import APP_VERSION
+
 
 COLLECTION_DETAILS_ENDPOINT = (
     "https://api.steampowered.com/ISteamRemoteStorage/"
@@ -41,7 +43,7 @@ def fetch_workshop_collection(value: str, *, app_id: int | str) -> dict[str, Any
         data=payload,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "WycccModManager/0.8.2",
+            "User-Agent": f"WycccModManager/{APP_VERSION}",
         },
         method="POST",
     )
