@@ -1027,7 +1027,11 @@ export const useAppStore = defineStore('app', {
       this.searchLogic = logic === 'OR' ? 'OR' : 'AND'
     },
     async setSearchHighlightMode(enabled) {
-      return this.saveSettings({ search_highlight_mode: Boolean(enabled) })
+      return this.withBusy(t('busy.saveSettings'), async () => {
+        const data = await invoke('set_search_highlight_mode', Boolean(enabled))
+        this.settings = data.settings
+        return data
+      })
     },
     setSortMode(mode) {
       if (!SORT_OPTIONS.some(option => option.id === mode)) return

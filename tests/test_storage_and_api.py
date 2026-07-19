@@ -294,6 +294,29 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_saving_search_highlight_mode_keeps_scanned_assets_available_to_ai(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            asset = make_asset(
+                write_pack(root / "data" / "example.pack"),
+                "data:example.pack",
+                "data",
+            )
+            api = API(root / "state")
+            api._assets = {asset.id: asset}
+
+            saved = api.call("set_search_highlight_mode", [True])
+            with patch(
+                "backend.api.generate_mod_user_data",
+                return_value={"alias": "AI alias", "notes": "AI notes"},
+            ):
+                generated = api.call("generate_mod_user_data", [asset.id])
+
+        self.assertTrue(saved["ok"])
+        self.assertTrue(saved["data"]["settings"]["search_highlight_mode"])
+        self.assertTrue(generated["ok"])
+        self.assertEqual(generated["data"]["alias"], "AI alias")
+
     @staticmethod
     def _prepare_launch_api(root: Path) -> tuple[API, dict]:
         game = root / "Total War WARHAMMER III"

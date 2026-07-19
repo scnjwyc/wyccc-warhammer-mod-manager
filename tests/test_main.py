@@ -163,7 +163,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("`0.8.2`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], "0.8.1")
+        self.assertEqual(update_manifest["version"], APP_VERSION)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
@@ -201,7 +201,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                 [release["version"] for release in releases[:10]],
                 ["0.8.2", "0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0", "0.1.0"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 1)
+            self.assertEqual(len(releases[0]["entries"]), 2)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")
             release_070 = next(release for release in releases if release["version"] == "0.7.0")
             release_065 = next(release for release in releases if release["version"] == "0.6.5")
@@ -523,6 +523,8 @@ class PackagedRuntimeTests(unittest.TestCase):
             "v082_added_title",
             "v082_batch_ai_generation",
             "v082_search_highlight",
+            "v082_fixed_title",
+            "v082_ai_highlight_cache",
         }
         structure_keys = {
             key
@@ -534,7 +536,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         for language in languages:
             release = get_all_changelogs(language)[0]
             self.assertEqual(release["version"], "0.8.2")
-            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [2])
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [2, 1])
 
     def test_agents_requires_concise_function_focused_changelogs(self) -> None:
         agents = (

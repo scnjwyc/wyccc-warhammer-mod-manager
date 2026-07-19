@@ -679,8 +679,8 @@ onBeforeUnmount(() => {
           class="search-highlight-button"
           :class="{ active: store.searchHighlightMode }"
           :aria-pressed="store.searchHighlightMode"
-          :title="t('search.highlightMode')"
-          :aria-label="t('search.highlightMode')"
+          :title="t('search.highlightModeHelp')"
+          :aria-label="t('search.highlightModeHelp')"
           data-testid="search-highlight-button"
           @click="toggleSearchHighlight"
         >

@@ -192,6 +192,14 @@ describe('built-in interface languages', () => {
     expect(t('toast.forceUpdateCompleted')).toContain('完成')
   })
 
+  it('explains that highlight search mode keeps nonmatching MODs visible', () => {
+    applyInterfaceLanguage('zh-CN')
+    expect(t('search.highlightModeHelp')).toContain('MOD')
+
+    applyInterfaceLanguage('en-US')
+    expect(t('search.highlightModeHelp')).toContain('keeps all MODs visible')
+  })
+
   it('does not leak Chinese backend warnings into another selected language', () => {
     applyInterfaceLanguage('en-US')
     const message = localizeBackendMessage('缺少依赖：base.pack')

@@ -1,32 +1,34 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.8.1",
-  "published_at": "2026-07-18",
+  "version": "0.8.2",
+  "published_at": "2026-07-19",
   "download": {
-    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.1/Wyccc.s.Mod.Manager.exe",
-    "sha256": "646d0223a925bb3e3585599b6ea55ee7dc025a6a9e61e6aab6b1b09ca0deb864",
-    "size": 61977338
+    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.2/Wyccc.s.Mod.Manager.exe",
+    "filename": "Wyccc's Mod Manager.exe",
+    "sha256": "3d8f8b5f4e686fc7c08d3a17eaf76147395eb48ec008e3c94811ec6b7f8b537e",
+    "size": 61980982
   },
   "changelog": [
+    {
+      "title": "新增",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "右键菜单现可为多个已选 MOD 批量使用 AI 生成别名和备注。"
+        },
+        {
+          "type": "feature",
+          "text": "搜索新增高亮模式：保留完整列表、淡化非结果，并跳转到首个结果。"
+        }
+      ]
+    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "已在“游戏数据修改”面板恢复“移除友伤”设置。"
-        },
-        {
-          "type": "fix",
-          "text": "播放集现按游戏分开保存和显示，战锤 3 与三国互不混用。"
-        },
-        {
-          "type": "fix",
-          "text": "修复软件更新后自动重启时偶发的错误提示，并避免作者信息刷新异常导致管理器退出。"
-        },
-        {
-          "type": "fix",
-          "text": "修复多倍单位规模下阵型拖拽范围异常，并避免巨炮、战鼓等战争机器重复放大每台机器的牵引坐骑，防止数量错乱和穿模。"
+          "text": "修复切换高亮搜索模式后 AI 生成找不到 MOD 的问题，无需重新扫描即可继续使用。"
         }
       ]
     }

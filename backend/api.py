@@ -158,6 +158,7 @@ class API:
             "get_bootstrap": self._get_bootstrap,
             "detect_paths": self._detect_paths,
             "save_settings": self._save_settings,
+            "set_search_highlight_mode": self._set_search_highlight_mode,
             "save_game_data_settings": self._save_game_data_settings,
             "get_game_data_feature_status": self._get_game_data_feature_status,
             "check_for_updates": self._check_for_updates,
@@ -459,6 +460,10 @@ class API:
             "paths": paths.to_dict(),
             "path_health": self._path_health(paths),
         }
+
+    def _set_search_highlight_mode(self, enabled: bool) -> dict[str, Any]:
+        self.settings_service.save({"search_highlight_mode": bool(enabled)})
+        return {"settings": self.settings_service.get_public()}
 
     def _save_game_data_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
         self._require_game_capability("supports_game_data_modification", "Game data modification")

@@ -125,11 +125,9 @@ describe('anchored mod selection', () => {
     store.activeIds = ['active-match', 'active-muted']
     store.searchTokens = [{ type: 'text', value: 'Alpha' }]
     invokeMock.mockImplementation(method => {
-      if (method === 'save_settings') {
+      if (method === 'set_search_highlight_mode') {
         return Promise.resolve({
           settings: { language: 'zh-CN', search_highlight_mode: false },
-          paths: {},
-          path_health: {},
         })
       }
       return Promise.resolve({ items: [] })
@@ -141,8 +139,12 @@ describe('anchored mod selection', () => {
     expect(store.inactiveSearchMatchIds).toEqual(['inactive-match'])
 
     await store.setSearchHighlightMode(false)
-    expect(invokeMock).toHaveBeenCalledWith('save_settings', { search_highlight_mode: false })
+    expect(invokeMock).toHaveBeenCalledWith('set_search_highlight_mode', false)
     expect(store.settings.search_highlight_mode).toBe(false)
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-match'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-match'])
+    expect(store.activeIds).toEqual(['active-match', 'active-muted'])
+    expect(store.mods).toHaveLength(4)
   })
 
   it('moves a multi-selection as one ordered block', () => {

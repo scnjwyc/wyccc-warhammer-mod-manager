@@ -157,6 +157,7 @@ const entries = {
   'search.descending': ['降序', 'Descending', '내림차순', 'По убыванию', '降順'],
   'search.displayOnly': ['仅改变列表显示，不修改实际加载顺序。', 'Only changes the display; the actual load order is unchanged.', '목록 표시만 바뀌며 실제 로드 순서는 변경되지 않습니다.', 'Меняется только отображение; фактический порядок загрузки не изменяется.', '一覧表示のみ変更し、実際の読み込み順は変更しません。'],
   'search.highlightMode': ['高亮搜索结果', 'Highlight search results', '검색 결과 강조', 'Подсветить результаты поиска', '検索結果を強調'],
+  'search.highlightModeHelp': ['切换到高亮搜索结果模式：此模式会保留所有 MOD，仅高亮符合当前搜索条件的 MOD，降低其他 MOD 的可见度，并自动定位至第一个结果。', 'Switch to highlight search results mode: this mode keeps all MODs visible, highlights only MODs matching the current search, dims the others, and jumps to the first result.', '검색 결과 강조 모드 전환: 이 모드는 모든 MOD를 표시하고 현재 검색과 일치하는 MOD만 강조하며 나머지는 흐리게 표시하고 첫 번째 결과로 이동합니다.', 'Переключить режим подсветки результатов поиска: этот режим сохраняет видимость всех MOD, подсвечивает только MOD по текущему поиску, приглушает остальные и переходит к первому результату.', '検索結果の強調表示モードに切り替えます。このモードではすべてのMODを表示したまま、現在の検索に一致するMODだけを強調し、他を薄く表示して最初の結果に移動します。'],
 
   'details.sourceWorkshop': ['STEAM 创意工坊', 'Steam Workshop', 'Steam 창작마당', 'Мастерская Steam', 'Steam ワークショップ'],
   'details.sourceData': ['游戏 Data', 'Game Data', '게임 Data', 'Data игры', 'ゲーム Data'],
@@ -714,6 +715,7 @@ const spanishEntries = {
   "search.descending": "Descendente",
   "search.displayOnly": "Sólo cambia la visualización; el orden de carga real no cambia.",
   "search.highlightMode": "Resaltar resultados de búsqueda",
+  "search.highlightModeHelp": "Cambiar al modo de resaltar resultados de búsqueda: mantiene visibles todos los MOD, resalta solo los que coinciden con la búsqueda actual, atenúa los demás y salta al primer resultado.",
   "details.sourceWorkshop": "Steam Taller",
   "details.sourceData": "Datos del juego",
   "details.authorUnavailable": "Nombre del autor no disponible",
@@ -1169,6 +1171,7 @@ Object.assign(spanishEntries, {
   'search.displaySortTitle': 'Orden de visualización: {label}',
   'search.displayOnly': 'Solo cambia la visualización; el orden de carga real no cambia.',
   'search.highlightMode': 'Resaltar resultados de búsqueda',
+  'search.highlightModeHelp': 'Cambiar al modo de resaltar resultados de búsqueda: mantiene visibles todos los MOD, resalta solo los que coinciden con la búsqueda actual, atenúa los demás y salta al primer resultado.',
 
   'details.sourceWorkshop': 'Taller de Steam',
   'details.workshopId': 'ID del Taller',
