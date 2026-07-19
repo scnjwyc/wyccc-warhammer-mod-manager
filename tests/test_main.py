@@ -562,17 +562,13 @@ class PackagedRuntimeTests(unittest.TestCase):
             self.assertEqual(release["version"], "0.8.3")
             self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [1])
 
-    def test_agents_requires_concise_function_focused_changelogs(self) -> None:
+    def test_agents_defaults_code_changes_to_main_branch(self) -> None:
         agents = (
             Path(__file__).resolve().parents[1] / "AGENTS.md"
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "更新日志必须简洁明了，只介绍用户可见的功能与修复，不描述实现细节。",
-            agents,
-        )
-        self.assertIn(
-            "更新日志统一按“新增”“调整”“修复”三类归类；每个版本的中英文及其他内置语言条目必须使用同一分类结构，且仅记录用户可见的变化。",
+            "在没有特别强调或明确指定其他分支的情况下，所有代码修改默认直接放到主分支（`main`）。",
             agents,
         )
 
