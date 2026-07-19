@@ -177,6 +177,171 @@ class GameDataPatchTests(unittest.TestCase):
             {31, 32, 33, 34, 38, 39},
         )
 
+    def test_pack_load_order_outranks_internal_table_file_names(self) -> None:
+        mod = DbSource(
+            "sfo.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\SFO_data",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "unit_knights",
+                                "caste": "cavalry",
+                                "land_unit": "land_knights",
+                                "num_men": 32,
+                            }
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\SFO_data",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {
+                                "key": "land_knights",
+                                "num_mounts": 32,
+                                "num_engines": 0,
+                                "rank_depth": 4,
+                            }
+                        ],
+                    ),
+                ),
+            ),
+        )
+        vanilla = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "unit_knights",
+                                "caste": "cavalry",
+                                "land_unit": "land_knights",
+                                "num_men": 24,
+                            }
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\data__",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {
+                                "key": "land_knights",
+                                "num_mounts": 24,
+                                "num_engines": 0,
+                                "rank_depth": 3,
+                            }
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        result = build_game_data_entries(
+            [mod, vanilla],
+            {"unit_model_multiplier": 2},
+        )
+
+        main_rows = {
+            row["unit"]: row
+            for row in _rows_for(result, "main_units_tables")
+        }
+        land_rows = {
+            row["key"]: row
+            for row in _rows_for(result, "land_units_tables")
+        }
+        self.assertEqual(main_rows["unit_knights"]["num_men"], 64)
+        self.assertEqual(land_rows["land_knights"]["num_mounts"], 64)
+        self.assertEqual(land_rows["land_knights"]["rank_depth"], 8)
+
+    def test_enabled_mod_order_selects_the_first_pack_before_table_names(self) -> None:
+        first = DbSource(
+            "compatibility_patch.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\z_compatibility",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [{"unit": "shared_unit", "num_men": 30}],
+                    ),
+                ),
+            ),
+        )
+        second = DbSource(
+            "overhaul.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\!overhaul",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [{"unit": "shared_unit", "num_men": 20}],
+                    ),
+                ),
+            ),
+        )
+
+        first_wins = _collect_effective_rows(
+            [first, second],
+            {"main_units_tables"},
+        )
+        second_wins = _collect_effective_rows(
+            [second, first],
+            {"main_units_tables"},
+        )
+
+        self.assertEqual(
+            first_wins["main_units_tables"]["shared_unit"].row.values["num_men"],
+            30,
+        )
+        self.assertEqual(
+            second_wins["main_units_tables"]["shared_unit"].row.values["num_men"],
+            20,
+        )
+
+    def test_internal_table_file_priority_is_preserved_within_one_pack(self) -> None:
+        source = DbSource(
+            "overhaul.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\z_low_priority",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [{"unit": "shared_unit", "num_men": 30}],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\main_units_tables\\!high_priority",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [{"unit": "shared_unit", "num_men": 20}],
+                    ),
+                ),
+            ),
+        )
+
+        effective = _collect_effective_rows([source], {"main_units_tables"})
+
+        self.assertEqual(
+            effective["main_units_tables"]["shared_unit"].row.values["num_men"],
+            20,
+        )
+
     def test_generated_tables_outrank_high_priority_mod_table_names(self) -> None:
         source_internal_name = "!!!!!!!overhaul"
         source = DbSource(

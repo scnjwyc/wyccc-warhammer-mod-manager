@@ -23,7 +23,7 @@ from .start_options import (
 
 GAME_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_game_data_patch.json"
 FINGERPRINT_SCHEMA_VERSION = 1
-GAME_DATA_BUILDER_VERSION = 8
+GAME_DATA_BUILDER_VERSION = 9
 
 
 def _coerce_bool(value: Any) -> bool:

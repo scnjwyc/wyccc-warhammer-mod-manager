@@ -281,15 +281,16 @@ def _compare_internal_names(first: str, second: str) -> int:
 
 
 def _has_higher_priority(candidate: _Candidate, existing: _Candidate) -> bool:
+    if candidate.source_rank != existing.source_rank:
+        return candidate.source_rank < existing.source_rank
+
     file_order = _compare_internal_names(candidate.internal_name, existing.internal_name)
     if file_order:
         return file_order < 0
     return (
-        candidate.source_rank,
         candidate.entry_rank,
         candidate.row_rank,
     ) < (
-        existing.source_rank,
         existing.entry_rank,
         existing.row_rank,
     )

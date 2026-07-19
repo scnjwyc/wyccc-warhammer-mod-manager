@@ -23,8 +23,8 @@ UNIT_SIZE_WORKSHOP_ID = "3765783838"
 
 
 class GameDataPatchStateTests(unittest.TestCase):
-    def test_builder_version_invalidates_pre_engine_mount_fix_patches(self) -> None:
-        self.assertEqual(GAME_DATA_BUILDER_VERSION, 8)
+    def test_builder_version_invalidates_pre_final_db_overlay_patches(self) -> None:
+        self.assertEqual(GAME_DATA_BUILDER_VERSION, 9)
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

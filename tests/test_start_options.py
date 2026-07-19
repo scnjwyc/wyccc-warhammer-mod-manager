@@ -22,6 +22,7 @@ from backend.start_options import (
     read_pack_entries,
     write_pfh5_pack,
 )
+from tests.helpers import make_asset
 
 UNIT_SIZE_FEATURE_WORKSHOP_ID = "3765783838"
 FRIENDLY_FIRE_FEATURE_WORKSHOP_ID = "3765783977"
@@ -280,6 +281,61 @@ class StartOptionsPackTests(unittest.TestCase):
             )
             self.assertIn("unit_model_multiplier", result["options"])
             self.assertEqual(result["game_data"]["unit_rows_scaled"], 1)
+
+    def test_game_data_sources_follow_enabled_order_before_vanilla(self) -> None:
+        build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
+        self.assertTrue(callable(build_game_data_patch))
+        if not callable(build_game_data_patch):
+            return
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            workshop = root / "workshop"
+            data.mkdir()
+            workshop.mkdir()
+            write_pfh5_pack(
+                data / "db.pack",
+                [PackEntry("db\\main_units_tables\\data__", b"vanilla")],
+            )
+            high_path = write_pfh5_pack(
+                workshop / "high.pack",
+                [PackEntry("db\\main_units_tables\\z_high", b"high")],
+            )
+            low_path = write_pfh5_pack(
+                workshop / "low.pack",
+                [PackEntry("db\\main_units_tables\\!low", b"low")],
+            )
+            assets = {
+                "high": make_asset(high_path, "high", "workshop"),
+                "low": make_asset(low_path, "low", "workshop"),
+            }
+            built = GameDataBuildResult(
+                (
+                    GameDataEntry(
+                        "db\\main_units_tables\\!!!!wyccc_game_data_v0007",
+                        b"patched",
+                    ),
+                ),
+                {"unit_rows_scaled": 1},
+            )
+
+            with patch(
+                "backend.start_options.build_game_data_entries",
+                return_value=built,
+            ) as builder:
+                build_game_data_patch(
+                    root / "runtime",
+                    str(data),
+                    assets,
+                    ["high", "low"],
+                    {"unit_model_multiplier": 2.0},
+                    subscribed_workshop_ids=(UNIT_SIZE_FEATURE_WORKSHOP_ID,),
+                )
+
+            self.assertEqual(
+                [source.name for source in builder.call_args.args[0]],
+                ["high.pack", "low.pack", "db.pack"],
+            )
 
     def test_kv_rule_only_game_data_change_writes_a_patch(self) -> None:
         build_game_data_patch = getattr(start_options, "build_game_data_patch", None)
