@@ -1953,6 +1953,10 @@ class ApiContractTests(unittest.TestCase):
             self.assertTrue(enabled_first["ok"])
             self.assertEqual([warning["code"] for warning in first.warnings], ["missing_dependency"])
             self.assertEqual(second.warnings, [])
+            self.assertEqual(
+                enabled_first["data"]["missing_dependency_warnings"],
+                {first.id: first.warnings},
+            )
 
             enabled_second = api.call("update_playset", ["default", [second.id]])
             self.assertTrue(enabled_second["ok"])
@@ -1963,6 +1967,7 @@ class ApiContractTests(unittest.TestCase):
             self.assertTrue(disabled_all["ok"])
             self.assertEqual(first.warnings, [])
             self.assertEqual(second.warnings, [])
+            self.assertEqual(disabled_all["data"]["missing_dependency_warnings"], {})
 
     def test_windows_file_reveal_uses_explorer_select_with_the_path_quoted_after_comma(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

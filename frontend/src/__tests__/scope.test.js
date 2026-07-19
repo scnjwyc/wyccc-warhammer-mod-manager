@@ -140,6 +140,14 @@ describe('deliberately small product scope', () => {
     expect(stylesSource).toMatch(/\.change-entry li\s*\{[^}]*font-size:\s*14px/s)
   })
 
+  it('uses fixed header, content, and footer rows for every settings tab', () => {
+    const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
+
+    expect(stylesSource).toMatch(/\.settings-modal\s*\{[^}]*display:\s*grid[^}]*grid-template-rows:\s*68px\s+minmax\(0,\s*1fr\)\s+62px/s)
+    expect(stylesSource).toMatch(/\.settings-layout\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0/s)
+    expect(stylesSource).toMatch(/\.settings-page-scroll\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/s)
+  })
+
   it('centers the warning entry in the enabled-list heading instead of using a bottom strip', () => {
     const appSource = read(resolve(frontendRoot, 'src/App.vue'))
     const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))

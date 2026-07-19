@@ -103,6 +103,24 @@ class DependencyWorkshopMetadata(OfflineWorkshopMetadata):
         }
 
 
+class InstalledDependencyWorkshopMetadata(OfflineWorkshopMetadata):
+    def get_many(
+        self,
+        workshop_ids: list[str],
+        interface_language: str = "en-US",
+        *,
+        app_id: int = 1_142_710,
+    ) -> dict[str, dict]:
+        return {
+            "101": {
+                "required_workshop_items": [
+                    {"workshop_id": "102", "title": "Installed requirement"},
+                ]
+            },
+            "102": {"required_workshop_items": []},
+        }
+
+
 class DependencyWarningWorkshopMetadata(DependencyWorkshopMetadata):
     last_refresh_warning = ""
 
@@ -315,6 +333,59 @@ class ScannerTests(unittest.TestCase):
         ModScanner.refresh_missing_dependency_warnings(result.mods, [first_asset.id])
         self.assertFalse(any(warning["code"] == "missing_dependency" for warning in dependent_asset.warnings))
         self.assertEqual(first_asset.warnings[0]["code"], "missing_dependency")
+
+    def test_warns_when_installed_dependencies_are_not_enabled_in_the_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "game" / "data"
+            workshop = root / "workshop" / "1142710"
+            write_pack(data / "base.pack")
+            write_pack(data / "dependent.pack", dependencies=["base.pack"])
+            write_pack(workshop / "101" / "first.pack")
+            write_pack(workshop / "102" / "requirement.pack")
+
+            result = ModScanner(InstalledDependencyWorkshopMetadata()).scan(
+                GamePaths(data_path=str(data), workshop_path=str(workshop)),
+                {"language": "zh-CN", "check_outdated_mods": False},
+            )
+
+        by_name = {mod.pack_name: mod for mod in result.mods}
+        dependent = by_name["dependent.pack"]
+        base = by_name["base.pack"]
+        first = by_name["first.pack"]
+        requirement = by_name["requirement.pack"]
+
+        ModScanner.refresh_missing_dependency_warnings(result.mods, [dependent.id, first.id])
+
+        dependent_warning = next(
+            warning for warning in dependent.warnings if warning["code"] == "missing_dependency"
+        )
+        self.assertEqual(
+            dependent_warning["dependencies"],
+            [{"kind": "pack", "id": "base.pack", "name": "base.pack", "availability": "disabled"}],
+        )
+        first_warning = next(
+            warning for warning in first.warnings if warning["code"] == "missing_dependency"
+        )
+        self.assertEqual(
+            first_warning["dependencies"],
+            [
+                {
+                    "kind": "workshop",
+                    "id": "102",
+                    "name": "Installed requirement",
+                    "availability": "disabled",
+                },
+            ],
+        )
+
+        ModScanner.refresh_missing_dependency_warnings(
+            result.mods,
+            [dependent.id, base.id, first.id, requirement.id],
+        )
+
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in dependent.warnings))
+        self.assertFalse(any(warning["code"] == "missing_dependency" for warning in first.warnings))
 
     def test_dependency_refresh_notice_is_structured_and_ignorable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

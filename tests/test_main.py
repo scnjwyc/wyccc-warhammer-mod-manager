@@ -153,18 +153,18 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.8.5")
+        self.assertEqual(APP_VERSION, "0.8.6")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.8.5'", frontend_store)
-        self.assertIn("filevers=(0, 8, 5, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.8.5')", version_info)
-        self.assertIn("`0.8.5`", readme)
-        self.assertIn("`0.8.5`", readme_en)
+        self.assertIn("appVersion: '0.8.6'", frontend_store)
+        self.assertIn("filevers=(0, 8, 6, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.8.6')", version_info)
+        self.assertIn("`0.8.6`", readme)
+        self.assertIn("`0.8.6`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], APP_VERSION)
-        self.assertFalse(is_newer_version(APP_VERSION, update_manifest["version"]))
+        self.assertEqual(update_manifest["version"], "0.8.6")
+        self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
             release for release in changelog
@@ -177,9 +177,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:10]],
-            ["0.8.5", "0.8.2", "0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0"],
+            ["0.8.6", "0.8.5", "0.8.2", "0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0"],
         )
-        self.assertEqual(changelog[1]["version"], "0.8.2")
+        self.assertEqual(changelog[1]["version"], "0.8.5")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
@@ -199,7 +199,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         for releases in localized.values():
             self.assertEqual(
                 [release["version"] for release in releases[:10]],
-                ["0.8.5", "0.8.2", "0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0", "0.2.0"],
+                ["0.8.6", "0.8.5", "0.8.2", "0.8.1", "0.8.0", "0.7.0", "0.6.5", "0.6.0", "0.5.0", "0.3.0"],
             )
             self.assertEqual(len(releases[0]["entries"]), 1)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")
@@ -557,6 +557,28 @@ class PackagedRuntimeTests(unittest.TestCase):
         }
         structure_keys = {
             key
+            for title_key, changes in next(
+                item for item in CHANGELOG_STRUCTURE if item["version"] == "0.8.5"
+            )["entries"]
+            for key in (title_key, *(text_key for _change_type, text_key in changes))
+        }
+        self.assertSetEqual(structure_keys, expected_keys)
+
+        for language in languages:
+            release = next(
+                item for item in get_all_changelogs(language) if item["version"] == "0.8.5"
+            )
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3])
+
+    def test_086_changelog_describes_playset_dependency_fix(self) -> None:
+        languages = ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES")
+        expected_keys = {
+            "v086_fixed_title",
+            "v086_playset_dependencies",
+            "v086_settings_page_ui",
+        }
+        structure_keys = {
+            key
             for title_key, changes in CHANGELOG_STRUCTURE[0]["entries"]
             for key in (title_key, *(text_key for _change_type, text_key in changes))
         }
@@ -564,8 +586,11 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for language in languages:
             release = get_all_changelogs(language)[0]
-            self.assertEqual(release["version"], "0.8.5")
-            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [3])
+            self.assertEqual(release["version"], "0.8.6")
+            self.assertEqual([len(entry["changes"]) for entry in release["entries"]], [2])
+        english = str(get_all_changelogs("en-US")[0])
+        self.assertIn("installed but not enabled", english)
+        self.assertIn("Settings page", english)
 
     def test_agents_defaults_code_changes_to_main_branch(self) -> None:
         agents = (

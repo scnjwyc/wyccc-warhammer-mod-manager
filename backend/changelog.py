@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.8.6",
+        "date": "2026-07-19",
+        "entries": (
+            (
+                "v086_fixed_title",
+                (
+                    ("fix", "v086_playset_dependencies"),
+                    ("fix", "v086_settings_page_ui"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.8.5",
         "date": "2026-07-19",
         "entries": (
@@ -266,6 +279,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v086_fixed_title": "修复",
+        "v086_playset_dependencies": "修复某些情况下依赖检测失效的问题",
+        "v086_settings_page_ui": "修复设置页面 UI 存在的问题。",
         "v085_fixed_title": "修复",
         "v085_non_ascii_launch_paths": "修复游戏本体或创意工坊目录含中文等非 ASCII 字符时无法启动的问题。",
         "v085_game_data_overhauls": "修复游戏数据修改对于 ATC、SFO 等大修 MOD 作用不正常的问题。",
@@ -386,6 +402,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v086_fixed_title": "Fixed",
+        "v086_playset_dependencies": "Fixed missing-dependency warnings when a required MOD is installed but not enabled in the current playset.",
+        "v086_settings_page_ui": "Fixed UI issues on the Settings page.",
         "v085_fixed_title": "Fixed",
         "v085_non_ascii_launch_paths": "Fixed game launch when the game installation or Workshop directory contains Chinese or other non-ASCII characters.",
         "v085_game_data_overhauls": "Fixed Game Data Modification behaving incorrectly with overhaul MODs such as ATC and SFO.",
@@ -506,6 +525,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v086_fixed_title": "수정",
+        "v086_playset_dependencies": "필수 MOD가 설치되어 있지만 현재 플레이세트에서 활성화되지 않은 경우 누락된 종속성 경고가 표시되지 않던 문제를 수정했습니다.",
+        "v086_settings_page_ui": "설정 페이지의 UI 문제를 수정했습니다.",
         "v085_fixed_title": "수정",
         "v085_non_ascii_launch_paths": "게임 설치 또는 창작마당 경로에 중국어 등 ASCII 이외 문자가 있으면 실행되지 않던 문제를 수정했습니다.",
         "v085_game_data_overhauls": "ATC, SFO 등 대형 개편 MOD에서 게임 데이터 수정이 정상적으로 적용되지 않던 문제를 수정했습니다.",
@@ -626,6 +648,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v086_fixed_title": "Исправлено",
+        "v086_playset_dependencies": "Исправлено отсутствие предупреждения о зависимости, когда требуемый MOD установлен, но не включён в текущем наборе.",
+        "v086_settings_page_ui": "Исправлены проблемы интерфейса на странице настроек.",
         "v085_fixed_title": "Исправлено",
         "v085_non_ascii_launch_paths": "Исправлен запуск игры, когда путь к игре или каталогу Мастерской содержит китайские или другие не-ASCII символы.",
         "v085_game_data_overhauls": "Исправлена некорректная работа изменения игровых данных с крупными модами, такими как ATC и SFO.",
@@ -746,6 +771,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v086_fixed_title": "修正",
+        "v086_playset_dependencies": "必要な MOD がインストール済みでも現在のプレイセットで有効化されていない場合に、依存関係不足の警告が表示されない問題を修正しました。",
+        "v086_settings_page_ui": "設定ページの UI の問題を修正しました。",
         "v085_fixed_title": "修正",
         "v085_non_ascii_launch_paths": "ゲーム本体またはワークショップのパスに中国語などの ASCII 以外の文字が含まれると起動できない問題を修正しました。",
         "v085_game_data_overhauls": "ATC、SFO などの大型オーバーホール MOD でゲームデータ変更が正常に適用されない問題を修正しました。",
@@ -866,6 +894,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v086_fixed_title": "Corregido",
+        "v086_playset_dependencies": "Se corrigió la falta de aviso de dependencia cuando el MOD requerido está instalado pero no está habilitado en el conjunto actual.",
+        "v086_settings_page_ui": "Se corrigieron problemas de interfaz en la página de configuración.",
         "v085_fixed_title": "Corregido",
         "v085_non_ascii_launch_paths": "Se corrigió el inicio del juego cuando la instalación o la carpeta de Workshop contiene caracteres chinos u otros caracteres no ASCII.",
         "v085_game_data_overhauls": "Se corrigió el funcionamiento incorrecto de la modificación de datos del juego con grandes MOD, como ATC y SFO.",

@@ -1106,6 +1106,7 @@ class API:
             "current_playset": current,
             "ordered_mod_ids": present,
             "missing_mod_ids": missing,
+            "missing_dependency_warnings": self._missing_dependency_warnings_payload(),
         }
 
     def _create_playset(self, name: str, mod_ids: list[str]) -> dict[str, Any]:
@@ -1140,6 +1141,7 @@ class API:
             "playset": playset,
             "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": self.state_repository.get_current_playset(game_id),
+            "missing_dependency_warnings": self._missing_dependency_warnings_payload(),
         }
 
     def _delete_playset(self, playset_id: str) -> dict[str, Any]:
@@ -2026,6 +2028,20 @@ class API:
             self._assets.values(),
             self._canonicalize_mod_ids(enabled_mod_ids),
         )
+
+    def _missing_dependency_warnings_payload(self) -> dict[str, list[dict[str, Any]]]:
+        return {
+            asset.id: [
+                warning
+                for warning in asset.to_dict()["warnings"]
+                if str(warning.get("code") or "") == "missing_dependency"
+            ]
+            for asset in self._assets.values()
+            if any(
+                str(warning.get("code") or "") == "missing_dependency"
+                for warning in asset.to_dict()["warnings"]
+            )
+        }
 
     def _active_order_path(self, game_path: str) -> Path:
         return current_order_path(

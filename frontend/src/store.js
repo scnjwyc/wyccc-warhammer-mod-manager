@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.8.5',
+    appVersion: '0.8.6',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -218,23 +218,17 @@ export const useAppStore = defineStore('app', {
       this.refreshMissingDependencyWarnings()
     },
     refreshMissingDependencyWarnings() {
-      const active = new Set(this.activeIds)
+      // The backend evaluates both missing and installed-but-disabled
+      // dependencies.  Keep its result intact while a playset write is queued;
+      // rebuilding from `missing_dependencies` here would lose the latter.
+    },
+    applyMissingDependencyWarnings(warningsByModId) {
+      if (!warningsByModId || typeof warningsByModId !== 'object') return
       for (const mod of this.mods) {
         const warnings = (mod.warnings || [])
           .filter(warning => warning?.code !== 'missing_dependency')
-        const missing = Array.isArray(mod.missing_dependencies) ? mod.missing_dependencies : []
-        const ignored = (mod.ignored_warning_codes || []).includes('missing_dependency')
-        if (active.has(mod.id) && missing.length && !ignored) {
-          const names = missing
-            .map(item => String(item?.name || item?.id || '').trim())
-            .filter(Boolean)
-          warnings.push({
-            code: 'missing_dependency',
-            severity: 'error',
-            message: `缺少依赖：${names.join('、')}`,
-            dependencies: missing.map(item => ({ ...item })),
-          })
-        }
+        const current = warningsByModId[mod.id]
+        if (Array.isArray(current)) warnings.push(...current)
         mod.warnings = warnings
       }
     },
@@ -458,6 +452,9 @@ export const useAppStore = defineStore('app', {
     applyPlaysetPayload(data, replaceOrder = true) {
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+      if (Object.prototype.hasOwnProperty.call(data, 'missing_dependency_warnings')) {
+        this.applyMissingDependencyWarnings(data.missing_dependency_warnings)
+      }
       if (replaceOrder) {
         this.replaceActiveIds(data.ordered_mod_ids || [])
         this.missingEnabledIds = [...(data.missing_mod_ids || [])]
@@ -478,6 +475,9 @@ export const useAppStore = defineStore('app', {
           const data = await invoke('update_playset', playsetId, snapshot)
           if (this.currentPlaysetId === playsetId) {
             this.playsets = data.playsets || this.playsets
+            if (Object.prototype.hasOwnProperty.call(data, 'missing_dependency_warnings')) {
+              this.applyMissingDependencyWarnings(data.missing_dependency_warnings)
+            }
           }
           const saved = await invoke('save_load_order', activeSnapshot, this.orderToken)
           this.orderToken = saved.order_token

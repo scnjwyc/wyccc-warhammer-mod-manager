@@ -218,7 +218,7 @@ describe('anchored mod selection', () => {
     expect(store.warningCount).toBe(0)
   })
 
-  it('rechecks missing dependencies whenever the enabled list changes', () => {
+  it('keeps backend dependency warnings while the enabled list changes', () => {
     const store = useAppStore()
     store.mods = [
       {
@@ -241,12 +241,22 @@ describe('anchored mod selection', () => {
     store.recordCurrentPlaysetChange = vi.fn()
     store.replaceActiveIds([])
 
+    store.applyMissingDependencyWarnings({
+      a: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：a-base.pack' }],
+    })
+
     store.enable('a')
     expect(store.mods[0].warnings.map(item => item.code)).toEqual(['missing_dependency'])
     expect(store.mods[1].warnings).toEqual([])
     expect(store.warningItems.map(item => item.modId)).toEqual(['a'])
 
     store.enable('b')
+    expect(store.warningItems.map(item => item.modId)).toEqual(['a'])
+
+    store.applyMissingDependencyWarnings({
+      a: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：a-base.pack' }],
+      b: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：b-base.pack' }],
+    })
     expect(store.warningItems.map(item => item.modId)).toEqual(['a', 'b'])
 
     const refreshWarnings = vi.spyOn(store, 'refreshMissingDependencyWarnings')
@@ -254,7 +264,7 @@ describe('anchored mod selection', () => {
     expect(refreshWarnings).toHaveBeenCalled()
 
     store.disable('a')
-    expect(store.mods[0].warnings).toEqual([])
+    expect(store.mods[0].warnings.map(item => item.code)).toEqual(['missing_dependency'])
     expect(store.mods[1].warnings.map(item => item.code)).toEqual(['missing_dependency'])
     expect(store.warningItems.map(item => item.modId)).toEqual(['b'])
 
@@ -263,6 +273,9 @@ describe('anchored mod selection', () => {
       current_playset: { id: 'other', name: 'Other', mod_ids: ['a'] },
       ordered_mod_ids: ['a'],
       missing_mod_ids: [],
+      missing_dependency_warnings: {
+        a: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖：a-base.pack' }],
+      },
     })
     expect(store.mods[0].warnings.map(item => item.code)).toEqual(['missing_dependency'])
     expect(store.mods[1].warnings).toEqual([])

@@ -354,24 +354,88 @@ class ModScanner:
         assets: Iterable[ModAsset],
         enabled_mod_ids: Iterable[str],
     ) -> None:
+        scanned_assets = list(assets)
         enabled = {str(mod_id) for mod_id in enabled_mod_ids}
-        for asset in assets:
+        installed_pack_names = {asset.pack_name.casefold() for asset in scanned_assets}
+        enabled_pack_names = {
+            asset.pack_name.casefold()
+            for asset in scanned_assets
+            if asset.id in enabled
+        }
+        installed_workshop_ids = {
+            asset.workshop_id for asset in scanned_assets if asset.workshop_id
+        }
+        enabled_workshop_ids = {
+            asset.workshop_id
+            for asset in scanned_assets
+            if asset.id in enabled and asset.workshop_id
+        }
+
+        for asset in scanned_assets:
             asset.warnings = [
                 warning
                 for warning in asset.warnings
                 if str(warning.get("code") or "") != "missing_dependency"
             ]
-            if asset.id not in enabled or not asset.missing_dependencies:
+            dependencies = list(asset.missing_dependencies)
+            recorded_dependencies = {
+                (str(item.get("kind") or ""), str(item.get("id") or ""))
+                for item in dependencies
+            }
+
+            for dependency in asset.dependency_packs:
+                dependency_name = Path(dependency.replace("\\", "/")).name
+                dependency_key = dependency_name.casefold()
+                if (
+                    not dependency_name
+                    or dependency_key == asset.pack_name.casefold()
+                    or dependency_key not in installed_pack_names
+                    or dependency_key in enabled_pack_names
+                    or ("pack", dependency_name) in recorded_dependencies
+                ):
+                    continue
+                dependencies.append(
+                    {
+                        "kind": "pack",
+                        "id": dependency_name,
+                        "name": dependency_name,
+                        "availability": "disabled",
+                    }
+                )
+                recorded_dependencies.add(("pack", dependency_name))
+
+            for required in asset.required_workshop_items:
+                workshop_id = str(required.get("workshop_id") or "")
+                if (
+                    not workshop_id
+                    or workshop_id == asset.workshop_id
+                    or workshop_id not in installed_workshop_ids
+                    or workshop_id in enabled_workshop_ids
+                    or ("workshop", workshop_id) in recorded_dependencies
+                ):
+                    continue
+                dependencies.append(
+                    {
+                        "kind": "workshop",
+                        "id": workshop_id,
+                        "name": str(required.get("title") or "").strip()
+                        or f"Workshop #{workshop_id}",
+                        "availability": "disabled",
+                    }
+                )
+                recorded_dependencies.add(("workshop", workshop_id))
+
+            if asset.id not in enabled or not dependencies:
                 continue
             dependency_names = "、".join(
-                item["name"] for item in asset.missing_dependencies
+                item["name"] for item in dependencies
             )
             asset.warnings.append(
                 {
                     "code": "missing_dependency",
                     "severity": "error",
                     "message": f"缺少依赖：{dependency_names}",
-                    "dependencies": list(asset.missing_dependencies),
+                    "dependencies": dependencies,
                 }
             )
 

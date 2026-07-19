@@ -2148,8 +2148,10 @@ button.context-menu-item {
 }
 
 .settings-modal {
+  display: grid;
   width: min(980px, 96vw);
   height: min(820px, 94vh);
+  grid-template-rows: 68px minmax(0, 1fr) 62px;
 }
 
 .settings-modal .modal-body {
@@ -2158,6 +2160,7 @@ button.context-menu-item {
 
 .settings-layout {
   display: grid;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   grid-template-columns: 196px minmax(0, 1fr);
