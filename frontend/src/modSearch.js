@@ -32,6 +32,7 @@ for (const field of fieldDefinitions) {
 
 export const SORT_OPTIONS = [
   { id: 'priority', labelKey: 'search.sortPriority' },
+  { id: 'type', labelKey: 'search.sortType' },
   { id: 'filename', labelKey: 'search.sortFilename' },
   { id: 'name', labelKey: 'search.sortName' },
   { id: 'author', labelKey: 'search.sortAuthor' },
@@ -202,14 +203,21 @@ export const insertByDefaultLoadOrder = (orderedIds = [], modId, modsById = {}) 
   return next
 }
 
-export const sortDisplayedMods = (mods, mode = 'priority', descending = false) => {
+export const sortDisplayedMods = (mods, mode = 'priority', descending = false, typeRanks = {}) => {
   const result = [...(mods || [])]
   if (mode === 'priority') return result
   const collator = new Intl.Collator(currentLocale(), { numeric: true, sensitivity: 'base' })
   const compareText = (left, right) => collator.compare(String(left || ''), String(right || ''))
+  const typeRank = mod => {
+    const rank = selectedTypeIds(mod)
+      .map(typeId => Number(typeRanks?.[typeId]))
+      .find(Number.isFinite)
+    return rank ?? Number.MAX_SAFE_INTEGER
+  }
   result.sort((left, right) => {
     let comparison = 0
-    if (mode === 'filename') comparison = compareText(left.pack_name, right.pack_name)
+    if (mode === 'type') comparison = typeRank(left) - typeRank(right)
+    else if (mode === 'filename') comparison = compareText(left.pack_name, right.pack_name)
     else if (mode === 'name') comparison = compareText(left.effective_name, right.effective_name)
     else if (mode === 'author') comparison = compareText(left.author, right.author)
     else if (mode === 'updated') comparison = Number(left.updated_at || 0) - Number(right.updated_at || 0)

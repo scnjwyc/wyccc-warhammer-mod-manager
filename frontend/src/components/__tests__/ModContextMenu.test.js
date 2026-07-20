@@ -25,6 +25,16 @@ const types = [
 const buttonByText = (wrapper, text) => wrapper.findAll('button').find(button => button.text().includes(text))
 
 describe('ModContextMenu', () => {
+  it('puts manual type entry at the top of the type submenu with its shortcut', () => {
+    const wrapper = mount(ModContextMenu, {
+      props: { open: true, x: 100, y: 100, mod, active: true, types },
+    })
+
+    const submenu = wrapper.get('.type-submenu')
+    expect(submenu.find('button').attributes('data-testid')).toBe('context-manual-type')
+    expect(submenu.get('[data-testid="context-manual-type"] .context-menu-shortcut').text()).toBe('Shift + F')
+  })
+
   it('shows configured shortcut keys beside shortcut actions', () => {
     const wrapper = mount(ModContextMenu, {
       props: {

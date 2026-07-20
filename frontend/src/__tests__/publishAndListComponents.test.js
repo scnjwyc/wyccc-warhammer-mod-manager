@@ -41,6 +41,37 @@ describe('visual-only list sorting guardrails', () => {
 })
 
 describe('Workshop publish dialog', () => {
+  it('uses the shared icon button style for the close control', () => {
+    const wrapper = mount(WorkshopPublishModal, {
+      global: { plugins: [createPinia()] },
+      props: {
+        open: true,
+        mode: 'update',
+        mod: { ...localMod, workshop_id: '123' },
+        busy: '',
+      },
+    })
+
+    expect(wrapper.get('button.icon-button').classes()).toContain('icon-button')
+    expect(wrapper.get('button.icon-button').text()).toBe('×')
+  })
+
+  it('uses one shared textarea style for description and changelog fields', () => {
+    const wrapper = mount(WorkshopPublishModal, {
+      global: { plugins: [createPinia()] },
+      props: {
+        open: true,
+        mode: 'update',
+        mod: { ...localMod, workshop_id: '123' },
+        busy: '',
+      },
+    })
+
+    expect(wrapper.findAll('.publish-textarea')).toHaveLength(2)
+    expect(wrapper.find('textarea[rows="6"]').classes()).toContain('publish-textarea')
+    expect(wrapper.find('textarea[rows="3"]').classes()).toContain('publish-textarea')
+  })
+
   it('uses the sibling cover automatically and emits without a confirmation checkbox', async () => {
     const wrapper = mount(WorkshopPublishModal, {
       global: { plugins: [createPinia()] },

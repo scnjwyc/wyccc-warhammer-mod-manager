@@ -175,6 +175,7 @@ class API:
             "save_mod_user_data": self._save_mod_user_data,
             "generate_mod_user_data": self._generate_mod_user_data,
             "list_mod_types": self._list_mod_types,
+            "reorder_mod_types": self._reorder_mod_types,
             "create_mod_type": self._create_mod_type,
             "update_mod_type": self._update_mod_type,
             "delete_mod_type": self._delete_mod_type,
@@ -675,6 +676,9 @@ class API:
 
     def _list_mod_types(self) -> list[dict[str, Any]]:
         return self.state_repository.list_mod_types()
+
+    def _reorder_mod_types(self, type_ids: list[str]) -> dict[str, Any]:
+        return {"items": self.state_repository.reorder_mod_types(type_ids)}
 
     def _create_mod_type(self, name: str) -> dict[str, Any]:
         created = self.state_repository.create_mod_type(name)

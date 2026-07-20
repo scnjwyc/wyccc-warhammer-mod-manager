@@ -22,6 +22,25 @@ describe('playset state', () => {
     invokeMock.mockReset()
   })
 
+  it('persists the configured MOD type order', async () => {
+    invokeMock.mockResolvedValue({
+      items: [
+        { id: 'custom:audio', name: '音效', built_in: false },
+        { id: 'ui', name: 'UI', built_in: true },
+      ],
+    })
+    const store = useAppStore()
+    store.modTypes = [
+      { id: 'ui', name: 'UI', built_in: true },
+      { id: 'custom:audio', name: '音效', built_in: false },
+    ]
+
+    await store.reorderModTypes(['custom:audio', 'ui'])
+
+    expect(invokeMock).toHaveBeenCalledWith('reorder_mod_types', ['custom:audio', 'ui'])
+    expect(store.modTypes.map(item => item.id)).toEqual(['custom:audio', 'ui'])
+  })
+
   it('persists rapid enable and reorder operations to the current playset in order', async () => {
     let saveCount = 0
     invokeMock.mockImplementation(async (method, playsetId, modIds) => {

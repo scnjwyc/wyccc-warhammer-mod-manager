@@ -103,6 +103,18 @@ const run = (action, value = null, close = true) => {
         <span class="context-menu-arrow">›</span>
         <div class="context-submenu type-submenu" role="menu">
           <button
+            type="button"
+            class="context-menu-item"
+            role="menuitem"
+            data-testid="context-manual-type"
+            @click.stop="run('manual-type')"
+          >
+            <span class="context-menu-icon">T</span>
+            <span>{{ t('context.manualType') }}</span>
+            <kbd class="context-menu-shortcut">Shift + F</kbd>
+          </button>
+          <div class="context-menu-divider"></div>
+          <button
             v-for="type in types"
             :key="type.id"
             type="button"

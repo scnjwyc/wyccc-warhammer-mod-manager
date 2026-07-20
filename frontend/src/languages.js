@@ -135,6 +135,7 @@ const entries = {
   'search.fieldCreator': ['作者 ID', 'Author ID', '작성자 ID', 'ID автора', '作者 ID'],
   'search.keyword': ['关键词', 'keyword', '키워드', 'ключевое слово', 'キーワード'],
   'search.sortPriority': ['优先级', 'Priority', '우선순위', 'Приоритет', '優先度'],
+  'search.sortType': ['类型', 'Type', '유형', 'Тип', '種類'],
   'search.sortFilename': ['文件名', 'File name', '파일 이름', 'Имя файла', 'ファイル名'],
   'search.sortName': ['模组名', 'MOD name', 'MOD 이름', 'Название MOD', 'MOD 名'],
   'search.sortAuthor': ['作者', 'Author', '작성자', 'Автор', '作者'],
@@ -572,6 +573,8 @@ const entries = {
 }
 
 Object.assign(entries, {
+  'context.manualType': ['手动输入', 'Manual input', '수동 입력', 'Ручной ввод', '手動入力'],
+  'shortcuts.manualType': ['手动输入类型', 'Enter a type manually', '수동으로 유형 입력', 'Ввести тип вручную', '種類を手動入力'],
   'settings.shortcutCaptureHelp': ['点击快捷键位后按下新的按键组合；Esc 取消本次修改。', 'Click a binding, then press the new key combination. Press Esc to cancel.', '단축키를 클릭한 뒤 새 키 조합을 누르세요. Esc로 취소합니다.', 'Нажмите сочетание клавиш, затем введите новое. Esc отменяет изменение.', 'ショートカットをクリックして新しいキーの組み合わせを押します。Esc で取り消します。'],
   'settings.shortcutPressKeys': ['请按下新的快捷键', 'Press the new shortcut', '새 단축키를 누르세요', 'Нажмите новое сочетание', '新しいショートカットを押してください'],
   'settings.shortcutInvalid': ['请至少按下一个非修饰键。', 'Include at least one non-modifier key.', '수정 키 외의 키를 하나 이상 포함하세요.', 'Добавьте хотя бы одну клавишу, не являющуюся модификатором.', '修飾キー以外のキーを少なくとも 1 つ含めてください。'],
@@ -663,10 +666,12 @@ const spanishEntries = {
   "app.confirmSyncData": "¿Sincronizar todos los archivos Steam Workshop MOD con la carpeta de datos local?\n\nLos MOD que ya tengan el mismo nombre en Datos se omitirán y los archivos modificados después de la sincronización no se sobrescribirán.",
   "app.warningIgnored": "Se ignoró la advertencia {warning} para “{name}”",
   "app.scanWarningIgnored": "Se ignoró este aviso de análisis para la sesión actual",
+  "context.manualType": "Entrada manual",
   "shortcuts.openWorkshop": "Abrir el Taller en el navegador",
   "shortcuts.openRpfm": "Abrir en RPFM",
   "shortcuts.toggleActive": "Alternar estado activado",
   "shortcuts.launchGame": "Iniciar juego",
+  "shortcuts.manualType": "Introducir un tipo manualmente",
   "list.loadOrder": "Orden de carga",
   "list.authorUnavailable": "Nombre del autor no disponible",
   "list.localFile": "archivo local",
@@ -693,6 +698,7 @@ const spanishEntries = {
   "search.fieldCreator": "Autor ID",
   "search.keyword": "palabra clave",
   "search.sortPriority": "Prioridad",
+  "search.sortType": "Tipo",
   "search.sortFilename": "Nombre de archivo",
   "search.sortName": "MOD nombre",
   "search.sortAuthor": "Autor",

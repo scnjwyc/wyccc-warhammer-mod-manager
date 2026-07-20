@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { localizedPlaysetName, t } from './languages'
+import { localizedModTypeName, localizedPlaysetName, t } from './languages'
 import { executeKeyboardShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
 import { useAppStore } from './store'
 import DeleteModsModal from './components/DeleteModsModal.vue'
@@ -329,6 +329,7 @@ const handleGlobalShortcut = event => {
     openRpfm: modId => store.openModInRpfm(modId),
     enableMany: modIds => store.enableMany(modIds),
     disableMany: modIds => store.disableMany(modIds),
+    manualType: modIds => enterManualModType(modIds, store.modMap.get(modIds[0]) || null),
     launch: () => store.launch(),
   }).then(notifyShortcutOutcome).catch(() => {
     // Store actions surface failures through the shared toast.
@@ -361,6 +362,8 @@ const handleContextAction = async ({ action, value, mod }) => {
       }
     } else if (action === 'manage-types') {
       showTypeManager.value = true
+    } else if (action === 'manual-type') {
+      await enterManualModType(actionIds, mod)
     } else if (action === 'move-specific') {
       const current = store.activeIds.indexOf(mod.id) + 1
       const raw = window.prompt(t('app.promptLoadOrder', { count: store.activeIds.length }), String(current))
@@ -512,8 +515,40 @@ const updateModType = async ({ id, name }) => {
   try { await store.updateModType(id, name) } catch { /* shared toast */ }
 }
 
+const moveModType = async ({ id, direction }) => {
+  const ids = store.modTypes.map(type => type.id)
+  const index = ids.indexOf(id)
+  const target = index + Number(direction || 0)
+  if (index < 0 || target < 0 || target >= ids.length) return
+  ;[ids[index], ids[target]] = [ids[target], ids[index]]
+  try { await store.reorderModTypes(ids) } catch { /* shared toast */ }
+}
+
 const deleteModType = async typeId => {
   try { await store.deleteModType(typeId) } catch { /* shared toast */ }
+}
+
+const enterManualModType = async (modIds, initialMod = null) => {
+  const currentType = initialMod?.mod_types?.[0] || initialMod?.mod_type || 'unknown'
+  const currentTypeRecord = store.modTypes.find(type => type.id === currentType)
+  const raw = window.prompt(
+    t('context.manualType'),
+    currentTypeRecord ? localizedModTypeName(currentTypeRecord) : '',
+  )
+  const name = String(raw || '').trim()
+  if (!name) return
+  const normalized = name.toLocaleLowerCase()
+  let type = store.modTypes.find(item => (
+    localizedModTypeName(item).trim().toLocaleLowerCase() === normalized
+    || String(item.name || '').trim().toLocaleLowerCase() === normalized
+  ))
+  if (!type) type = await store.createModType(name)
+  for (const modId of modIds) {
+    const target = store.modMap.get(modId)
+    if (!target) continue
+    const selected = target.mod_types?.length ? target.mod_types : [target.mod_type || 'unknown']
+    if (!selected.includes(type.id)) await store.toggleModType(modId, type.id)
+  }
 }
 
 const syncWorkshopToData = async () => {
@@ -937,6 +972,7 @@ onBeforeUnmount(() => {
       @close="showTypeManager = false"
       @create="createModType"
       @update="updateModType"
+      @move="moveModType"
       @delete="deleteModType"
     />
 

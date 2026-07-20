@@ -36,6 +36,7 @@ export const KEYBOARD_SHORTCUTS = Object.freeze([
   { id: 'open-rpfm', defaultShortcut: 'Shift+R', keys: 'Shift + R', labelKey: 'shortcuts.openRpfm' },
   { id: 'toggle-active', defaultShortcut: 'Shift+E', keys: 'Shift + E', labelKey: 'shortcuts.toggleActive' },
   { id: 'launch-game', defaultShortcut: 'Shift+Enter', keys: 'Shift + Enter', labelKey: 'shortcuts.launchGame' },
+  { id: 'manual-type', defaultShortcut: 'Shift+F', keys: 'Shift + F', labelKey: 'shortcuts.manualType' },
 ])
 
 const shortcutMetadata = new Map(KEYBOARD_SHORTCUTS.map(shortcut => [shortcut.id, shortcut]))
@@ -149,6 +150,7 @@ export const executeKeyboardShortcut = async (action, {
   openRpfm,
   enableMany,
   disableMany,
+  manualType,
   launch,
 } = {}) => {
   if (action === 'launch-game') {
@@ -170,6 +172,12 @@ export const executeKeyboardShortcut = async (action, {
   if (action === 'open-rpfm') {
     if (selection.length !== 1) return { handled: false, reason: 'single-selection-required' }
     await openRpfm(selection[0])
+    return { handled: true }
+  }
+
+  if (action === 'manual-type') {
+    if (typeof manualType !== 'function') return { handled: false, reason: 'unknown-shortcut' }
+    await manualType(selection)
     return { handled: true }
   }
 

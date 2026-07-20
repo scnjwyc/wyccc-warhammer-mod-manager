@@ -9,6 +9,21 @@ const types = [
 ]
 
 describe('TypeManagerModal', () => {
+  it('exposes move controls for every type and disables list boundaries', async () => {
+    const orderedTypes = [
+      { id: 'language', name: '语言包', built_in: true },
+      { id: 'ui', name: 'UI', built_in: true },
+      { id: 'custom:audio', name: '音效', built_in: false },
+    ]
+    const wrapper = mount(TypeManagerModal, { props: { open: true, types: orderedTypes } })
+
+    expect(wrapper.get('[data-testid="type-move-up-language"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="type-move-down-custom:audio"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="type-move-up-ui"]').trigger('click')
+
+    expect(wrapper.emitted('move')[0][0]).toEqual({ id: 'ui', direction: -1 })
+  })
+
   it('locks defaults and supports adding, editing, and deleting custom types', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const wrapper = mount(TypeManagerModal, { props: { open: true, types } })

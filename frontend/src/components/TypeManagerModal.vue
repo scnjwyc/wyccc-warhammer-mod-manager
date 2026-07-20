@@ -8,7 +8,7 @@ const props = defineProps({
   busy: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'create', 'update', 'delete'])
+const emit = defineEmits(['close', 'create', 'update', 'delete', 'move'])
 const newTypeName = ref('')
 const edits = reactive({})
 
@@ -58,7 +58,7 @@ const deleteType = type => {
       <div class="modal-body">
         <p class="type-manager-help">{{ t('types.help') }}</p>
         <div class="type-manager-list">
-          <div v-for="type in types" :key="type.id" class="type-manager-row" :class="{ builtIn: type.built_in }">
+          <div v-for="(type, index) in types" :key="type.id" class="type-manager-row" :class="{ builtIn: type.built_in }">
             <span v-if="type.built_in" class="type-name-readonly">{{ localizedModTypeName(type) }}</span>
             <input
               v-else
@@ -73,6 +73,26 @@ const deleteType = type => {
               <button type="button" class="secondary-button compact" :disabled="!!busy" @click="updateType(type)">{{ t('common.save') }}</button>
               <button type="button" class="secondary-button compact danger-text" :disabled="!!busy" @click="deleteType(type)">{{ t('common.delete') }}</button>
             </template>
+            <span class="type-manager-order-actions">
+              <button
+                type="button"
+                class="icon-button"
+                :disabled="!!busy || index === 0"
+                :title="t('list.moveUp')"
+                :aria-label="`${t('list.moveUp')} ${localizedModTypeName(type)}`"
+                :data-testid="`type-move-up-${type.id}`"
+                @click="emit('move', { id: type.id, direction: -1 })"
+              >&uarr;</button>
+              <button
+                type="button"
+                class="icon-button"
+                :disabled="!!busy || index === types.length - 1"
+                :title="t('list.moveDown')"
+                :aria-label="`${t('list.moveDown')} ${localizedModTypeName(type)}`"
+                :data-testid="`type-move-down-${type.id}`"
+                @click="emit('move', { id: type.id, direction: 1 })"
+              >&darr;</button>
+            </span>
           </div>
         </div>
 

@@ -81,6 +81,23 @@ describe('RimCrow-style multi-condition MOD search', () => {
 })
 
 describe('display-only sorting', () => {
+  it('sorts by the persisted primary MOD type order', () => {
+    const original = [
+      { id: 'ui', pack_name: 'a.pack', mod_types: ['ui'] },
+      { id: 'unknown', pack_name: 'z.pack', mod_types: ['unknown'] },
+      { id: 'overhaul', pack_name: 'c.pack', mod_types: ['overhaul'] },
+      { id: 'multi', pack_name: 'b.pack', mod_types: ['ui', 'overhaul'] },
+    ]
+    const ranks = { overhaul: 0, ui: 1, unknown: 2 }
+
+    expect(sortDisplayedMods(original, 'type', false, ranks).map(mod => mod.id)).toEqual([
+      'overhaul', 'ui', 'multi', 'unknown',
+    ])
+    expect(sortDisplayedMods(original, 'type', true, ranks).map(mod => mod.id)).toEqual([
+      'unknown', 'multi', 'ui', 'overhaul',
+    ])
+  })
+
   it('sorts a copied list and keeps priority order unchanged', () => {
     const original = [mods[1], mods[0]]
     const byFile = sortDisplayedMods(original, 'filename', false)

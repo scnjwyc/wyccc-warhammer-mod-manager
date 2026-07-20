@@ -22,6 +22,7 @@ from .mod_types import (
 DEFAULT_PLAYSET_ID = "default"
 DEFAULT_PLAYSET_NAME = "默认"
 PLAYSET_SCHEMA_VERSION = "8"
+MOD_TYPE_ORDER_STATE_KEY = "mod_type_order"
 
 
 def _normalized_game_id(game_id: str | None) -> str:
@@ -505,12 +506,12 @@ class StateRepository:
             )
         return {"alias": alias.strip(), "notes": notes.strip()}
 
-    def list_mod_types(self) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as connection:
-            rows = connection.execute(
-                "SELECT id, name, created_at, updated_at "
-                "FROM custom_mod_types ORDER BY name COLLATE NOCASE, created_at"
-            ).fetchall()
+    @staticmethod
+    def _mod_type_records(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+        rows = connection.execute(
+            "SELECT id, name, created_at, updated_at "
+            "FROM custom_mod_types ORDER BY name COLLATE NOCASE, created_at, id"
+        ).fetchall()
         return [
             *default_mod_types(),
             *[
@@ -524,6 +525,47 @@ class StateRepository:
                 for row in rows
             ],
         ]
+
+    @classmethod
+    def _normalize_mod_type_order(
+        cls,
+        connection: sqlite3.Connection,
+        requested: list[str] | None = None,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        records = cls._mod_type_records(connection)
+        valid_ids = [str(item["id"]) for item in records]
+        valid_set = set(valid_ids)
+        if requested is None:
+            row = connection.execute(
+                "SELECT value FROM app_state WHERE key = ?",
+                (MOD_TYPE_ORDER_STATE_KEY,),
+            ).fetchone()
+            requested = cls._decode_order(row["value"] if row else "[]")
+        normalized = [
+            item for item in dict.fromkeys(str(value) for value in requested)
+            if item in valid_set
+        ]
+        normalized.extend(item for item in valid_ids if item not in normalized)
+        encoded = json.dumps(normalized, ensure_ascii=False)
+        row = connection.execute(
+            "SELECT value FROM app_state WHERE key = ?",
+            (MOD_TYPE_ORDER_STATE_KEY,),
+        ).fetchone()
+        if not row or str(row["value"]) != encoded:
+            cls._write_app_state(connection, MOD_TYPE_ORDER_STATE_KEY, encoded)
+        return normalized, records
+
+    def list_mod_types(self) -> list[dict[str, Any]]:
+        with self._lock, self._connect() as connection:
+            order, records = self._normalize_mod_type_order(connection)
+            by_id = {str(item["id"]): item for item in records}
+            return [by_id[type_id] for type_id in order]
+
+    def reorder_mod_types(self, type_ids: list[str]) -> list[dict[str, Any]]:
+        with self._lock, self._connect() as connection:
+            order, records = self._normalize_mod_type_order(connection, type_ids)
+            by_id = {str(item["id"]): item for item in records}
+            return [by_id[type_id] for type_id in order]
 
     def create_mod_type(self, name: str) -> dict[str, Any]:
         clean_name = self._validate_mod_type_name(name)

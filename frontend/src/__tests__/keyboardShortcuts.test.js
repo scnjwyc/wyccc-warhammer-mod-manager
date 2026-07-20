@@ -19,17 +19,19 @@ describe('keyboard shortcuts', () => {
     expect(normalizeShortcut('Shift')).toBe('')
   })
 
-  it('maps the four requested Shift bindings and ignores unsafe input contexts', () => {
+  it('maps the requested Shift bindings and ignores unsafe input contexts', () => {
     expect(KEYBOARD_SHORTCUTS.map(item => item.id)).toEqual([
       'open-workshop',
       'open-rpfm',
       'toggle-active',
       'launch-game',
+      'manual-type',
     ])
     expect(resolveKeyboardShortcut({ key: 'w', shiftKey: true })).toBe('open-workshop')
     expect(resolveKeyboardShortcut({ key: 'R', shiftKey: true })).toBe('open-rpfm')
     expect(resolveKeyboardShortcut({ key: 'e', shiftKey: true })).toBe('toggle-active')
     expect(resolveKeyboardShortcut({ key: 'Enter', shiftKey: true })).toBe('launch-game')
+    expect(resolveKeyboardShortcut({ key: 'f', shiftKey: true })).toBe('manual-type')
     expect(resolveKeyboardShortcut({ key: 'w', shiftKey: true, ctrlKey: true })).toBe('')
     expect(resolveKeyboardShortcut(
       { key: 'k', ctrlKey: true, altKey: true },
@@ -78,6 +80,18 @@ describe('keyboard shortcuts', () => {
     })).resolves.toEqual({ handled: true })
     expect(disableMany).toHaveBeenCalledWith(['first', 'second'])
     expect(enableMany).not.toHaveBeenCalled()
+  })
+
+  it('executes manual type entry for the current selection', async () => {
+    const manualType = vi.fn().mockResolvedValue()
+
+    await expect(executeKeyboardShortcut('manual-type', {
+      selectedMod: mod('first'),
+      selectedIds: ['first'],
+      getMod: id => mod(id),
+      manualType,
+    })).resolves.toEqual({ handled: true })
+    expect(manualType).toHaveBeenCalledWith(['first'])
   })
 
   it('launches only when the existing launch button would be available and reports unavailable selections', async () => {

@@ -928,7 +928,7 @@ textarea {
 .details-meta dt {
   margin-bottom: 3px;
   color: #b3a59a;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.035em;
   text-shadow: 0 1px 4px #000;
 }
@@ -937,8 +937,8 @@ textarea {
   overflow: hidden;
   margin: 0;
   color: #eee4da;
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   text-shadow: 0 1px 4px #000;
   white-space: nowrap;
@@ -1897,7 +1897,7 @@ textarea {
 .launch-button {
   min-height: 40px;
   padding: 0 17px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -1931,7 +1931,7 @@ textarea {
 .play-mark {
   margin-right: 6px;
   color: #f1c493;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .spinner {
@@ -2227,13 +2227,13 @@ button.context-menu-item {
 }
 
 .settings-tab-copy strong {
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: 0.035em;
 }
 
 .settings-tab-copy small {
   color: #756a64;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .settings-page-scroll {
@@ -3148,7 +3148,7 @@ button.context-menu-item {
 .type-manager-help {
   margin: 0 0 14px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .type-manager-list {
@@ -3160,7 +3160,7 @@ button.context-menu-item {
 .type-manager-row {
   display: grid;
   min-height: 46px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 7px 9px;
@@ -3180,13 +3180,13 @@ button.context-menu-item {
   width: 100%;
   min-width: 0;
   padding: 8px 9px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .type-name-readonly {
   padding-left: 4px;
   color: #c7bab1;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .default-type-badge {
@@ -3194,7 +3194,16 @@ button.context-menu-item {
   border: 1px solid #493c36;
   border-radius: 999px;
   color: #81756f;
-  font-size: 9px;
+  font-size: 11px;
+}
+
+.type-manager-row .secondary-button.compact {
+  font-size: 12px;
+}
+
+.type-manager-order-actions {
+  display: inline-flex;
+  gap: 4px;
 }
 
 .secondary-button.compact {
@@ -3377,6 +3386,15 @@ button.context-menu-item {
 
 .publish-form .field-label {
   margin: 0;
+}
+
+.publish-textarea {
+  resize: vertical;
+}
+
+.publish-textarea::-webkit-resizer {
+  background:
+    linear-gradient(135deg, transparent 0 52%, var(--gold-dark) 52% 60%, transparent 60% 70%, var(--gold-dark) 70% 78%, transparent 78%);
 }
 
 .publish-pack-path {

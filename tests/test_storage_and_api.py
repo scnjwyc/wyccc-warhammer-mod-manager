@@ -21,6 +21,33 @@ from tests.helpers import make_asset, write_pack
 
 
 class StorageContractTests(unittest.TestCase):
+    def test_mod_type_order_is_persisted_for_built_in_and_custom_types(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "state.db"
+            repository = StateRepository(database)
+            custom = repository.create_mod_type("音效")
+            ids = [item["id"] for item in repository.list_mod_types()]
+            requested = [custom["id"], "unknown", "ui", "missing"]
+
+            ordered = repository.reorder_mod_types(requested)
+            self.assertEqual(
+                [item["id"] for item in ordered],
+                [custom["id"], "unknown", "ui", "language", "unit", "feature", "overhaul", "visual"],
+            )
+            self.assertEqual(
+                [item["id"] for item in StateRepository(database).list_mod_types()],
+                [custom["id"], "unknown", "ui", "language", "unit", "feature", "overhaul", "visual"],
+            )
+            self.assertEqual(len(ids), len(ordered))
+
+            created_later = repository.create_mod_type("新类型")
+            self.assertEqual(
+                [item["id"] for item in repository.list_mod_types()][-1],
+                created_later["id"],
+            )
+            repository.delete_mod_type(custom["id"])
+            self.assertNotIn(custom["id"], [item["id"] for item in repository.list_mod_types()])
+
     def test_schema_one_database_migrates_user_intent_columns(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "state.db"
@@ -1521,6 +1548,15 @@ class ApiContractTests(unittest.TestCase):
                 custom_type = api.call("create_mod_type", ["音效"])
                 self.assertTrue(custom_type["ok"])
                 custom_type_id = custom_type["data"]["item"]["id"]
+                reordered_types = api.call(
+                    "reorder_mod_types",
+                    [[custom_type_id, "unknown", "ui"]],
+                )
+                self.assertTrue(reordered_types["ok"])
+                self.assertEqual(
+                    [item["id"] for item in reordered_types["data"]["items"][:3]],
+                    [custom_type_id, "unknown", "ui"],
+                )
                 typed = api.call("set_mod_types", [mod["id"], [custom_type_id, "ui"]])
                 self.assertEqual(typed["data"]["mod_type"], custom_type_id)
                 self.assertEqual(typed["data"]["mod_types"], [custom_type_id, "ui"])

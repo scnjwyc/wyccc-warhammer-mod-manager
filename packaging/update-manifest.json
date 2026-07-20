@@ -1,25 +1,47 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.8.6",
-  "published_at": "2026-07-19",
+  "version": "0.8.7",
+  "published_at": "2026-07-20",
   "download": {
-    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.6/Wyccc.s.Mod.Manager.exe",
+    "url": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.8.7/Wyccc.s.Mod.Manager.exe",
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "59931852b53abafe8ad05c1ba4d148aba95bd595e56d63e9f769f853a33ce541",
-    "size": 61986675
+    "sha256": "0dfc9eb4ad7afe018267b09b2a977fe3fefe43321bc1487a74b9c3de500a3306",
+    "size": 61990626
   },
   "changelog": [
     {
-      "title": "修复",
+      "title": "\u65b0\u589e",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "\u7c7b\u578b\u7ba1\u7406\u652f\u6301\u8c03\u6574\u5185\u7f6e\u548c\u81ea\u5b9a\u4e49\u7c7b\u578b\u7684\u663e\u793a\u987a\u5e8f\uff0c\u5e76\u4f1a\u6301\u4e45\u4fdd\u5b58\u3002"
+        },
+        {
+          "type": "feature",
+          "text": "\u65b0\u589e\u6309\u7c7b\u578b\u6392\u5e8f\uff0c\u4f7f\u7528\u5df2\u914d\u7f6e\u7684\u7c7b\u578b\u987a\u5e8f\u6392\u5217 MOD\u3002"
+        },
+        {
+          "type": "feature",
+          "text": "\u53f3\u952e\u83dc\u5355\u65b0\u589e\u201c\u624b\u52a8\u8f93\u5165\u201d\u7c7b\u578b\uff0c\u5e76\u652f\u6301 Shift+F \u5feb\u6377\u952e\u6279\u91cf\u5e94\u7528\u7c7b\u578b\u3002"
+        }
+      ]
+    },
+    {
+      "title": "\u8c03\u6574",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "\u653e\u5927\u8be6\u60c5\u4fe1\u606f\u3001\u5e95\u90e8\u64cd\u4f5c\u6309\u94ae\u3001\u7c7b\u578b\u7ba1\u7406\u548c\u8bbe\u7f6e\u9875\u9762\u7b49\u533a\u57df\u7684\u6587\u5b57\uff0c\u63d0\u9ad8\u53ef\u8bfb\u6027\u3002"
+        }
+      ]
+    },
+    {
+      "title": "\u4fee\u590d",
       "changes": [
         {
           "type": "fix",
-          "text": "修复某些情况下依赖检测失效的问题"
-        },
-        {
-          "type": "fix",
-          "text": "修复设置页面 UI 存在的问题。"
+          "text": "\u4fee\u590d\u53d1\u5e03\u66f4\u65b0\u7a97\u53e3\u7684\u5173\u95ed\u6309\u94ae\u548c\u6587\u672c\u6846\u5927\u5c0f\u8c03\u6574\u63a7\u4ef6\u6837\u5f0f\u4e0d\u4e00\u81f4\u7684\u95ee\u9898\u3002"
         }
       ]
     }

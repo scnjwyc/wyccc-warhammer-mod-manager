@@ -132,8 +132,13 @@ describe('deliberately small product scope', () => {
   it('uses a larger readable type scale for settings tabs and changelog entries', () => {
     const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
 
-    expect(stylesSource).toMatch(/\.settings-tab-copy strong\s*\{[^}]*font-size:\s*15px/s)
-    expect(stylesSource).toMatch(/\.settings-tab-copy small\s*\{[^}]*font-size:\s*12px/s)
+    expect(stylesSource).toMatch(/\.settings-tab-copy strong\s*\{[^}]*font-size:\s*16px/s)
+    expect(stylesSource).toMatch(/\.settings-tab-copy small\s*\{[^}]*font-size:\s*13px/s)
+    expect(stylesSource).toMatch(/\.details-meta dt\s*\{[^}]*font-size:\s*11px/s)
+    expect(stylesSource).toMatch(/\.details-meta dd\s*\{[^}]*font-size:\s*12px/s)
+    expect(stylesSource).toMatch(/\.continue-button,\s*\n\.launch-button\s*\{[^}]*font-size:\s*14px/s)
+    expect(stylesSource).toMatch(/\.type-manager-help\s*\{[^}]*font-size:\s*13px/s)
+    expect(stylesSource).toMatch(/\.type-name-readonly\s*\{[^}]*font-size:\s*14px/s)
     expect(stylesSource).toMatch(/\.release-entry > header strong\s*\{[^}]*font-size:\s*19px/s)
     expect(stylesSource).toMatch(/\.release-entry > header time\s*\{[^}]*font-size:\s*13px/s)
     expect(stylesSource).toMatch(/\.change-entry h3\s*\{[^}]*font-size:\s*15px/s)

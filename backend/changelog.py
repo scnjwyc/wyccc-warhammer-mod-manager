@@ -9,6 +9,28 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.8.7",
+        "date": "2026-07-20",
+        "entries": (
+            (
+                "v087_added_title",
+                (
+                    ("feature", "v087_type_order"),
+                    ("feature", "v087_type_sort"),
+                    ("feature", "v087_manual_type"),
+                ),
+            ),
+            (
+                "v087_adjusted_title",
+                (("improvement", "v087_readability"),),
+            ),
+            (
+                "v087_fixed_title",
+                (("fix", "v087_publish_modal_ui"),),
+            ),
+        ),
+    },
+    {
         "version": "0.8.6",
         "date": "2026-07-19",
         "entries": (
@@ -279,6 +301,14 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v087_added_title": "新增",
+        "v087_type_order": "类型管理支持调整内置和自定义类型的显示顺序，并会持久保存。",
+        "v087_type_sort": "新增按类型排序，使用已配置的类型顺序排列 MOD。",
+        "v087_manual_type": "右键菜单新增“手动输入”类型，并支持 Shift+F 快捷键批量应用类型。",
+        "v087_adjusted_title": "调整",
+        "v087_readability": "放大详情信息、底部操作按钮、类型管理和设置页面等区域的文字，提高可读性。",
+        "v087_fixed_title": "修复",
+        "v087_publish_modal_ui": "修复发布更新窗口的关闭按钮和文本框大小调整控件样式不一致的问题。",
         "v086_fixed_title": "修复",
         "v086_playset_dependencies": "修复某些情况下依赖检测失效的问题",
         "v086_settings_page_ui": "修复设置页面 UI 存在的问题。",
@@ -402,6 +432,14 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v087_added_title": "Added",
+        "v087_type_order": "Type management now supports reordering built-in and custom types, with the order persisted.",
+        "v087_type_sort": "Added type-based MOD sorting that follows the configured type order.",
+        "v087_manual_type": "Added Manual input to the type context menu with Shift+F for applying a type to selected MODs.",
+        "v087_adjusted_title": "Adjusted",
+        "v087_readability": "Enlarged text in MOD details, bottom actions, type management, and Settings for better readability.",
+        "v087_fixed_title": "Fixed",
+        "v087_publish_modal_ui": "Fixed inconsistent styling for the close button and textarea resize control in the Workshop publish/update window.",
         "v086_fixed_title": "Fixed",
         "v086_playset_dependencies": "Fixed missing-dependency warnings when a required MOD is installed but not enabled in the current playset.",
         "v086_settings_page_ui": "Fixed UI issues on the Settings page.",
@@ -525,6 +563,14 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v087_added_title": "추가",
+        "v087_type_order": "내장 유형과 사용자 지정 유형의 순서를 조정하고 저장할 수 있습니다.",
+        "v087_type_sort": "설정된 유형 순서를 따르는 유형별 MOD 정렬을 추가했습니다.",
+        "v087_manual_type": "유형 컨텍스트 메뉴에 선택한 MOD에 유형을 적용하는 수동 입력과 Shift+F 단축키를 추가했습니다.",
+        "v087_adjusted_title": "조정",
+        "v087_readability": "MOD 세부 정보, 하단 작업 버튼, 유형 관리 및 설정 페이지의 글자를 키워 가독성을 높였습니다.",
+        "v087_fixed_title": "수정",
+        "v087_publish_modal_ui": "창작마당 게시/업데이트 창의 닫기 버튼과 텍스트 영역 크기 조절 컨트롤 스타일이 일치하지 않던 문제를 수정했습니다.",
         "v086_fixed_title": "수정",
         "v086_playset_dependencies": "필수 MOD가 설치되어 있지만 현재 플레이세트에서 활성화되지 않은 경우 누락된 종속성 경고가 표시되지 않던 문제를 수정했습니다.",
         "v086_settings_page_ui": "설정 페이지의 UI 문제를 수정했습니다.",
@@ -648,6 +694,14 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v087_added_title": "Добавлено",
+        "v087_type_order": "Добавлена настройка и сохранение порядка встроенных и пользовательских типов.",
+        "v087_type_sort": "Добавлена сортировка MOD по настроенному порядку типов.",
+        "v087_manual_type": "В контекстное меню типов добавлен ручной ввод с сочетанием Shift+F для применения типа к выбранным MOD.",
+        "v087_adjusted_title": "Изменено",
+        "v087_readability": "Увеличен размер текста в сведениях о MOD, нижних кнопках, управлении типами и настройках.",
+        "v087_fixed_title": "Исправлено",
+        "v087_publish_modal_ui": "Исправлен разный стиль кнопки закрытия и элемента изменения размера текста в окне публикации и обновления Workshop.",
         "v086_fixed_title": "Исправлено",
         "v086_playset_dependencies": "Исправлено отсутствие предупреждения о зависимости, когда требуемый MOD установлен, но не включён в текущем наборе.",
         "v086_settings_page_ui": "Исправлены проблемы интерфейса на странице настроек.",
@@ -771,6 +825,14 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v087_added_title": "追加",
+        "v087_type_order": "組み込みタイプとカスタムタイプの順序を変更して保存できるようにしました。",
+        "v087_type_sort": "設定したタイプ順に MOD を並べ替える機能を追加しました。",
+        "v087_manual_type": "タイプのコンテキストメニューに手動入力を追加し、Shift+F で選択した MOD に適用できるようにしました。",
+        "v087_adjusted_title": "調整",
+        "v087_readability": "MOD 詳細、下部操作ボタン、タイプ管理、設定画面などの文字を大きくして可読性を高めました。",
+        "v087_fixed_title": "修正",
+        "v087_publish_modal_ui": "Workshop の公開・更新画面で、閉じるボタンとテキストエリアのサイズ変更コントロールのスタイルが一致しない問題を修正しました。",
         "v086_fixed_title": "修正",
         "v086_playset_dependencies": "必要な MOD がインストール済みでも現在のプレイセットで有効化されていない場合に、依存関係不足の警告が表示されない問題を修正しました。",
         "v086_settings_page_ui": "設定ページの UI の問題を修正しました。",
@@ -894,6 +956,14 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v087_added_title": "Añadido",
+        "v087_type_order": "La gestión de tipos ahora permite reordenar y guardar los tipos integrados y personalizados.",
+        "v087_type_sort": "Se añadió la clasificación de MOD por el orden configurado de tipos.",
+        "v087_manual_type": "Se añadió Entrada manual al menú contextual de tipos, con Shift+F para aplicarla a los MOD seleccionados.",
+        "v087_adjusted_title": "Ajustado",
+        "v087_readability": "Se amplió el texto de los detalles del MOD, los botones inferiores, la gestión de tipos y Configuración.",
+        "v087_fixed_title": "Corregido",
+        "v087_publish_modal_ui": "Se corrigieron los estilos incoherentes del botón de cierre y del control de tamaño de texto en la ventana de publicación/actualización del Taller.",
         "v086_fixed_title": "Corregido",
         "v086_playset_dependencies": "Se corrigió la falta de aviso de dependencia cuando el MOD requerido está instalado pero no está habilitado en el conjunto actual.",
         "v086_settings_page_ui": "Se corrigieron problemas de interfaz en la página de configuración.",

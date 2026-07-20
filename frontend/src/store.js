@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.8.6',
+    appVersion: '0.8.7',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -118,6 +118,7 @@ export const useAppStore = defineStore('app', {
       Boolean(state.gameDataFeatures?.[featureKey]?.subscribed)
     ),
     modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
+    modTypeRanks: (state) => Object.fromEntries(state.modTypes.map((item, index) => [item.id, index])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
     warningItems(state) {
       const active = new Set(state.activeIds)
@@ -172,15 +173,15 @@ export const useAppStore = defineStore('app', {
         .map(id => this.modMap.get(id))
         .filter(Boolean)
         .filter(mod => this.showHidden || !mod.hidden)
-      return sortDisplayedMods(mods, this.sortMode, this.sortDescending)
+      return sortDisplayedMods(mods, this.sortMode, this.sortDescending, this.modTypeRanks)
     },
     inactiveDisplayMods() {
       const active = new Set(this.activeIds)
       const mods = this.mods
         .filter(mod => !active.has(mod.id))
         .filter(mod => this.showHidden || !mod.hidden)
-      const sorted = sortDisplayedMods(mods, this.sortMode, this.sortDescending)
-      if (!this.inactiveOrderCustomized) return sorted
+      const sorted = sortDisplayedMods(mods, this.sortMode, this.sortDescending, this.modTypeRanks)
+      if (this.sortMode !== 'priority' || !this.inactiveOrderCustomized) return sorted
       const rank = new Map(this.inactiveOrderIds.map((id, index) => [id, index]))
       return [...mods].sort((left, right) => (
         (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
@@ -1041,6 +1042,13 @@ export const useAppStore = defineStore('app', {
     },
     setSortDescending(descending) {
       this.sortDescending = Boolean(descending)
+    },
+    async reorderModTypes(typeIds) {
+      return this.withBusy(t('busy.editType'), async () => {
+        const data = await invoke('reorder_mod_types', typeIds)
+        this.modTypes = data.items || []
+        return this.modTypes
+      })
     },
     async setModType(modId, typeId) {
       return this.withBusy(t('busy.editType'), async () => {

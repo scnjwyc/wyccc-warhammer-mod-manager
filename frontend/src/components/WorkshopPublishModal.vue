@@ -127,7 +127,7 @@ const submit = () => {
           <span class="eyebrow">{{ t('publish.eyebrow') }}</span>
           <h2>{{ mode === 'upload' ? t('publish.upload') : t('publish.update') }}</h2>
         </div>
-        <button type="button" class="close-button" :disabled="!!busy" @click="emit('close')">×</button>
+        <button type="button" class="icon-button" :disabled="!!busy" @click="emit('close')">×</button>
       </header>
 
       <div class="modal-body publish-form">
@@ -155,11 +155,17 @@ const submit = () => {
         </label>
         <label class="field-label">
           <span>{{ t('publish.description') }}</span>
-          <textarea v-model="draft.description" rows="6" maxlength="8000" :disabled="languageLoading"></textarea>
+          <textarea
+            v-model="draft.description"
+            class="publish-textarea"
+            rows="6"
+            maxlength="8000"
+            :disabled="languageLoading"
+          ></textarea>
         </label>
         <label v-if="mode === 'update'" class="field-label">
           <span>{{ t('publish.changelog') }}</span>
-          <textarea v-model="draft.change_note" rows="3" maxlength="8000"></textarea>
+          <textarea v-model="draft.change_note" class="publish-textarea" rows="3" maxlength="8000"></textarea>
         </label>
         <div class="publish-grid">
           <div class="field-label">
