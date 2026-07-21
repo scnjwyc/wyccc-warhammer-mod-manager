@@ -25,6 +25,10 @@ class UpdateServiceTests(unittest.TestCase):
             "published_at": "2026-07-15",
             "download": {
                 "url": "https://downloads.example.test/WycccModManager.exe",
+                "mirrors": {
+                    "github": "https://github.com/example/WycccModManager/releases/download/0.9.1/WycccModManager.exe",
+                    "gitee": "https://gitee.com/example/WycccModManager/releases/download/0.9.1/WycccModManager.exe",
+                },
                 "sha256": "1" * 64,
                 "size": 1234,
             },
@@ -50,7 +54,7 @@ class UpdateServiceTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "app": "Wyccc's Mod Manager",
-                        "version": "0.8.9",
+                        "version": "0.9.1",
                         "published_at": "2026-07-15",
                         "download": {
                             "url": executable.name,
@@ -77,12 +81,12 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["entries"][0]["changes"][0]["type"], "feature")
             self.assertGreater(settings.get()["last_update_check_at"], 0)
 
-            downloaded = service.download("0.8.9")
+            downloaded = service.download("0.9.1")
             self.assertEqual(downloaded["status"], "ready")
             self.assertTrue(Path(downloaded["local_path"]).is_file())
             self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
 
-            service.ignore("0.8.9")
+            service.ignore("0.9.1")
             ignored = service.check(manual=False)
             self.assertFalse(ignored["has_update"])
             self.assertTrue(ignored["ignored"])
@@ -98,7 +102,7 @@ class UpdateServiceTests(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "version": "0.8.9",
+                        "version": "0.9.1",
                         "download_url": executable.name,
                         "sha256": "0" * 64,
                         "size": executable.stat().st_size,
@@ -143,6 +147,7 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(calls, [GITEE_UPDATE_MANIFEST_URL, GITHUB_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
             self.assertEqual(checked["sources_checked"], ["gitee", "github"])
+            self.assertTrue(service._last_info["download_url"].startswith("https://gitee.com/"))
             self.assertFalse(checked["has_update"])
 
     def test_non_chinese_checks_github_first_but_uses_a_newer_gitee_release(self) -> None:
@@ -154,7 +159,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 calls.append(url)
-                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.8.9"
+                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "0.9.1"
                 return self._manifest(version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
@@ -162,8 +167,20 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertEqual(calls, [GITHUB_UPDATE_MANIFEST_URL, GITEE_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(checked["version"], "0.8.9")
+            self.assertEqual(checked["version"], "0.9.1")
+            self.assertTrue(service._last_info["download_url"].startswith("https://github.com/"))
             self.assertTrue(checked["has_update"])
+
+    def test_chinese_update_rejects_a_manifest_without_a_gitee_executable(self) -> None:
+        manifest = self._manifest("0.9.1")
+        manifest["download"].pop("mirrors")
+
+        with self.assertRaisesRegex(ValueError, "Gitee Release"):
+            UpdateService._parse_manifest(
+                manifest,
+                GITEE_UPDATE_MANIFEST_URL,
+                preferred_download_source="gitee",
+            )
 
     def test_repository_check_falls_back_when_the_preferred_source_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -174,7 +191,7 @@ class UpdateServiceTests(unittest.TestCase):
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 if url == GITEE_UPDATE_MANIFEST_URL:
                     raise OSError("Gitee unavailable")
-                return self._manifest("0.8.9"), url
+                return self._manifest("0.9.1"), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
                 checked = service.check(manual=True)

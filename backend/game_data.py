@@ -309,9 +309,38 @@ def _entry_table_name(name: str) -> tuple[str, str] | None:
     return matched, parts[2]
 
 
+def _is_main_unit_compatibility_placeholder(
+    internal_name: str,
+    row: ParsedDbRow,
+) -> bool:
+    """Identify low-priority foreign-key stubs that must not enter the overlay."""
+    values = row.values
+    return (
+        internal_name.casefold().startswith("zzz_")
+        and str(values.get("caste") or "").casefold() == "melee_infantry"
+        and str(values.get("land_unit") or "")
+        == "wh2_dlc17_emp_inf_prisoners_0"
+        and not bool(values.get("in_encyclopedia"))
+        and not bool(values.get("is_monstrous"))
+        and int(values.get("campaign_cap") or 0) == 1
+        and int(values.get("multiplayer_cap") or 0) == 1
+        and int(values.get("create_time") or 0) >= 99
+        and all(
+            int(values.get(field_name) or 0) >= 99_999
+            for field_name in (
+                "multiplayer_cost",
+                "recruitment_cost",
+                "upkeep_cost",
+            )
+        )
+    )
+
+
 def _collect_effective_rows(
     sources: Sequence[DbSource],
     needed_tables: set[str],
+    *,
+    skip_main_unit_compatibility_placeholders: bool = False,
 ) -> dict[str, dict[str, _Candidate]]:
     effective = {table_name: {} for table_name in needed_tables}
     for source_rank, source in enumerate(sources):
@@ -326,6 +355,12 @@ def _collect_effective_rows(
                 raise ValueError(f"读取 {source.name} 中的 {entry.name} 失败：{exc}") from exc
             key_field = TABLE_KEY_FIELDS[table_name]
             for row_rank, row in enumerate(parsed.rows):
+                if (
+                    skip_main_unit_compatibility_placeholders
+                    and table_name == "main_units_tables"
+                    and _is_main_unit_compatibility_placeholder(internal_name, row)
+                ):
+                    continue
                 key = str(row.values.get(key_field) or "")
                 if not key:
                     raise ValueError(f"{source.name} 中的 {entry.name} 存在空主键")
@@ -563,7 +598,13 @@ def build_game_data_entries(
     if not needed_tables:
         return GameDataBuildResult((), stats)
 
-    effective = _collect_effective_rows(sources, needed_tables)
+    effective = _collect_effective_rows(
+        sources,
+        needed_tables,
+        skip_main_unit_compatibility_placeholders=(
+            "main_units_tables" in output_tables
+        ),
+    )
     for table_name in needed_tables:
         if table_name == "_kv_rules_tables":
             continue

@@ -1519,21 +1519,59 @@ class API:
         self._open_path(Path(paths.game_path))
         return {"opened": True}
 
-    def _open_workshop_page(self, mod_id: str) -> dict[str, bool]:
+    def _open_workshop_page(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_asset(mod_id)
         if not asset.workshop_id:
             raise ValueError("该 MOD 不是 Workshop 项目")
-        webbrowser.open(
-            f"https://steamcommunity.com/sharedfiles/filedetails/?id={asset.workshop_id}"
-        )
-        return {"opened": True}
+        return self._open_workshop_page_by_id(asset.workshop_id, "browser")
 
-    def _open_workshop_client(self, mod_id: str) -> dict[str, bool]:
+    def _open_workshop_client(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_asset(mod_id)
         if not asset.workshop_id:
             raise ValueError("该 MOD 不是 Workshop 项目")
-        self._open_uri(f"steam://url/CommunityFilePage/{asset.workshop_id}")
-        return {"opened": True}
+        return self._open_workshop_page_by_id(asset.workshop_id, "client")
+
+    def _open_workshop_page_by_id(
+        self,
+        workshop_id: str,
+        target: str,
+        *,
+        record_preference: bool = True,
+    ) -> dict[str, Any]:
+        normalized_id = str(workshop_id or "").strip()
+        if not normalized_id.isdigit():
+            raise ValueError("无效的 Workshop ID")
+        if target == "browser":
+            webbrowser.open(
+                f"https://steamcommunity.com/sharedfiles/filedetails/?id={normalized_id}"
+            )
+        elif target == "client":
+            self._open_uri(f"steam://url/CommunityFilePage/{normalized_id}")
+        else:
+            raise ValueError("无效的 Workshop 页面打开方式")
+        if record_preference:
+            self._record_workshop_page_open_preference(target)
+        return {"opened": True, "target": target}
+
+    def _record_workshop_page_open_preference(self, target: str) -> None:
+        settings = self.settings_service.get()
+        raw_counts = settings.get("workshop_page_open_counts")
+        counts = dict(raw_counts) if isinstance(raw_counts, dict) else {}
+        counts[target] = int(counts.get(target) or 0) + 1
+        self.settings_service.save({"workshop_page_open_counts": counts})
+
+    def _preferred_workshop_page_target(self) -> str:
+        raw_counts = self.settings_service.get().get("workshop_page_open_counts")
+        counts = raw_counts if isinstance(raw_counts, dict) else {}
+        try:
+            browser_count = int(counts.get("browser") or 0)
+        except (TypeError, ValueError):
+            browser_count = 0
+        try:
+            client_count = int(counts.get("client") or 0)
+        except (TypeError, ValueError):
+            client_count = 0
+        return "browser" if browser_count > client_count else "client"
 
     @staticmethod
     def _open_external_url(url: str) -> dict[str, Any]:
@@ -1786,7 +1824,16 @@ class API:
         )
         asset.creator_id = str(result.get("owner_id") or asset.creator_id)
         asset.author = str(result.get("owner_name") or asset.author)
-        return {"result": result, "mod": asset.to_dict()}
+        page_opened: dict[str, Any] | None = None
+        try:
+            page_opened = self._open_workshop_page_by_id(
+                published_id,
+                self._preferred_workshop_page_target(),
+                record_preference=False,
+            )
+        except Exception as exc:
+            logger.warning("Could not open published Workshop item %s: %s", published_id, exc)
+        return {"result": result, "mod": asset.to_dict(), "page_opened": page_opened}
 
     def _run_workshop_operation(self, operation: str, workshop_id: str) -> dict[str, Any]:
         try:

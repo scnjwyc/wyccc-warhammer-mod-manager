@@ -519,6 +519,8 @@ const entries = {
 
   'toast.saveModsEnabled': ['已启用存档中的 {count} 个 MOD', 'Enabled {count} MODs from the save', '저장의 MOD {count}개를 활성화했습니다', 'Включено MOD из сохранения: {count}', 'セーブ内の MOD を {count} 件有効にしました'],
   'toast.saveModsEnabledMissing': ['已启用 {enabled} 个 MOD，另有 {missing} 个本机缺失', 'Enabled {enabled} MODs; {missing} are missing locally', 'MOD {enabled}개를 활성화했으며 {missing}개는 로컬에 없습니다', 'Включено MOD: {enabled}; отсутствуют локально: {missing}', '{enabled} 件を有効化し、{missing} 件はローカルにありません'],
+  'toast.savePlaysetCreated': ['已创建播放集“{name}”，并按存档顺序启用 {count} 个 MOD', 'Created playset “{name}” with {count} MODs in save order', '플레이 세트 “{name}”을 만들고 저장 순서대로 MOD {count}개를 활성화했습니다', 'Создан набор «{name}»: {count} MOD включены в порядке сохранения', 'プレイセット「{name}」を作成し、セーブ順に MOD を {count} 件有効化しました'],
+  'toast.savePlaysetCreatedMissing': ['已创建播放集“{name}”，并按存档顺序启用 {enabled} 个 MOD；另有 {missing} 个本机缺失', 'Created playset “{name}” with {enabled} MODs in save order; {missing} are missing locally', '플레이 세트 “{name}”을 만들고 저장 순서대로 MOD {enabled}개를 활성화했습니다. {missing}개는 로컬에 없습니다', 'Создан набор «{name}»: {enabled} MOD включены в порядке сохранения; локально отсутствуют: {missing}', 'プレイセット「{name}」を作成し、セーブ順に {enabled} 件を有効化しました。{missing} 件はローカルにありません'],
   'toast.officialImported': ['已导入到播放集“{name}”', 'Imported into playset “{name}”', '플레이 세트 “{name}”에 가져왔습니다', 'Импортировано в набор «{name}»', 'プレイセット「{name}」にインポートしました'],
   'toast.officialPending': ['配置已导入，等待下载 {count} 个工坊项目', 'Profile imported; waiting for {count} Workshop items', '프로필을 가져왔으며 창작마당 항목 {count}개를 기다리는 중입니다', 'Профиль импортирован; ожидается загрузка элементов: {count}', 'プロファイルをインポートし、{count} 件のダウンロードを待機しています'],
   'toast.modPathsCopied': ['已复制 {count} 个 MOD 路径', 'Copied {count} MOD paths', 'MOD 경로 {count}개를 복사했습니다', 'Скопировано путей MOD: {count}', 'MOD パスを {count} 件コピーしました'],
@@ -1060,6 +1062,8 @@ const spanishEntries = {
   "busy.alreadyRunning": "Ya en ejecución: {task}",
   "toast.saveModsEnabled": "Habilitado {count} MODs desde el guardado",
   "toast.saveModsEnabledMissing": "Habilitado {enabled} MODs; {missing} faltan localmente",
+  "toast.savePlaysetCreated": "Se creó el conjunto “{name}” con {count} MODs en el orden de la partida guardada",
+  "toast.savePlaysetCreatedMissing": "Se creó el conjunto “{name}” con {enabled} MODs en el orden de la partida guardada; faltan {missing} localmente",
   "toast.officialImported": "Importado al juego “{name}”",
   "toast.officialPending": "Perfil importado; esperando {count} Artículos del taller",
   "toast.modPathsCopied": "Copiado {count} MOD rutas",
@@ -1229,6 +1233,8 @@ Object.assign(spanishEntries, {
   'saves.compareSaveOnly': 'En la partida, no activado ahora',
   'saves.compareCurrentOnly': 'Activado ahora, no incluido en la partida',
   'saves.none': 'No se encontraron partidas guardadas de campaña',
+  'toast.savePlaysetCreated': 'Se creó el conjunto “{name}” con {count} MODs en el orden de la partida guardada',
+  'toast.savePlaysetCreatedMissing': 'Se creó el conjunto “{name}” con {enabled} MODs en el orden de la partida guardada; faltan {missing} localmente',
 
   'warnings.aria': 'Advertencias de MOD',
   'warnings.eyebrow': 'ADVERTENCIAS DE MOD',

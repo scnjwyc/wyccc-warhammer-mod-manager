@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.8.8',
+    appVersion: '0.9.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -824,7 +824,7 @@ export const useAppStore = defineStore('app', {
         shared: saveEntries.filter(item => activeKeys.has(item.packName.toLocaleLowerCase())),
       }
     },
-    async enableModsFromSave(saveName) {
+    async createPlaysetFromSave(saveName) {
       const data = await this.readSaveMods(saveName)
       const byPackName = this.saveModLookup()
       const enabledIds = []
@@ -834,16 +834,39 @@ export const useAppStore = defineStore('app', {
         if (mod) enabledIds.push(mod.id)
         else missingPackNames.push(packName)
       }
-      this.replaceActiveIds(enabledIds)
-      this.dirty = true
-      this.recordCurrentPlaysetChange()
-      this.notify(
-        missingPackNames.length
-          ? t('toast.saveModsEnabledMissing', { enabled: enabledIds.length, missing: missingPackNames.length })
-          : t('toast.saveModsEnabled', { count: enabledIds.length }),
-        missingPackNames.length ? 'warning' : 'success',
+      const baseName = `存档${String(data.save?.name || saveName).trim()}`
+      const existingNames = new Set(
+        this.playsets.map(item => String(item.name || '').trim().toLocaleLowerCase()),
       )
-      return { save: data.save, enabledIds, missingPackNames }
+      let playsetName = baseName
+      let suffix = 2
+      while (existingNames.has(playsetName.toLocaleLowerCase())) {
+        playsetName = `${baseName} (${suffix})`
+        suffix += 1
+      }
+
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('busy.createPlayset'), async () => {
+        const created = await invoke('create_playset', playsetName, enabledIds)
+        this.applyPlaysetPayload(created)
+        this.dirty = true
+        await this.recordCurrentPlaysetChange()
+        const playset = created.current_playset
+        this.notify(
+          missingPackNames.length
+            ? t('toast.savePlaysetCreatedMissing', {
+              name: localizedPlaysetName(playset),
+              enabled: enabledIds.length,
+              missing: missingPackNames.length,
+            })
+            : t('toast.savePlaysetCreated', {
+              name: localizedPlaysetName(playset),
+              count: enabledIds.length,
+            }),
+          missingPackNames.length ? 'warning' : 'success',
+        )
+        return { save: data.save, playset, enabledIds, missingPackNames }
+      })
     },
     async launchSave(saveName) {
       await this.flushPlaysetUpdates()
@@ -1411,7 +1434,19 @@ export const useAppStore = defineStore('app', {
       this.liveModRefreshing = true
       try {
         await this.flushPlaysetUpdates()
-        const data = await invoke('scan_mods', false)
+        const previousWorkshopIds = new Set(
+          this.mods
+            .map(mod => String(mod?.workshop_id || '').trim())
+            .filter(Boolean),
+        )
+        let data = await invoke('scan_mods', false)
+        const hasNewWorkshopMod = (data.mods || []).some(mod => {
+          const workshopId = String(mod?.workshop_id || '').trim()
+          return mod?.source === 'workshop' && workshopId && !previousWorkshopIds.has(workshopId)
+        })
+        if (hasNewWorkshopMod && this.settings.fetch_workshop_metadata !== false) {
+          data = await invoke('scan_mods', true)
+        }
         const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
         const previousActiveIds = [...this.activeIds]
         await this.applyExternalScan(data, { forcePlaysetOrder })

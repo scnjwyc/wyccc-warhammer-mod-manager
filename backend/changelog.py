@@ -9,6 +9,29 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.0",
+        "date": "2026-07-21",
+        "entries": (
+            (
+                "v090_added_title",
+                (
+                    ("feature", "v090_open_published_workshop_page"),
+                ),
+            ),
+            (
+                "v090_adjusted_title",
+                (("improvement", "v090_save_playset"),),
+            ),
+            (
+                "v090_fixed_title",
+                (
+                    ("fix", "v090_auto_update"),
+                    ("fix", "v090_fully_custom_garrison"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.8.8",
         "date": "2026-07-21",
         "entries": (
@@ -315,6 +338,13 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v090_added_title": "新增",
+        "v090_open_published_workshop_page": "发布或更新 MOD 后，自动打开对应的创意工坊页面。",
+        "v090_adjusted_title": "调整",
+        "v090_save_playset": "从存档中加载 MOD 时，会新建“存档+存档名”播放集，并严格保留存档中的 MOD 排序。",
+        "v090_fixed_title": "修复",
+        "v090_auto_update": "修复自动更新失败的问题。",
+        "v090_fully_custom_garrison": "单位规模修改现已兼容 Fully Custom Garrison 及其子 MOD。",
         "v088_added_title": "新增",
         "v088_dependency_action": "缺失依赖警告界面现在可以直接订阅并启用缺失的依赖。",
         "v088_adjusted_title": "调整",
@@ -450,6 +480,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v090_added_title": "Added",
+        "v090_open_published_workshop_page": "Publishing or updating a MOD now opens its Workshop page automatically.",
+        "v090_adjusted_title": "Adjusted",
+        "v090_save_playset": "Loading MODs from a save now creates a Save + save-name playset and preserves the save's MOD order exactly.",
+        "v090_fixed_title": "Fixed",
+        "v090_auto_update": "Fixed automatic update failures.",
+        "v090_fully_custom_garrison": "Unit scale modification now supports Fully Custom Garrison and its submods.",
         "v088_added_title": "Added",
         "v088_dependency_action": "The missing-dependency warning can now subscribe to and enable missing dependencies directly.",
         "v088_adjusted_title": "Adjusted",
@@ -585,6 +622,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v090_added_title": "추가",
+        "v090_open_published_workshop_page": "MOD를 게시하거나 업데이트하면 해당 창작마당 페이지가 자동으로 열립니다.",
+        "v090_adjusted_title": "조정",
+        "v090_save_playset": "저장 파일에서 MOD를 불러오면 ‘저장+저장 이름’ 플레이 세트를 새로 만들고 저장 파일의 MOD 순서를 그대로 유지합니다.",
+        "v090_fixed_title": "수정",
+        "v090_auto_update": "자동 업데이트 실패 문제를 수정했습니다.",
+        "v090_fully_custom_garrison": "유닛 규모 변경이 Fully Custom Garrison 및 하위 MOD와 호환됩니다.",
         "v088_added_title": "추가",
         "v088_dependency_action": "누락된 종속성 경고 화면에서 누락된 종속성을 바로 구독하고 활성화할 수 있습니다.",
         "v088_adjusted_title": "조정",
@@ -720,6 +764,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v090_added_title": "Добавлено",
+        "v090_open_published_workshop_page": "После публикации или обновления MOD его страница Мастерской открывается автоматически.",
+        "v090_adjusted_title": "Изменено",
+        "v090_save_playset": "Загрузка MOD из сохранения теперь создает новый набор «Сохранение + имя» и точно сохраняет порядок MOD из сохранения.",
+        "v090_fixed_title": "Исправлено",
+        "v090_auto_update": "Исправлены ошибки автоматического обновления.",
+        "v090_fully_custom_garrison": "Изменение размера отрядов теперь совместимо с Fully Custom Garrison и его подмодами.",
         "v088_added_title": "Добавлено",
         "v088_dependency_action": "На экране предупреждений о недостающих зависимостях теперь можно сразу подписаться на них и включить их.",
         "v088_adjusted_title": "Изменено",
@@ -855,6 +906,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v090_added_title": "追加",
+        "v090_open_published_workshop_page": "MOD の公開または更新後、対応するワークショップページを自動で開くようになりました。",
+        "v090_adjusted_title": "調整",
+        "v090_save_playset": "セーブから MOD を読み込むと、「セーブ+セーブ名」の新しいプレイセットを作成し、セーブ内の MOD 順を厳密に保持します。",
+        "v090_fixed_title": "修正",
+        "v090_auto_update": "自動更新の失敗を修正しました。",
+        "v090_fully_custom_garrison": "ユニット規模の変更が Fully Custom Garrison とそのサブMODに対応しました。",
         "v088_added_title": "追加",
         "v088_dependency_action": "不足している依存関係の警告画面から、依存関係を直接購読して有効化できるようにしました。",
         "v088_adjusted_title": "調整",
@@ -990,6 +1048,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v090_added_title": "Añadido",
+        "v090_open_published_workshop_page": "Al publicar o actualizar un MOD, su página del Taller se abre automáticamente.",
+        "v090_adjusted_title": "Ajustado",
+        "v090_save_playset": "Al cargar MOD desde una partida guardada se crea un conjunto «Guardado + nombre» y se conserva exactamente su orden.",
+        "v090_fixed_title": "Corregido",
+        "v090_auto_update": "Se corrigieron fallos de actualización automática.",
+        "v090_fully_custom_garrison": "La modificación del tamaño de unidad ahora es compatible con Fully Custom Garrison y sus submods.",
         "v088_added_title": "Añadido",
         "v088_dependency_action": "La advertencia de dependencias faltantes ahora permite suscribirse y activarlas directamente.",
         "v088_adjusted_title": "Ajustado",

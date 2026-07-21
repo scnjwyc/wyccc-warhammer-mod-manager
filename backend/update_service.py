@@ -136,6 +136,11 @@ class UpdateService:
             sources = self.preferred_repository_sources(
                 str(settings.get("language") or "")
             )
+            preferred_download_source = (
+                sources[0][0]
+                if sources and sources[0][0] in {"gitee", "github"}
+                else None
+            )
 
             candidates: list[dict[str, Any]] = []
             failures: list[tuple[str, Exception]] = []
@@ -143,7 +148,11 @@ class UpdateService:
                 try:
                     validated_url = _validate_url(source_url, allow_file=True)
                     payload, final_manifest_url = self._read_json(validated_url)
-                    candidate = self._parse_manifest(payload, final_manifest_url)
+                    candidate = self._parse_manifest(
+                        payload,
+                        final_manifest_url,
+                        preferred_download_source=preferred_download_source,
+                    )
                     candidate["source"] = source
                     candidates.append(candidate)
                 except Exception as exc:
@@ -330,7 +339,12 @@ class UpdateService:
         return payload, final_url
 
     @staticmethod
-    def _parse_manifest(payload: dict[str, Any], manifest_url: str) -> dict[str, Any]:
+    def _parse_manifest(
+        payload: dict[str, Any],
+        manifest_url: str,
+        *,
+        preferred_download_source: str | None = None,
+    ) -> dict[str, Any]:
         schema_version = int(payload.get("schema_version") or 1)
         if schema_version != 1:
             raise ValueError(f"不支持的更新清单版本：{schema_version}")
@@ -341,11 +355,20 @@ class UpdateService:
         _version_key(version)
         download = payload.get("download") if isinstance(payload.get("download"), dict) else {}
         raw_url = str(download.get("url") or payload.get("download_url") or "").strip()
+        mirrors = download.get("mirrors")
+        if mirrors is not None and not isinstance(mirrors, dict):
+            raise ValueError("更新清单的镜像下载地址必须是对象")
+        if preferred_download_source and isinstance(mirrors, dict):
+            raw_url = str(mirrors.get(preferred_download_source) or raw_url).strip()
         if not raw_url:
             raise ValueError("更新清单缺少下载地址")
         download_url = parse.urljoin(manifest_url, raw_url)
         allow_file = parse.urlparse(manifest_url).scheme == "file"
         _validate_url(download_url, allow_file=allow_file)
+        if preferred_download_source == "gitee":
+            hostname = (parse.urlparse(download_url).hostname or "").casefold()
+            if hostname != "gitee.com" and not hostname.endswith(".gitee.com"):
+                raise ValueError("中文更新清单必须提供 Gitee Release 的 EXE 下载地址")
         sha256 = str(download.get("sha256") or payload.get("sha256") or "").strip()
         if not _SHA256_RE.fullmatch(sha256):
             raise ValueError("更新清单必须提供 64 位 SHA-256")

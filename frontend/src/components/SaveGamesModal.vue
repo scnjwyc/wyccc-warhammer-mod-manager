@@ -10,7 +10,7 @@ const props = defineProps({
   running: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'refresh', 'load', 'enable-mods', 'compare-mods'])
+const emit = defineEmits(['close', 'refresh', 'load', 'create-playset', 'compare-mods'])
 const query = ref('')
 
 watch(() => props.open, open => {
@@ -74,9 +74,9 @@ const formatSize = value => {
             <button
               type="button"
               class="secondary-button"
-              data-testid="save-enable-mods"
+              data-testid="save-create-playset"
               :disabled="!!busy || running"
-              @click="emit('enable-mods', save.name)"
+              @click="emit('create-playset', save.name)"
             >{{ t('saves.enableMods') }}</button>
             <button
               type="button"

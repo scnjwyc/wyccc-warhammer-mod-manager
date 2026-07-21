@@ -4,7 +4,11 @@
   "version": "0.5.1",
   "published_at": "2026-07-15",
   "download": {
-    "url": "https://downloads.example.com/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://github.com/example/WycccModManager/releases/download/0.5.1/WycccModManager.exe",
+    "mirrors": {
+      "github": "https://github.com/example/WycccModManager/releases/download/0.5.1/WycccModManager.exe",
+      "gitee": "https://gitee.com/example/WycccModManager/releases/download/0.5.1/WycccModManager.exe"
+    },
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "size": 123456789
   },

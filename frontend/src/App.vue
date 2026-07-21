@@ -604,9 +604,9 @@ const launchSave = async saveName => {
   } catch { /* shared toast */ }
 }
 
-const enableSaveMods = async saveName => {
+const createSavePlayset = async saveName => {
   try {
-    await store.enableModsFromSave(saveName)
+    await store.createPlaysetFromSave(saveName)
     showSaveGames.value = false
   } catch { /* shared toast */ }
 }
@@ -935,7 +935,7 @@ onBeforeUnmount(() => {
       @close="showSaveGames = false"
       @refresh="store.loadSaveGames"
       @load="launchSave"
-      @enable-mods="enableSaveMods"
+      @create-playset="createSavePlayset"
       @compare-mods="compareSaveMods"
     />
 

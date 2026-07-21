@@ -591,6 +591,85 @@ class GameDataPatchTests(unittest.TestCase):
         self.assertEqual(result.stats["land_rows_scaled"], 2)
         self.assertEqual(result.stats["lord_hero_health_rows_scaled"], 0)
 
+    def test_unit_multiplier_does_not_promote_low_priority_compatibility_placeholders(
+        self,
+    ) -> None:
+        compatibility_mod = DbSource(
+            "bjg_basic_custom_garrison_compat_cathay.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\zzz_bjg_bcgc_main_units_cathay",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": unit,
+                                "campaign_cap": 1,
+                                "caste": "melee_infantry",
+                                "create_time": 99,
+                                "land_unit": "wh2_dlc17_emp_inf_prisoners_0",
+                                "num_men": 36,
+                                "multiplayer_cap": 1,
+                                "multiplayer_cost": 99999,
+                                "recruitment_cost": 99999,
+                                "upkeep_cost": 99999,
+                                "in_encyclopedia": False,
+                                "is_monstrous": False,
+                            }
+                            for unit in ("real_cathay_unit", "missing_foreign_unit")
+                        ],
+                    ),
+                ),
+            ),
+        )
+        base = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "real_cathay_unit",
+                                "caste": "melee_infantry",
+                                "land_unit": "real_cathay_land_unit",
+                                "num_men": 100,
+                                "in_encyclopedia": True,
+                            }
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\data__",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {
+                                "key": "real_cathay_land_unit",
+                                "num_mounts": 0,
+                                "num_engines": 0,
+                                "rank_depth": 5,
+                            }
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        result = build_game_data_entries(
+            [compatibility_mod, base],
+            {"unit_model_multiplier": 2},
+        )
+
+        main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
+        self.assertEqual(main_rows["real_cathay_unit"]["num_men"], 200)
+        self.assertNotIn("missing_foreign_unit", main_rows)
+        self.assertEqual(result.stats["unit_rows_scaled"], 1)
+
     def test_engine_units_keep_per_engine_mount_count_when_scaled(self) -> None:
         source = DbSource(
             "db.pack",

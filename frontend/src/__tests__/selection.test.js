@@ -51,7 +51,7 @@ describe('anchored mod selection', () => {
     expect(store.selectionAnchorId).toBe('c')
   })
 
-  it('enables and compares save mods by pack name without subscribing', async () => {
+  it('creates a save playset and persists the exact save order without subscribing', async () => {
     const store = useAppStore()
     store.mods = [
       { id: 'data:first', pack_name: 'first.pack', source: 'data', sources: ['data'] },
@@ -59,23 +59,88 @@ describe('anchored mod selection', () => {
       { id: 'steam:extra', pack_name: 'extra.pack', source: 'workshop', sources: ['workshop'] },
     ]
     store.activeIds = ['steam:extra']
-    store.recordCurrentPlaysetChange = vi.fn()
-    invokeMock.mockResolvedValue({
-      save: { name: 'campaign.save' },
-      pack_names: ['SECOND.PACK', 'missing.pack', 'first.pack'],
-    })
+    store.orderToken = 'before-import'
+    const importedPlayset = {
+      id: 'save-playset',
+      name: '存档campaign.save',
+      mod_ids: ['steam:second', 'data:first'],
+    }
+    invokeMock.mockImplementation(async method => ({
+      get_save_mods: {
+        save: { name: 'campaign.save' },
+        pack_names: ['SECOND.PACK', 'missing.pack', 'first.pack'],
+      },
+      create_playset: {
+        playsets: [importedPlayset],
+        current_playset: importedPlayset,
+        ordered_mod_ids: ['steam:second', 'data:first'],
+        missing_mod_ids: [],
+      },
+      update_playset: {
+        playsets: [importedPlayset],
+        current_playset: importedPlayset,
+      },
+      save_load_order: {
+        order_token: 'after-import',
+        backup: null,
+      },
+    }[method]))
 
     const comparison = await store.compareSaveMods('campaign.save')
     expect(comparison.saveOnly.map(item => item.packName)).toEqual(['SECOND.PACK', 'missing.pack', 'first.pack'])
     expect(comparison.currentOnly.map(item => item.packName)).toEqual(['extra.pack'])
     expect(comparison.shared).toEqual([])
 
-    const enabled = await store.enableModsFromSave('campaign.save')
+    const imported = await store.createPlaysetFromSave('campaign.save')
+    expect(store.currentPlaysetId).toBe('save-playset')
     expect(store.activeIds).toEqual(['steam:second', 'data:first'])
-    expect(enabled.missingPackNames).toEqual(['missing.pack'])
-    expect(store.recordCurrentPlaysetChange).toHaveBeenCalledTimes(1)
-    expect(invokeMock).toHaveBeenCalledWith('get_save_mods', 'campaign.save')
+    expect(imported.playset.name).toBe('存档campaign.save')
+    expect(imported.missingPackNames).toEqual(['missing.pack'])
+    expect(invokeMock).toHaveBeenCalledWith(
+      'create_playset',
+      '存档campaign.save',
+      ['steam:second', 'data:first'],
+    )
+    expect(invokeMock).toHaveBeenCalledWith(
+      'update_playset',
+      'save-playset',
+      ['steam:second', 'data:first'],
+    )
+    expect(invokeMock).toHaveBeenCalledWith(
+      'save_load_order',
+      ['steam:second', 'data:first'],
+      'before-import',
+    )
     expect(invokeMock).not.toHaveBeenCalledWith('subscribe_workshop_items', expect.anything())
+  })
+
+  it('creates a distinct suffixed playset when the save was imported before', async () => {
+    const store = useAppStore()
+    store.mods = [{ id: 'first', pack_name: 'first.pack', source: 'data' }]
+    store.playsets = [
+      { id: 'existing-1', name: '存档campaign.save', mod_ids: [] },
+      { id: 'existing-2', name: '存档campaign.save (2)', mod_ids: [] },
+    ]
+    store.recordCurrentPlaysetChange = vi.fn()
+    invokeMock.mockImplementation(async method => {
+      if (method === 'get_save_mods') {
+        return { save: { name: 'campaign.save' }, pack_names: ['first.pack'] }
+      }
+      if (method === 'create_playset') {
+        const playset = { id: 'new', name: '存档campaign.save (3)', mod_ids: ['first'] }
+        return {
+          playsets: [...store.playsets, playset],
+          current_playset: playset,
+          ordered_mod_ids: ['first'],
+          missing_mod_ids: [],
+        }
+      }
+      return {}
+    })
+
+    await store.createPlaysetFromSave('campaign.save')
+
+    expect(invokeMock).toHaveBeenCalledWith('create_playset', '存档campaign.save (3)', ['first'])
   })
 
   it('copies selected primary MOD paths as a deduplicated newline list', async () => {

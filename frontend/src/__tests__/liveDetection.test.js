@@ -40,6 +40,37 @@ describe('live MOD detection', () => {
     expect(store.liveModRefreshing).toBe(false)
   })
 
+  it('refreshes Steam metadata when a newly subscribed Workshop MOD appears', async () => {
+    const withoutMetadata = {
+      ...emptyScan(3),
+      mods: [{ id: 'steam:123:new.pack', source: 'workshop', workshop_id: '123', pack_name: 'new.pack' }],
+    }
+    const withMetadata = {
+      ...withoutMetadata,
+      mods: [{
+        ...withoutMetadata.mods[0],
+        display_name: 'Steam MOD name',
+        author: 'Steam author',
+      }],
+    }
+    invokeMock.mockImplementation(async (method, refreshWorkshop) => {
+      if (method === 'get_runtime_status') return { running: false, mod_revision: 3 }
+      if (method === 'scan_mods') return refreshWorkshop ? withMetadata : withoutMetadata
+      throw new Error(`Unexpected RPC: ${method}`)
+    })
+    const store = useAppStore()
+    store.settings = { live_mod_detection: true, fetch_workshop_metadata: true }
+    store.modRevision = 2
+
+    await store.refreshRuntime()
+
+    expect(invokeMock.mock.calls.filter(([method]) => method === 'scan_mods')).toEqual([
+      ['scan_mods', false],
+      ['scan_mods', true],
+    ])
+    expect(store.mods[0].author).toBe('Steam author')
+  })
+
   it('does not scan while the game is running', async () => {
     invokeMock.mockResolvedValue({ running: true, mod_revision: 4 })
     const store = useAppStore()

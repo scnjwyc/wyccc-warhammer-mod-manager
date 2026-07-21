@@ -32,7 +32,7 @@ SYSTEM_LANGUAGE_MAP = {
     "ja": "ja-JP",
     "es": "es-ES",
 }
-SETTINGS_SCHEMA_VERSION = 15
+SETTINGS_SCHEMA_VERSION = 16
 
 DEFAULT_KEYBOARD_SHORTCUTS = {
     "open-workshop": "Shift+W",
@@ -108,6 +108,17 @@ def _normalize_keyboard_shortcuts(value: Any) -> dict[str, str]:
         candidate = _normalize_shortcut(raw.get(action))
         result[action] = candidate or default
     return result
+
+
+def _normalize_workshop_page_open_counts(value: Any) -> dict[str, int]:
+    raw = value if isinstance(value, dict) else {}
+    normalized: dict[str, int] = {}
+    for target in ("browser", "client"):
+        try:
+            normalized[target] = max(0, min(1_000_000, int(raw.get(target) or 0)))
+        except (TypeError, ValueError):
+            normalized[target] = 0
+    return normalized
 
 
 def _system_locale_name() -> str:
@@ -204,6 +215,7 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
         "check_updates_automatically": True,
+        "workshop_page_open_counts": {"browser": 0, "client": 0},
         "last_update_check_at": 0,
         "ignored_update_version": "",
         "last_seen_app_version": APP_VERSION,
@@ -413,6 +425,9 @@ class SettingsService:
         result["selected_game"] = selected_game
         result["game_installations"] = normalized_installations
         result["keyboard_shortcuts"] = _normalize_keyboard_shortcuts(result.get("keyboard_shortcuts"))
+        result["workshop_page_open_counts"] = _normalize_workshop_page_open_counts(
+            result.get("workshop_page_open_counts")
+        )
         for key in (
             "fetch_workshop_metadata",
             "live_mod_detection",

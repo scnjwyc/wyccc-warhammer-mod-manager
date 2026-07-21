@@ -23,7 +23,7 @@ describe('SaveGamesModal', () => {
     expect(wrapper.emitted('load')[0]).toEqual(['震旦.save'])
   })
 
-  it('offers enable and compare actions for each save', async () => {
+  it('offers create-playset and compare actions for each save', async () => {
     const wrapper = mount(SaveGamesModal, {
       props: {
         open: true,
@@ -31,10 +31,11 @@ describe('SaveGamesModal', () => {
       },
     })
 
-    await wrapper.get('[data-testid="save-enable-mods"]').trigger('click')
+    expect(wrapper.get('[data-testid="save-create-playset"]').text()).toBe('启用存档中使用的模组')
+    await wrapper.get('[data-testid="save-create-playset"]').trigger('click')
     await wrapper.get('[data-testid="save-compare-mods"]').trigger('click')
 
-    expect(wrapper.emitted('enable-mods')[0]).toEqual(['campaign.save'])
+    expect(wrapper.emitted('create-playset')[0]).toEqual(['campaign.save'])
     expect(wrapper.emitted('compare-mods')[0]).toEqual(['campaign.save'])
   })
 })

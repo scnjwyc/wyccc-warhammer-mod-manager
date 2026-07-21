@@ -1664,7 +1664,10 @@ class ApiContractTests(unittest.TestCase):
                 "category": "units",
                 "visibility": 0,
             }
-            with patch("backend.api.publish_workshop_item", side_effect=fake_publish):
+            with (
+                patch("backend.api.publish_workshop_item", side_effect=fake_publish),
+                patch.object(api, "_open_uri") as open_uri,
+            ):
                 uploaded = api.call("publish_workshop_item", [mod["id"], payload])
                 updated = api.call(
                     "publish_workshop_item",
@@ -1684,6 +1687,9 @@ class ApiContractTests(unittest.TestCase):
                 api.state_repository.list_user_mod_data()[mod["id"]]["published_workshop_id"],
                 "456789",
             )
+            self.assertEqual(uploaded["data"]["page_opened"]["target"], "client")
+            self.assertEqual(updated["data"]["page_opened"]["target"], "client")
+            self.assertEqual(open_uri.call_count, 2)
 
     def test_workshop_publish_requires_a_same_name_png_cover(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1894,12 +1900,32 @@ class ApiContractTests(unittest.TestCase):
             with patch.object(api, "_open_uri") as open_uri:
                 client_result = api.call("open_workshop_client", [asset.id])
 
+            self.assertEqual(
+                api.settings_service.get()["workshop_page_open_counts"],
+                {"browser": 1, "client": 1},
+            )
+
         self.assertTrue(browser_result["ok"])
         browser.assert_called_once_with(
             "https://steamcommunity.com/sharedfiles/filedetails/?id=123"
         )
         self.assertTrue(client_result["ok"])
         open_uri.assert_called_once_with("steam://url/CommunityFilePage/123")
+
+    def test_published_workshop_page_uses_the_more_frequent_manual_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            api.settings_service.save({"workshop_page_open_counts": {"browser": 4, "client": 2}})
+
+            with patch("backend.api.webbrowser.open", return_value=True) as browser:
+                result = api._open_workshop_page_by_id(
+                    "123", api._preferred_workshop_page_target(), record_preference=False
+                )
+
+        self.assertEqual(result, {"opened": True, "target": "browser"})
+        browser.assert_called_once_with(
+            "https://steamcommunity.com/sharedfiles/filedetails/?id=123"
+        )
 
     def test_warning_ignore_rpc_filters_and_restores_supported_mod_warnings(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
