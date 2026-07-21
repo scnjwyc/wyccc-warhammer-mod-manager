@@ -8,7 +8,7 @@ const props = defineProps({
   busy: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'select', 'ignore'])
+const emit = defineEmits(['close', 'select', 'ignore', 'subscribe-enable'])
 
 const ignorableCount = computed(() => props.items.filter(item => item.ignorable).length)
 
@@ -19,6 +19,12 @@ const typeLabel = item => ({
 }[item.code] || t('warnings.scanNotice'))
 
 const warningMessage = item => localizeBackendMessage(item.message, 'warnings.genericScan')
+const canSubscribeAndEnable = item => (
+  item.code === 'missing_dependency'
+  && item.dependencies?.some(dependency => (
+    dependency?.kind === 'workshop' || dependency?.availability === 'disabled'
+  ))
+)
 </script>
 
 <template>
@@ -60,16 +66,27 @@ const warningMessage = item => localizeBackendMessage(item.message, 'warnings.ge
             <strong>{{ t('warnings.scanNotice') }}</strong>
             <small>{{ warningMessage(item) }}</small>
           </div>
-          <button
-            v-if="item.ignorable"
-            type="button"
-            class="warning-ignore-button"
-            :disabled="!!busy"
-            @click="emit('ignore', item)"
-          >
-            {{ t('common.ignore') }}
-          </button>
-          <span v-else class="warning-system-label">{{ t('common.system') }}</span>
+          <div class="warning-row-actions">
+            <button
+              v-if="canSubscribeAndEnable(item)"
+              type="button"
+              class="warning-subscribe-button"
+              :disabled="!!busy"
+              @click="emit('subscribe-enable', item)"
+            >
+              {{ t('warnings.subscribeEnableDependencies') }}
+            </button>
+            <button
+              v-if="item.ignorable"
+              type="button"
+              class="warning-ignore-button"
+              :disabled="!!busy"
+              @click="emit('ignore', item)"
+            >
+              {{ t('common.ignore') }}
+            </button>
+            <span v-else-if="item.code !== 'missing_dependency'" class="warning-system-label">{{ t('common.system') }}</span>
+          </div>
         </article>
 
         <div v-if="!items.length" class="warning-modal-empty">

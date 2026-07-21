@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.8.7',
+    appVersion: '0.8.8',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -134,6 +134,7 @@ export const useAppStore = defineStore('app', {
             modName: '',
             code,
             ignorable: Boolean(record.ignorable && code),
+            dependencies: Array.isArray(record.dependencies) ? record.dependencies : [],
           }
         })
         .filter(item => !item.code || !state.ignoredScanWarningCodes.includes(item.code))
@@ -149,6 +150,7 @@ export const useAppStore = defineStore('app', {
             modName: mod.effective_name || mod.display_name || mod.pack_name,
             code,
             ignorable: ['outdated_mod', 'missing_dependency'].includes(code),
+            dependencies: Array.isArray(warning.dependencies) ? warning.dependencies : [],
           })
         }
       }
@@ -1142,6 +1144,66 @@ export const useAppStore = defineStore('app', {
           existing: existing ? t('toast.subscriptionExisting', { count: existing }) : '',
         }))
         return data
+      })
+    },
+    async subscribeAndEnableMissingDependencies(items) {
+      const dependencies = (Array.isArray(items) ? items : [])
+        .filter(item => item?.code === 'missing_dependency')
+        .flatMap(item => Array.isArray(item.dependencies) ? item.dependencies : [])
+      const installedIds = []
+      const workshopIds = []
+      const pendingIds = []
+      const seen = new Set()
+      for (const dependency of dependencies) {
+        const kind = String(dependency?.kind || '')
+        const dependencyId = String(dependency?.id || '').trim()
+        if (!dependencyId) continue
+        const key = `${kind}:${dependencyId.toLocaleLowerCase()}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        const mod = kind === 'workshop'
+          ? this.mods.find(item => String(item.workshop_id || '') === dependencyId)
+          : this.mods.find(item => String(item.pack_name || '').toLocaleLowerCase() === dependencyId.toLocaleLowerCase())
+        if (mod) {
+          installedIds.push(mod.id)
+        } else if (kind === 'workshop' && /^\d+$/.test(dependencyId)) {
+          workshopIds.push(dependencyId)
+          pendingIds.push(`pending:steam:${dependencyId}:`)
+        }
+      }
+      if (!installedIds.length && !workshopIds.length) return { enabled: [], subscribed: [], pending: [] }
+      return this.withBusy(t('busy.subscribeWorkshop'), async () => {
+        let subscription = { subscribed: [], already_subscribed: [] }
+        if (workshopIds.length) subscription = await invoke('subscribe_workshop_items', workshopIds)
+        const nextActive = [...this.activeIds]
+        for (const modId of installedIds) {
+          if (this.modMap.has(modId) && !nextActive.includes(modId)) {
+            nextActive.splice(0, nextActive.length, ...insertByDefaultLoadOrder(nextActive, modId, this.modMap))
+          }
+        }
+        const activeChanged = nextActive.length !== this.activeIds.length
+        const nextPending = [...new Set([...(this.missingEnabledIds || []), ...pendingIds])]
+        const pendingChanged = nextPending.length !== (this.missingEnabledIds || []).length
+        if (activeChanged) this.replaceActiveIds(nextActive)
+        if (pendingChanged) this.missingEnabledIds = nextPending
+        if (activeChanged || pendingChanged) {
+          this.dirty = true
+          await this.recordCurrentPlaysetChange()
+        }
+        const subscribed = subscription.subscribed?.length || 0
+        const existing = subscription.already_subscribed?.length || 0
+        this.notify(t('toast.missingDependenciesEnabled', {
+          enabled: installedIds.length,
+          pending: workshopIds.length,
+          subscribed,
+          existing: existing ? t('toast.subscriptionExisting', { count: existing }) : '',
+        }), pendingIds.length ? 'warning' : 'success')
+        return {
+          enabled: installedIds,
+          pending: pendingIds,
+          subscribed: subscription.subscribed || [],
+          alreadySubscribed: subscription.already_subscribed || [],
+        }
       })
     },
     async importShare(value) {

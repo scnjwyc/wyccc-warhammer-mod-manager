@@ -407,6 +407,7 @@ def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
             "single_entity_health_rows_scaled",
             "unit_friendly_fire_rows_changed",
             "unit_friendly_fire_kv_rules_changed",
+            "unit_max_drag_width_changed",
             "spell_friendly_fire_rows_changed",
         )
     )

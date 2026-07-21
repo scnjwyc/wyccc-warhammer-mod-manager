@@ -583,6 +583,15 @@ const ignoreWarning = async item => {
   }
 }
 
+const subscribeAndEnableDependencies = async item => {
+  try {
+    await store.subscribeAndEnableMissingDependencies([item])
+    showWarnings.value = false
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
 const openSaveGames = async () => {
   showSaveGames.value = true
   try { await store.loadSaveGames() } catch { /* shared toast */ }
@@ -943,6 +952,7 @@ onBeforeUnmount(() => {
       @close="showWarnings = false"
       @select="selectWarning"
       @ignore="ignoreWarning"
+      @subscribe-enable="subscribeAndEnableDependencies"
     />
 
     <ShareModal

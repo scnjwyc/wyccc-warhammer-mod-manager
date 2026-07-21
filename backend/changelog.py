@@ -9,6 +9,20 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.8.8",
+        "date": "2026-07-21",
+        "entries": (
+            (
+                "v088_added_title",
+                (("feature", "v088_dependency_action"),),
+            ),
+            (
+                "v088_adjusted_title",
+                (("improvement", "v088_unit_formation_width"),),
+            ),
+        ),
+    },
+    {
         "version": "0.8.7",
         "date": "2026-07-20",
         "entries": (
@@ -301,6 +315,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v088_added_title": "新增",
+        "v088_dependency_action": "缺失依赖警告界面现在可以直接订阅并启用缺失的依赖。",
+        "v088_adjusted_title": "调整",
+        "v088_unit_formation_width": "调整单位规模倍率后，现在可以将阵型拉得更长。",
         "v087_added_title": "新增",
         "v087_type_order": "类型管理支持调整内置和自定义类型的显示顺序，并会持久保存。",
         "v087_type_sort": "新增按类型排序，使用已配置的类型顺序排列 MOD。",
@@ -432,6 +450,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v088_added_title": "Added",
+        "v088_dependency_action": "The missing-dependency warning can now subscribe to and enable missing dependencies directly.",
+        "v088_adjusted_title": "Adjusted",
+        "v088_unit_formation_width": "Unit scale multipliers now also allow formations to be dragged wider.",
         "v087_added_title": "Added",
         "v087_type_order": "Type management now supports reordering built-in and custom types, with the order persisted.",
         "v087_type_sort": "Added type-based MOD sorting that follows the configured type order.",
@@ -563,6 +585,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v088_added_title": "추가",
+        "v088_dependency_action": "누락된 종속성 경고 화면에서 누락된 종속성을 바로 구독하고 활성화할 수 있습니다.",
+        "v088_adjusted_title": "조정",
+        "v088_unit_formation_width": "유닛 규모 배율을 조정하면 이제 진형을 더 넓게 드래그할 수 있습니다.",
         "v087_added_title": "추가",
         "v087_type_order": "내장 유형과 사용자 지정 유형의 순서를 조정하고 저장할 수 있습니다.",
         "v087_type_sort": "설정된 유형 순서를 따르는 유형별 MOD 정렬을 추가했습니다.",
@@ -694,6 +720,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v088_added_title": "Добавлено",
+        "v088_dependency_action": "На экране предупреждений о недостающих зависимостях теперь можно сразу подписаться на них и включить их.",
+        "v088_adjusted_title": "Изменено",
+        "v088_unit_formation_width": "Множитель размера отрядов теперь также позволяет растягивать строй шире.",
         "v087_added_title": "Добавлено",
         "v087_type_order": "Добавлена настройка и сохранение порядка встроенных и пользовательских типов.",
         "v087_type_sort": "Добавлена сортировка MOD по настроенному порядку типов.",
@@ -825,6 +855,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v088_added_title": "追加",
+        "v088_dependency_action": "不足している依存関係の警告画面から、依存関係を直接購読して有効化できるようにしました。",
+        "v088_adjusted_title": "調整",
+        "v088_unit_formation_width": "ユニット規模の倍率を調整すると、陣形をより広くドラッグできるようになりました。",
         "v087_added_title": "追加",
         "v087_type_order": "組み込みタイプとカスタムタイプの順序を変更して保存できるようにしました。",
         "v087_type_sort": "設定したタイプ順に MOD を並べ替える機能を追加しました。",
@@ -956,6 +990,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v088_added_title": "Añadido",
+        "v088_dependency_action": "La advertencia de dependencias faltantes ahora permite suscribirse y activarlas directamente.",
+        "v088_adjusted_title": "Ajustado",
+        "v088_unit_formation_width": "Los multiplicadores del tamaño de unidad ahora también permiten arrastrar las formaciones más anchas.",
         "v087_added_title": "Añadido",
         "v087_type_order": "La gestión de tipos ahora permite reordenar y guardar los tipos integrados y personalizados.",
         "v087_type_sort": "Se añadió la clasificación de MOD por el orden configurado de tipos.",

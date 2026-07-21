@@ -14,6 +14,7 @@ const dependencyRefresh = {
 }
 
 const missingDependency = {
+  dependencies: [{ kind: 'workshop', id: '123', name: 'Base Workshop Mod' }],
   id: 'mod-a:missing_dependency',
   modId: 'mod-a',
   modName: '测试 MOD',
@@ -49,6 +50,9 @@ describe('WarningModal', () => {
     await ignoreButtons[1].trigger('click')
     expect(wrapper.emitted('ignore')[0][0]).toEqual(missingDependency)
     expect(wrapper.emitted('ignore')[1][0]).toEqual(dependencyRefresh)
+
+    await wrapper.get('.warning-subscribe-button').trigger('click')
+    expect(wrapper.emitted('subscribe-enable')[0][0]).toEqual(missingDependency)
 
     await wrapper.get('button.warning-modal-copy').trigger('click')
     expect(wrapper.emitted('select')[0][0]).toEqual(missingDependency)

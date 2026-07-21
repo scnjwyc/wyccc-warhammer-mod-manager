@@ -427,6 +427,7 @@ def _serialize_effective_table(
 
 def _serialize_non_spell_friendly_fire_kv_rules(
     candidates: Mapping[str, _Candidate],
+    unit_max_drag_width: float | None = None,
 ) -> GameDataEntry:
     rows = []
     for key, value in NON_SPELL_FRIENDLY_FIRE_KV_RULES:
@@ -435,6 +436,13 @@ def _serialize_non_spell_friendly_fire_kv_rules(
             struct.pack("<H", len(encoded_key))
             + encoded_key
             + struct.pack("<f", value)
+        )
+    if unit_max_drag_width is not None:
+        encoded_key = b"unit_max_drag_width"
+        rows.append(
+            struct.pack("<H", len(encoded_key))
+            + encoded_key
+            + struct.pack("<f", float(unit_max_drag_width))
         )
     payload = b"".join(
         (
@@ -524,6 +532,7 @@ def build_game_data_entries(
         "single_entity_health_rows_scaled": 0,
         "unit_friendly_fire_rows_changed": 0,
         "unit_friendly_fire_kv_rules_changed": 0,
+        "unit_max_drag_width_changed": 0,
         "spell_friendly_fire_rows_changed": 0,
         "source_table_priority_markers": 0,
         "patch_table_priority_markers": 0,
@@ -536,6 +545,8 @@ def build_game_data_entries(
     if scale_units:
         needed_tables.add("land_units_tables")
         output_tables.add("land_units_tables")
+        needed_tables.add("_kv_rules_tables")
+        output_tables.add("_kv_rules_tables")
         if scale_lord_hero_health or single_entity_health_mode:
             needed_tables.add("battle_entities_tables")
     if disable_unit or disable_spell:
@@ -761,6 +772,15 @@ def build_game_data_entries(
                             stats[stat_key] = int(stats[stat_key]) + 1
                 patched_by_table[table_name][key] = row
 
+    unit_max_drag_width: float | None = None
+    if scale_units:
+        width_candidate = effective["_kv_rules_tables"].get("unit_max_drag_width")
+        if width_candidate is not None:
+            base_width = float(width_candidate.row.values.get("value"))
+            unit_max_drag_width = base_width * multiplier
+            if not math.isclose(unit_max_drag_width, base_width, rel_tol=0.0, abs_tol=1e-6):
+                stats["unit_max_drag_width_changed"] = 1
+
     if disable_unit:
         stats["unit_friendly_fire_kv_rules_changed"] = len(
             NON_SPELL_FRIENDLY_FIRE_KV_RULES
@@ -770,9 +790,18 @@ def build_game_data_entries(
     for table_name in TABLE_ORDER:
         if table_name not in output_tables:
             continue
+        if (
+            table_name == "_kv_rules_tables"
+            and unit_max_drag_width is None
+            and not disable_unit
+        ):
+            continue
         table_candidates = effective[table_name]
         if table_name == "_kv_rules_tables":
-            table_entries = [_serialize_non_spell_friendly_fire_kv_rules(table_candidates)]
+            table_entries = [_serialize_non_spell_friendly_fire_kv_rules(
+                table_candidates,
+                unit_max_drag_width,
+            )]
         else:
             table_entries = _serialize_effective_table(
                 table_name,

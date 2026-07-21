@@ -1103,6 +1103,50 @@ class GameDataPatchTests(unittest.TestCase):
         self.assertLess(_compare_internal_names(generated_name, source_internal_name), 0)
         self.assertEqual(result.stats["unit_friendly_fire_kv_rules_changed"], 4)
 
+    def test_unit_multiplier_scales_max_drag_width(self) -> None:
+        source = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [{
+                            "unit": "unit_infantry",
+                            "caste": "infantry",
+                            "land_unit": "land_infantry",
+                            "num_men": 100,
+                        }],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\data__",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [{"key": "land_infantry", "num_mounts": 1, "num_engines": 0}],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\_kv_rules_tables\\data__",
+                    _kv_rules_payload([("unit_max_drag_width", 42.0)]),
+                ),
+            ),
+        )
+
+        result = build_game_data_entries([source], {"unit_model_multiplier": 3})
+
+        entries = [
+            entry
+            for entry in result.entries
+            if entry.name.startswith("db\\_kv_rules_tables\\")
+        ]
+        self.assertEqual(len(entries), 1)
+        rules = _decode_kv_rules(entries[0].payload)
+        self.assertAlmostEqual(rules["unit_max_drag_width"], 126.0)
+        self.assertEqual(result.stats["unit_max_drag_width_changed"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

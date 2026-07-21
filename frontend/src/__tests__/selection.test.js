@@ -308,4 +308,29 @@ describe('anchored mod selection', () => {
     expect(store.mods[0].ignored_warning_codes).toEqual(['missing_dependency'])
     expect(store.warningCount).toBe(0)
   })
+
+  it('subscribes to workshop dependencies and enables installed or pending items', async () => {
+    const store = useAppStore()
+    store.mods = [
+      { id: 'dependent', pack_name: 'dependent.pack', workshop_id: '10' },
+      { id: 'installed-base', pack_name: 'base.pack', workshop_id: '20' },
+    ]
+    store.activeIds = ['dependent']
+    store.recordCurrentPlaysetChange = vi.fn()
+    invokeMock.mockResolvedValue({ subscribed: ['30'], already_subscribed: [] })
+
+    const result = await store.subscribeAndEnableMissingDependencies([{
+      code: 'missing_dependency',
+      dependencies: [
+        { kind: 'pack', id: 'base.pack', name: 'base.pack' },
+        { kind: 'workshop', id: '30', name: 'Missing Workshop' },
+      ],
+    }])
+
+    expect(invokeMock).toHaveBeenCalledWith('subscribe_workshop_items', ['30'])
+    expect(store.activeIds).toContain('installed-base')
+    expect(store.missingEnabledIds).toContain('pending:steam:30:')
+    expect(store.recordCurrentPlaysetChange).toHaveBeenCalledTimes(1)
+    expect(result.pending).toEqual(['pending:steam:30:'])
+  })
 })

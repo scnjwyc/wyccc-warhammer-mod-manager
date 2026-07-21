@@ -1728,6 +1728,13 @@ textarea {
   background: #1d1511;
 }
 
+.warning-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .warning-modal-row.severity-error {
   border-color: #78383b;
   background: #251315;
@@ -2152,6 +2159,29 @@ button.context-menu-item {
   width: min(980px, 96vw);
   height: min(820px, 94vh);
   grid-template-rows: 68px minmax(0, 1fr) 62px;
+}
+
+.warning-subscribe-button {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid #8a693b;
+  border-radius: 4px;
+  background: rgba(111, 77, 33, 0.42);
+  color: #f0c98a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.warning-subscribe-button:hover:not(:disabled) {
+  border-color: #c09352;
+  background: rgba(132, 91, 38, 0.62);
+  color: #ffe0ad;
+}
+
+.warning-subscribe-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .settings-modal .modal-body {
