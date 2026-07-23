@@ -63,13 +63,12 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.0',
+    appVersion: '0.9.2',
     settings: {},
     paths: {},
     pathHealth: {},
     mods: [],
     modTypes: [],
-    showHidden: false,
     activeIds: [],
     inactiveOrderIds: [],
     inactiveOrderCustomized: false,
@@ -78,10 +77,14 @@ export const useAppStore = defineStore('app', {
     selectionAnchorId: '',
     selectedPreview: '',
     thumbnails: {},
-    searchTokens: [],
-    searchLogic: 'AND',
-    sortMode: 'priority',
-    sortDescending: false,
+    activeSearchTokens: [],
+    activeSearchLogic: 'AND',
+    inactiveSearchTokens: [],
+    inactiveSearchLogic: 'AND',
+    activeSortMode: 'priority',
+    activeSortDescending: false,
+    inactiveSortMode: 'priority',
+    inactiveSortDescending: false,
     playsets: [],
     currentPlaysetId: 'default',
     backups: [],
@@ -120,6 +123,7 @@ export const useAppStore = defineStore('app', {
     modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
     modTypeRanks: (state) => Object.fromEntries(state.modTypes.map((item, index) => [item.id, index])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
+    showHidden: state => Boolean(state.settings?.show_hidden_mods),
     warningItems(state) {
       const active = new Set(state.activeIds)
       const items = state.warnings
@@ -165,25 +169,35 @@ export const useAppStore = defineStore('app', {
     selectedMod() {
       return this.modMap.get(this.selectedId) || null
     },
-    searchActive: state => state.searchTokens.length > 0,
-    searchHighlightMode: state => Boolean(state.settings?.search_highlight_mode),
-    searchHighlightActive() {
-      return this.searchActive && this.searchHighlightMode
+    activeSearchActive: state => state.activeSearchTokens.length > 0,
+    inactiveSearchActive: state => state.inactiveSearchTokens.length > 0,
+    activeSearchHighlightMode: state => Boolean(state.settings?.active_search_highlight_mode),
+    inactiveSearchHighlightMode: state => Boolean(state.settings?.inactive_search_highlight_mode),
+    activeSearchHighlightActive() {
+      return this.activeSearchActive && this.activeSearchHighlightMode
+    },
+    inactiveSearchHighlightActive() {
+      return this.inactiveSearchActive && this.inactiveSearchHighlightMode
     },
     activeDisplayMods() {
       const mods = this.activeIds
         .map(id => this.modMap.get(id))
         .filter(Boolean)
         .filter(mod => this.showHidden || !mod.hidden)
-      return sortDisplayedMods(mods, this.sortMode, this.sortDescending, this.modTypeRanks)
+      return sortDisplayedMods(mods, this.activeSortMode, this.activeSortDescending, this.modTypeRanks)
     },
     inactiveDisplayMods() {
       const active = new Set(this.activeIds)
       const mods = this.mods
         .filter(mod => !active.has(mod.id))
         .filter(mod => this.showHidden || !mod.hidden)
-      const sorted = sortDisplayedMods(mods, this.sortMode, this.sortDescending, this.modTypeRanks)
-      if (this.sortMode !== 'priority' || !this.inactiveOrderCustomized) return sorted
+      const sorted = sortDisplayedMods(
+        mods,
+        this.inactiveSortMode,
+        this.inactiveSortDescending,
+        this.modTypeRanks,
+      )
+      if (this.inactiveSortMode !== 'priority' || !this.inactiveOrderCustomized) return sorted
       const rank = new Map(this.inactiveOrderIds.map((id, index) => [id, index]))
       return [...mods].sort((left, right) => (
         (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
@@ -191,27 +205,27 @@ export const useAppStore = defineStore('app', {
       ))
     },
     activeSearchMatchIds() {
-      if (!this.searchActive) return []
+      if (!this.activeSearchActive) return []
       return this.activeDisplayMods
-        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
+        .filter(mod => matchesSearchTokens(mod, this.activeSearchTokens, this.activeSearchLogic, this.modTypeMap))
         .map(mod => mod.id)
     },
     inactiveSearchMatchIds() {
-      if (!this.searchActive) return []
+      if (!this.inactiveSearchActive) return []
       return this.inactiveDisplayMods
-        .filter(mod => matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap))
+        .filter(mod => matchesSearchTokens(mod, this.inactiveSearchTokens, this.inactiveSearchLogic, this.modTypeMap))
         .map(mod => mod.id)
     },
     activeMods() {
-      if (this.searchHighlightActive) return this.activeDisplayMods
+      if (this.activeSearchHighlightActive) return this.activeDisplayMods
       return this.activeDisplayMods.filter(mod => (
-        matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap)
+        matchesSearchTokens(mod, this.activeSearchTokens, this.activeSearchLogic, this.modTypeMap)
       ))
     },
     inactiveMods() {
-      if (this.searchHighlightActive) return this.inactiveDisplayMods
+      if (this.inactiveSearchHighlightActive) return this.inactiveDisplayMods
       return this.inactiveDisplayMods.filter(mod => (
-        matchesSearchTokens(mod, this.searchTokens, this.searchLogic, this.modTypeMap)
+        matchesSearchTokens(mod, this.inactiveSearchTokens, this.inactiveSearchLogic, this.modTypeMap)
       ))
     },
   },
@@ -686,7 +700,7 @@ export const useAppStore = defineStore('app', {
       const ids = payload?.ids || []
       if (!ids.length || !['active', 'inactive'].includes(source) || !['active', 'inactive'].includes(target)) return
       if (source === 'active' && target === 'active') {
-        if (this.sortMode === 'priority') this.reorderMany(ids, payload.targetId, payload.draggedId)
+        if (this.activeSortMode === 'priority') this.reorderMany(ids, payload.targetId, payload.draggedId)
       } else if (source === 'inactive' && target === 'inactive') {
         this.reorderInactiveMany(ids, payload.targetId, payload.draggedId, payload.targetOrder)
       } else if (source === 'inactive' && target === 'active') {
@@ -734,16 +748,6 @@ export const useAppStore = defineStore('app', {
       ])
       this.dirty = true
       this.recordCurrentPlaysetChange()
-    },
-    async toggleHiddenVisibility() {
-      this.showHidden = !this.showHidden
-      if (!this.showHidden && this.selectedMod?.hidden) {
-        const next = [...this.activeMods, ...this.inactiveMods][0]
-        this.selectedId = next?.id || ''
-        this.selectedIds = this.selectedId ? [this.selectedId] : []
-        this.selectionAnchorId = this.selectedId
-        await this.loadPreview(this.selectedId)
-      }
     },
     applyLaunchResult(data) {
       this.orderToken = data.order_token
@@ -1046,27 +1050,48 @@ export const useAppStore = defineStore('app', {
         return { succeeded, failed }
       })
     },
-    setSearchTokens(tokens) {
-      this.searchTokens = Array.isArray(tokens) ? tokens : []
+    setActiveSearchTokens(tokens) {
+      this.activeSearchTokens = Array.isArray(tokens) ? tokens : []
     },
-    setSearchLogic(logic) {
-      this.searchLogic = logic === 'OR' ? 'OR' : 'AND'
+    setActiveSearchLogic(logic) {
+      this.activeSearchLogic = logic === 'OR' ? 'OR' : 'AND'
     },
-    async setSearchHighlightMode(enabled) {
+    setInactiveSearchTokens(tokens) {
+      this.inactiveSearchTokens = Array.isArray(tokens) ? tokens : []
+    },
+    setInactiveSearchLogic(logic) {
+      this.inactiveSearchLogic = logic === 'OR' ? 'OR' : 'AND'
+    },
+    async setActiveSearchHighlightMode(enabled) {
       return this.withBusy(t('busy.saveSettings'), async () => {
-        const data = await invoke('set_search_highlight_mode', Boolean(enabled))
+        const data = await invoke('set_search_highlight_mode', Boolean(enabled), 'active')
         this.settings = data.settings
         return data
       })
     },
-    setSortMode(mode) {
+    async setInactiveSearchHighlightMode(enabled) {
+      return this.withBusy(t('busy.saveSettings'), async () => {
+        const data = await invoke('set_search_highlight_mode', Boolean(enabled), 'inactive')
+        this.settings = data.settings
+        return data
+      })
+    },
+    setActiveSortMode(mode) {
       if (!SORT_OPTIONS.some(option => option.id === mode)) return
-      this.sortMode = mode
-      this.sortDescending = mode === 'updated' || mode === 'created'
+      this.activeSortMode = mode
+      this.activeSortDescending = mode === 'updated' || mode === 'created' || mode === 'subscription'
+    },
+    setActiveSortDescending(descending) {
+      this.activeSortDescending = Boolean(descending)
+    },
+    setInactiveSortMode(mode) {
+      if (!SORT_OPTIONS.some(option => option.id === mode)) return
+      this.inactiveSortMode = mode
+      this.inactiveSortDescending = mode === 'updated' || mode === 'created' || mode === 'subscription'
       this.inactiveOrderCustomized = false
     },
-    setSortDescending(descending) {
-      this.sortDescending = Boolean(descending)
+    setInactiveSortDescending(descending) {
+      this.inactiveSortDescending = Boolean(descending)
     },
     async reorderModTypes(typeIds) {
       return this.withBusy(t('busy.editType'), async () => {

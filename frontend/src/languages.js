@@ -141,6 +141,7 @@ const entries = {
   'search.sortAuthor': ['作者', 'Author', '작성자', 'Автор', '作者'],
   'search.sortUpdated': ['更新时间', 'Updated', '업데이트 시간', 'Время обновления', '更新日時'],
   'search.sortCreated': ['创建时间', 'Created', '생성 시간', 'Время создания', '作成日時'],
+  'search.sortSubscription': ['订阅时间', 'Subscribed', '구독 시간', 'Время подписки', '購読日時'],
   'search.addCondition': ['添加条件…', 'Add a condition…', '조건 추가…', 'Добавить условие…', '条件を追加…'],
   'search.placeholder': ['输入关键词，或使用 类型:语言包 等条件', 'Enter keywords or a condition such as type:Type', '키워드 또는 유형:언어 팩 같은 조건 입력', 'Введите ключевые слова или условие, например тип:Языковой пакет', 'キーワードまたは 種類:言語パック などの条件を入力'],
   'search.logicAll': ['满足全部条件；点击切换为任一条件', 'Match all conditions; click to match any', '모든 조건 일치; 클릭하여 일부 조건 일치로 전환', 'Все условия; нажмите, чтобы выбрать любое', 'すべての条件に一致；クリックでいずれかに切替'],
@@ -376,6 +377,8 @@ const entries = {
   'settings.tabAboutDetail': ['更新与支持', 'Updates and support', '업데이트 및 지원', 'Обновления и поддержка', '更新とサポート'],
   'settings.basicEyebrow': ['基础设置', 'GENERAL', '기본 설정', 'ОБЩИЕ', '基本設定'],
   'settings.basicIntro': ['管理界面语言、游戏路径和工坊信息检查。', 'Manage interface language, game paths, and Workshop information checks.', '인터페이스 언어, 게임 경로 및 창작마당 정보 확인을 관리합니다.', 'Настройка языка интерфейса, путей игры и проверки данных Мастерской.', '表示言語、ゲームパス、ワークショップ情報の確認を管理します。'],
+  'settings.showHiddenMods': ['显示隐藏的 MOD', 'Show hidden MODs', '숨겨진 MOD 표시', 'Показывать скрытые MOD', '非表示の MOD を表示'],
+  'settings.showHiddenModsHelp': ['默认关闭；开启后，隐藏的 MOD 会重新出现在两个列表中。', 'Off by default. When enabled, hidden MODs appear in both lists.', '기본적으로 꺼져 있으며, 켜면 숨겨진 MOD가 두 목록에 표시됩니다.', 'По умолчанию выключено. При включении скрытые MOD отображаются в обоих списках.', '初期状態ではオフです。有効にすると、非表示の MOD が両方の一覧に表示されます。'],
   'settings.game': ['游戏', 'Game', '게임', 'Игра', 'ゲーム'],
   'settings.gameWarhammer3': ['全面战争：战锤 3', 'Total War: WARHAMMER III', '토탈 워: 워해머 III', 'Total War: WARHAMMER III', 'Total War: WARHAMMER III'],
   'settings.gameThreeKingdoms': ['全面战争：三国', 'Total War: THREE KINGDOMS', '토탈 워: 삼국', 'Total War: THREE KINGDOMS', 'Total War: THREE KINGDOMS'],
@@ -708,6 +711,7 @@ const spanishEntries = {
   "search.sortAuthor": "Autor",
   "search.sortUpdated": "Actualizado",
   "search.sortCreated": "Creado",
+  "search.sortSubscription": "Suscrito",
   "search.addCondition": "Añade una condición...",
   "search.placeholder": "Introduzca palabras clave o una condición como tipo:Tipo",
   "search.logicAll": "Coincidir con todas las condiciones; haga clic para hacer coincidir cualquiera",
@@ -1121,6 +1125,8 @@ const spanishEntries = {
 // Product terms such as playsets, share codes, and the Steam Workshop need
 // deliberate Spanish wording rather than literal sentence-level translation.
 Object.assign(spanishEntries, {
+  'settings.showHiddenMods': 'Mostrar MODs ocultos',
+  'settings.showHiddenModsHelp': 'Desactivado de forma predeterminada. Al activarlo, los MODs ocultos aparecen en ambas listas.',
   'language.enUS': 'Inglés',
   'language.koKR': 'Coreano',
   'language.ruRU': 'Ruso',

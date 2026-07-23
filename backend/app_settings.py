@@ -200,6 +200,9 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "keyboard_shortcuts": dict(DEFAULT_KEYBOARD_SHORTCUTS),
         "check_outdated_mods": False,
         "search_highlight_mode": False,
+        "active_search_highlight_mode": False,
+        "inactive_search_highlight_mode": False,
+        "show_hidden_mods": False,
         "ai_enabled": False,
         "ai_base_url": "https://api.openai.com/v1",
         "ai_api_key": "",
@@ -241,12 +244,21 @@ class SettingsService:
         is_first_launch = not self.store.path.exists()
         stored = self.store.load()
         language_was_missing = "language" not in stored
+        search_highlight_modes_missing = any(
+            key not in stored
+            for key in ("active_search_highlight_mode", "inactive_search_highlight_mode")
+        )
         try:
             stored_version = int(stored.get("schema_version") or 0)
         except (TypeError, ValueError):
             stored_version = 0
         payload = default_settings()
         payload.update(stored)
+        if search_highlight_modes_missing:
+            legacy_highlight_mode = bool(payload.get("search_highlight_mode"))
+            for key in ("active_search_highlight_mode", "inactive_search_highlight_mode"):
+                if key not in stored:
+                    payload[key] = legacy_highlight_mode
         if stored_version < SETTINGS_SCHEMA_VERSION:
             payload["game_installations"] = self._migrate_legacy_game_installations(
                 stored,
@@ -258,7 +270,12 @@ class SettingsService:
             payload["fetch_workshop_metadata"] = True
         payload["schema_version"] = SETTINGS_SCHEMA_VERSION
         normalized = self._normalize(payload)
-        if is_first_launch or stored_version < SETTINGS_SCHEMA_VERSION or language_was_missing:
+        if (
+            is_first_launch
+            or stored_version < SETTINGS_SCHEMA_VERSION
+            or language_was_missing
+            or search_highlight_modes_missing
+        ):
             self.store.save(normalized)
         return normalized
 
@@ -434,6 +451,9 @@ class SettingsService:
             "keyboard_shortcuts_enabled",
             "check_outdated_mods",
             "search_highlight_mode",
+            "active_search_highlight_mode",
+            "inactive_search_highlight_mode",
+            "show_hidden_mods",
             "ai_enabled",
             "custom_battle_all_units_as_lords",
             "enable_script_logging",

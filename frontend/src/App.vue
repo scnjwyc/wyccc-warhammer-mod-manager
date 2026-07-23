@@ -13,8 +13,6 @@ import SaveGamesModal from './components/SaveGamesModal.vue'
 import SaveModsComparisonModal from './components/SaveModsComparisonModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import ShareModal from './components/ShareModal.vue'
-import SortMenu from './components/SortMenu.vue'
-import TagSearchBox from './components/TagSearchBox.vue'
 import ThemedSelect from './components/ThemedSelect.vue'
 import TypeManagerModal from './components/TypeManagerModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
@@ -49,9 +47,14 @@ const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
 const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
 const unitCapFeature = computed(() => store.gameDataFeatures.unit_cap)
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
-const searchFocusId = computed(() => (
-  store.searchHighlightActive
-    ? store.inactiveSearchMatchIds[0] || store.activeSearchMatchIds[0] || ''
+const inactiveSearchFocusId = computed(() => (
+  store.inactiveSearchHighlightActive
+    ? store.inactiveSearchMatchIds[0] || ''
+    : ''
+))
+const activeSearchFocusId = computed(() => (
+  store.activeSearchHighlightActive
+    ? store.activeSearchMatchIds[0] || ''
     : ''
 ))
 const playsetOptions = computed(() => store.playsets.map(playset => ({
@@ -279,9 +282,13 @@ const toggleSingleMod = modId => (
     : store.enableMany([modId])
 )
 const handleListDrop = payload => store.handleModDrop(payload)
-const toggleSearchHighlight = async () => {
+const toggleSearchHighlight = async listName => {
   try {
-    await store.setSearchHighlightMode(!store.searchHighlightMode)
+    if (listName === 'active') {
+      await store.setActiveSearchHighlightMode(!store.activeSearchHighlightMode)
+    } else {
+      await store.setInactiveSearchHighlightMode(!store.inactiveSearchHighlightMode)
+    }
   } catch {
     // Store actions surface failures through the shared toast.
   }
@@ -697,6 +704,9 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="header-actions">
+        <span class="header-mod-count">
+          {{ t('app.packCount', { count: store.mods.length }) }} · {{ t('app.enabledCount', { count: store.activeIds.length }) }}
+        </span>
         <button type="button" class="header-button" @click="openShare">{{ t('app.importExport') }}</button>
         <button type="button" class="header-button" @click="showSettings = true">{{ t('app.settings') }}</button>
       </div>
@@ -706,63 +716,6 @@ onBeforeUnmount(() => {
       <strong>{{ t('app.pathMissingTitle') }}</strong>
       <span>{{ t('app.pathMissingDetail') }}</span>
       <button type="button" class="secondary-button" @click="showSettings = true">{{ t('app.configureNow') }}</button>
-    </div>
-
-    <div class="workspace-toolbar">
-      <div class="toolbar-search-cluster">
-        <TagSearchBox
-          :tokens="store.searchTokens"
-          :logic="store.searchLogic"
-          :mods="store.mods"
-          :type-map="store.modTypeMap"
-          @update:tokens="store.setSearchTokens"
-          @update:logic="store.setSearchLogic"
-        />
-        <button
-          type="button"
-          class="search-highlight-button"
-          :class="{ active: store.searchHighlightMode }"
-          :aria-pressed="store.searchHighlightMode"
-          :title="t('search.highlightModeHelp')"
-          :aria-label="t('search.highlightModeHelp')"
-          data-testid="search-highlight-button"
-          @click="toggleSearchHighlight"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="5.5"></circle>
-            <path d="m15.2 15.2 4.3 4.3M11 8.5v5M8.5 11h5"></path>
-          </svg>
-        </button>
-        <SortMenu
-          :mode="store.sortMode"
-          :descending="store.sortDescending"
-          @update:mode="store.setSortMode"
-          @update:descending="store.setSortDescending"
-        />
-        <button
-          type="button"
-          class="hidden-visibility-button"
-          :class="{ active: store.showHidden }"
-          :disabled="!store.hiddenCount"
-          :title="store.hiddenCount ? (store.showHidden ? t('app.hideHidden') : t('app.showHidden')) : t('app.noHidden')"
-          data-testid="hidden-visibility-button"
-          @click="store.toggleHiddenVisibility"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M2.5 12s3.4-5 9.5-5 9.5 5 9.5 5-3.4 5-9.5 5-9.5-5-9.5-5Z"></path>
-            <circle cx="12" cy="12" r="2.4"></circle>
-            <path v-if="!store.showHidden" d="m4 4 16 16"></path>
-          </svg>
-          <span v-if="store.hiddenCount">{{ store.hiddenCount }}</span>
-        </button>
-      </div>
-      <div class="toolbar-meta">
-        <span>{{ t('app.packCount', { count: store.mods.length }) }}</span>
-        <span>{{ t('app.enabledCount', { count: store.activeIds.length }) }}</span>
-        <span v-if="store.selectedIds.length > 1" class="selection-indicator">{{ t('app.selectedCount', { count: store.selectedIds.length }) }}</span>
-        <span v-if="store.workshopRefreshing" class="running-indicator">{{ t('app.backgroundWorkshop') }}</span>
-        <span v-if="store.runtime.running" class="running-indicator">{{ t('status.gameRunning') }}</span>
-      </div>
     </div>
 
     <main class="workspace-grid">
@@ -785,16 +738,30 @@ onBeforeUnmount(() => {
         :order-ids="store.inactiveOrderIds"
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
-        :visual-sorted="store.sortMode !== 'priority'"
-        :search-active="store.searchHighlightActive"
+        :visual-sorted="store.inactiveSortMode !== 'priority'"
+        :search-tokens="store.inactiveSearchTokens"
+        :search-logic="store.inactiveSearchLogic"
+        :search-suggestion-mods="store.inactiveDisplayMods"
+        search-test-id="inactive-mod-search"
+        :search-highlight-mode="store.inactiveSearchHighlightMode"
+        search-highlight-test-id="inactive-search-highlight-button"
+        :sort-mode="store.inactiveSortMode"
+        :sort-descending="store.inactiveSortDescending"
+        sort-test-id="inactive-sort-button"
+        :search-active="store.inactiveSearchHighlightActive"
         :search-match-ids="store.inactiveSearchMatchIds"
-        :search-focus-id="searchFocusId"
+        :search-focus-id="inactiveSearchFocusId"
         @select="store.selectMod"
         @enable="enableSelected"
         @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
         @context-menu="openModContextMenu"
         @select-all="store.selectAllMods"
+        @update:search-tokens="store.setInactiveSearchTokens"
+        @update:search-logic="store.setInactiveSearchLogic"
+        @toggle-search-highlight="toggleSearchHighlight('inactive')"
+        @update:sort-mode="store.setInactiveSortMode"
+        @update:sort-descending="store.setInactiveSortDescending"
       />
 
       <ModList
@@ -806,10 +773,19 @@ onBeforeUnmount(() => {
         :order-ids="store.activeIds"
         :thumbnails="store.thumbnails"
         :type-map="store.modTypeMap"
-        :visual-sorted="store.sortMode !== 'priority'"
-        :search-active="store.searchHighlightActive"
+        :visual-sorted="store.activeSortMode !== 'priority'"
+        :search-tokens="store.activeSearchTokens"
+        :search-logic="store.activeSearchLogic"
+        :search-suggestion-mods="store.activeDisplayMods"
+        search-test-id="active-mod-search"
+        :search-highlight-mode="store.activeSearchHighlightMode"
+        search-highlight-test-id="active-search-highlight-button"
+        :sort-mode="store.activeSortMode"
+        :sort-descending="store.activeSortDescending"
+        sort-test-id="active-sort-button"
+        :search-active="store.activeSearchHighlightActive"
         :search-match-ids="store.activeSearchMatchIds"
-        :search-focus-id="searchFocusId"
+        :search-focus-id="activeSearchFocusId"
         :warning-count="store.warningCount"
         @select="store.selectMod"
         @disable="disableSelected"
@@ -819,6 +795,11 @@ onBeforeUnmount(() => {
         @context-menu="openModContextMenu"
         @select-all="store.selectAllMods"
         @show-warnings="showWarnings = true"
+        @update:search-tokens="store.setActiveSearchTokens"
+        @update:search-logic="store.setActiveSearchLogic"
+        @toggle-search-highlight="toggleSearchHighlight('active')"
+        @update:sort-mode="store.setActiveSortMode"
+        @update:sort-descending="store.setActiveSortDescending"
       />
     </main>
 

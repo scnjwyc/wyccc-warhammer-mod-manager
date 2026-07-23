@@ -141,8 +141,9 @@ describe('deliberately small product scope', () => {
     expect(stylesSource).toMatch(/\.type-name-readonly\s*\{[^}]*font-size:\s*14px/s)
     expect(stylesSource).toMatch(/\.release-entry > header strong\s*\{[^}]*font-size:\s*19px/s)
     expect(stylesSource).toMatch(/\.release-entry > header time\s*\{[^}]*font-size:\s*13px/s)
-    expect(stylesSource).toMatch(/\.change-entry h3\s*\{[^}]*font-size:\s*15px/s)
-    expect(stylesSource).toMatch(/\.change-entry li\s*\{[^}]*font-size:\s*14px/s)
+    expect(stylesSource).not.toContain('.change-entry h3')
+    expect(stylesSource).toMatch(/\.change-list\s*\{[^}]*gap:\s*8px/s)
+    expect(stylesSource).toMatch(/\.change-list li\s*\{[^}]*font-size:\s*14px/s)
   })
 
   it('uses fixed header, content, and footer rows for every settings tab', () => {

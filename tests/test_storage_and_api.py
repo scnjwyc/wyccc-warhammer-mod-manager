@@ -345,6 +345,20 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(generated["ok"])
         self.assertEqual(generated["data"]["alias"], "AI alias")
 
+    def test_scoped_search_highlight_preferences_are_saved_independently(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+
+            active = api.call("set_search_highlight_mode", [True, "active"])
+            inactive = api.call("set_search_highlight_mode", [True, "inactive"])
+
+        self.assertTrue(active["ok"])
+        self.assertTrue(active["data"]["settings"]["active_search_highlight_mode"])
+        self.assertFalse(active["data"]["settings"]["inactive_search_highlight_mode"])
+        self.assertTrue(inactive["ok"])
+        self.assertTrue(inactive["data"]["settings"]["active_search_highlight_mode"])
+        self.assertTrue(inactive["data"]["settings"]["inactive_search_highlight_mode"])
+
     @staticmethod
     def _prepare_launch_api(root: Path) -> tuple[API, dict]:
         game = root / "Total War WARHAMMER III"

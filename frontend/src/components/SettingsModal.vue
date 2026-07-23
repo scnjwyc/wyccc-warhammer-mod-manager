@@ -129,6 +129,7 @@ watch(
     delete draft.workshop_path
     if (!draft.language) draft.language = DEFAULT_LANGUAGE
     if (typeof draft.keyboard_shortcuts_enabled !== 'boolean') draft.keyboard_shortcuts_enabled = true
+    if (typeof draft.show_hidden_mods !== 'boolean') draft.show_hidden_mods = false
     draft.keyboard_shortcuts = normalizeShortcutMap(props.settings?.keyboard_shortcuts)
     shortcutCaptureId.value = ''
     shortcutError.value = ''
@@ -284,6 +285,11 @@ const closeSettings = () => {
               />
               <small class="field-help">{{ t('settings.languageHelp') }}</small>
             </div>
+
+            <label class="switch-row">
+              <input v-model="draft.show_hidden_mods" type="checkbox" data-testid="show-hidden-mods" />
+              <span><strong>{{ t('settings.showHiddenMods') }}</strong><small>{{ t('settings.showHiddenModsHelp') }}</small></span>
+            </label>
 
             <label class="field-label">
               <span>{{ t('settings.gameFolder') }}</span>

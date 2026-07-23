@@ -49,6 +49,7 @@ class ModAsset:
     pack_type: str = "unknown"
     updated_at: int = 0
     created_at: int = 0
+    subscribed_at: int = 0
     is_symlink: bool = False
     alias: str = ""
     notes: str = ""

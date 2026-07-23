@@ -15,6 +15,7 @@ const props = defineProps({
   logic: { type: String, default: 'AND' },
   mods: { type: Array, default: () => [] },
   typeMap: { type: Object, default: () => ({}) },
+  testId: { type: String, default: 'tag-search-box' },
 })
 
 const emit = defineEmits(['update:tokens', 'update:logic'])
@@ -97,7 +98,7 @@ onBeforeUnmount(() => window.clearTimeout(blurTimer))
 </script>
 
 <template>
-  <div class="search-box tag-search-box" data-testid="tag-search-box">
+  <div class="search-box tag-search-box" :data-testid="testId">
     <button
       type="button"
       class="search-logic-button"

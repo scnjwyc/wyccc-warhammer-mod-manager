@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.2",
+        "date": "2026-07-23",
+        "entries": (
+            (
+                "v092_adjusted_title",
+                (
+                    ("improvement", "v092_subscription_sort"),
+                    ("improvement", "v092_independent_mod_search"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.9.0",
         "date": "2026-07-21",
         "entries": (
@@ -338,6 +351,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v092_adjusted_title": "调整",
+        "v092_subscription_sort": "支持按照订阅时间排序。",
+        "v092_independent_mod_search": "已启用 MOD 列表和未启用 MOD 列表的搜索栏现在完全独立，互不影响。",
         "v090_added_title": "新增",
         "v090_open_published_workshop_page": "发布或更新 MOD 后，自动打开对应的创意工坊页面。",
         "v090_adjusted_title": "调整",
@@ -480,6 +496,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v092_adjusted_title": "Adjusted",
+        "v092_subscription_sort": "Added sorting by subscription time.",
+        "v092_independent_mod_search": "The search bars for enabled and disabled MOD lists now work completely independently.",
         "v090_added_title": "Added",
         "v090_open_published_workshop_page": "Publishing or updating a MOD now opens its Workshop page automatically.",
         "v090_adjusted_title": "Adjusted",
@@ -622,6 +641,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v092_adjusted_title": "조정",
+        "v092_subscription_sort": "구독 시간순 정렬을 지원합니다.",
+        "v092_independent_mod_search": "활성화된 MOD 목록과 비활성화된 MOD 목록의 검색창이 완전히 독립적으로 작동합니다.",
         "v090_added_title": "추가",
         "v090_open_published_workshop_page": "MOD를 게시하거나 업데이트하면 해당 창작마당 페이지가 자동으로 열립니다.",
         "v090_adjusted_title": "조정",
@@ -764,6 +786,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v092_adjusted_title": "Изменено",
+        "v092_subscription_sort": "Добавлена сортировка по времени подписки.",
+        "v092_independent_mod_search": "Поисковые поля списков включенных и отключенных MOD теперь работают полностью независимо.",
         "v090_added_title": "Добавлено",
         "v090_open_published_workshop_page": "После публикации или обновления MOD его страница Мастерской открывается автоматически.",
         "v090_adjusted_title": "Изменено",
@@ -906,6 +931,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v092_adjusted_title": "調整",
+        "v092_subscription_sort": "購読日時による並べ替えに対応しました。",
+        "v092_independent_mod_search": "有効な MOD と無効な MOD の検索欄が完全に独立して動作するようになりました。",
         "v090_added_title": "追加",
         "v090_open_published_workshop_page": "MOD の公開または更新後、対応するワークショップページを自動で開くようになりました。",
         "v090_adjusted_title": "調整",
@@ -1048,6 +1076,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v092_adjusted_title": "Ajustado",
+        "v092_subscription_sort": "Ahora se admite ordenar por fecha de suscripción.",
+        "v092_independent_mod_search": "Las barras de búsqueda de las listas de MOD activados y desactivados ahora funcionan de forma totalmente independiente.",
         "v090_added_title": "Añadido",
         "v090_open_published_workshop_page": "Al publicar o actualizar un MOD, su página del Taller se abre automáticamente.",
         "v090_adjusted_title": "Ajustado",

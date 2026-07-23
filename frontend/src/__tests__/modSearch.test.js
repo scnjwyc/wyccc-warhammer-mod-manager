@@ -25,6 +25,7 @@ const mods = [
     mod_types: ['language', 'ui'],
     updated_at: 200,
     created_at: 100,
+    subscribed_at: 300,
   },
   {
     id: 'b',
@@ -35,6 +36,7 @@ const mods = [
     mod_types: ['unknown'],
     updated_at: 100,
     created_at: 300,
+    subscribed_at: 100,
   },
 ]
 
@@ -108,6 +110,11 @@ describe('display-only sorting', () => {
     expect(sortDisplayedMods(original, 'priority', false)).toEqual(original)
     expect(original.map(mod => mod.id)).toEqual(['b', 'a'])
     expect(byFile).not.toBe(original)
+  })
+
+  it('sorts Workshop MODs by the Steam subscription time', () => {
+    expect(sortDisplayedMods(mods, 'subscription', true).map(mod => mod.id)).toEqual(['a', 'b'])
+    expect(sortDisplayedMods(mods, 'subscription', false).map(mod => mod.id)).toEqual(['b', 'a'])
   })
 })
 

@@ -7,6 +7,7 @@ import { SORT_OPTIONS, sortOptionLabel } from '../modSearch'
 const props = defineProps({
   mode: { type: String, default: 'priority' },
   descending: { type: Boolean, default: false },
+  testId: { type: String, default: 'sort-button' },
 })
 
 const emit = defineEmits(['update:mode', 'update:descending'])
@@ -35,7 +36,7 @@ onBeforeUnmount(() => window.removeEventListener('mousedown', closeOutside))
       :class="{ active: mode !== 'priority' }"
       :aria-expanded="open"
       :title="t('search.displaySortTitle', { label: currentLabel })"
-      data-testid="sort-button"
+      :data-testid="testId"
       @click="open = !open"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">

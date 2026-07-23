@@ -25,6 +25,76 @@ from .workshop import WorkshopMetadataService
 
 _MANIFEST_FILE_RE = re.compile(r"^\s*([^\s]+)")
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+_STEAM_KEYVALUES_TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
+
+
+def _parse_steam_keyvalues(text: str) -> dict[str, object]:
+    """Parse the quoted-key subset used by Steam's appworkshop manifests."""
+    tokens = [
+        match.group(1).replace(r'\\"', '"').replace(r'\\\\', '\\')
+        if match.group(1) is not None
+        else match.group(2)
+        for match in _STEAM_KEYVALUES_TOKEN_RE.finditer(text)
+    ]
+
+    def parse_object(index: int) -> tuple[dict[str, object], int]:
+        values: dict[str, object] = {}
+        while index < len(tokens):
+            token = tokens[index]
+            if token == "}":
+                return values, index + 1
+            if token == "{":
+                index += 1
+                continue
+            key = token
+            index += 1
+            if index >= len(tokens):
+                break
+            if tokens[index] == "{":
+                child, index = parse_object(index + 1)
+                values[key] = child
+            else:
+                values[key] = tokens[index]
+                index += 1
+        return values, index
+
+    return parse_object(0)[0]
+
+
+def _read_workshop_subscription_times(manifest_path: Path) -> dict[str, int]:
+    try:
+        manifest = _parse_steam_keyvalues(manifest_path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return {}
+    app_workshop = manifest.get("AppWorkshop")
+    if not isinstance(app_workshop, dict):
+        return {}
+    installed = app_workshop.get("WorkshopItemsInstalled")
+    if not isinstance(installed, dict):
+        return {}
+
+    subscription_times: dict[str, int] = {}
+    for workshop_id, item in installed.items():
+        if not str(workshop_id).isdigit() or not isinstance(item, dict):
+            continue
+        try:
+            time_added = int(str(item.get("timeadded") or "0"))
+        except (TypeError, ValueError):
+            continue
+        if time_added > 0:
+            subscription_times[str(workshop_id)] = time_added * 1000
+    return subscription_times
+
+
+def _workshop_subscription_manifest_path(paths: GamePaths, workshop_root: Path | None) -> Path | None:
+    app_id = paths.game_definition.app_id
+    if paths.steam_library:
+        return Path(paths.steam_library) / "steamapps" / f"appworkshop_{app_id}.acf"
+    if workshop_root:
+        for parent in workshop_root.parents:
+            if parent.name.casefold() == "steamapps":
+                return parent / f"appworkshop_{app_id}.acf"
+    return None
 
 
 def read_pack_type(path: Path) -> str:
@@ -122,6 +192,7 @@ class ModScanner:
                 excluded_names=vanilla,
             )
         workshop_ids: list[str] = []
+        workshop_root: Path | None = None
         if paths.workshop_path:
             workshop_root = Path(paths.workshop_path)
             if workshop_root.is_dir():
@@ -135,6 +206,13 @@ class ModScanner:
                     self._scan_workshop_item(child, child.name, assets, result)
             elif str(workshop_root):
                 result.warnings.append(f"Workshop 目录不存在：{workshop_root}")
+
+        subscription_manifest = _workshop_subscription_manifest_path(paths, workshop_root)
+        subscription_times = (
+            _read_workshop_subscription_times(subscription_manifest)
+            if subscription_manifest is not None
+            else {}
+        )
 
         metadata: dict[str, dict] = {}
         if workshop_ids:
@@ -171,6 +249,7 @@ class ModScanner:
 
         for asset in assets.values():
             if asset.workshop_id:
+                asset.subscribed_at = subscription_times.get(asset.workshop_id, 0)
                 workshop_data = metadata.get(asset.workshop_id, {})
                 asset.display_name = str(workshop_data.get("title") or asset.display_name)
                 asset.description = str(workshop_data.get("description") or "")
@@ -281,6 +360,7 @@ class ModScanner:
             primary.display_name = workshop.display_name or primary.display_name
             primary.created_at = workshop.created_at or primary.created_at
             primary.updated_at = max(primary.updated_at, workshop.updated_at)
+            primary.subscribed_at = workshop.subscribed_at or primary.subscribed_at
             primary.dependency_packs = list(
                 dict.fromkeys([*primary.dependency_packs, *workshop.dependency_packs])
             )

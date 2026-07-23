@@ -464,8 +464,20 @@ class API:
             "path_health": self._path_health(paths),
         }
 
-    def _set_search_highlight_mode(self, enabled: bool) -> dict[str, Any]:
-        self.settings_service.save({"search_highlight_mode": bool(enabled)})
+    def _set_search_highlight_mode(self, enabled: bool, list_name: str = "") -> dict[str, Any]:
+        mode = bool(enabled)
+        if list_name in {"active", "inactive"}:
+            self.settings_service.save({f"{list_name}_search_highlight_mode": mode})
+        else:
+            # Keep older clients functional while migrating their shared
+            # preference to both independently controlled list settings.
+            self.settings_service.save(
+                {
+                    "search_highlight_mode": mode,
+                    "active_search_highlight_mode": mode,
+                    "inactive_search_highlight_mode": mode,
+                }
+            )
         return {"settings": self.settings_service.get_public()}
 
     def _save_game_data_settings(self, changes: dict[str, Any]) -> dict[str, Any]:

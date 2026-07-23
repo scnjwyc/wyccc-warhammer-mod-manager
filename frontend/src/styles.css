@@ -155,7 +155,6 @@ textarea {
 .brand-block,
 .header-center,
 .header-actions,
-.toolbar-meta,
 .button-row,
 .footer-left,
 .footer-actions,
@@ -248,6 +247,13 @@ textarea {
   gap: 7px;
 }
 
+.header-mod-count {
+  color: #c5b7ae;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .header-button,
 .secondary-button,
 .primary-button,
@@ -338,25 +344,6 @@ textarea {
 .path-warning span {
   flex: 1;
   color: #aa9274;
-}
-
-.workspace-toolbar {
-  display: grid;
-  flex: 0 0 58px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 18px;
-  padding: 8px 18px;
-  border-bottom: 1px solid #261e1d;
-  background: rgba(15, 12, 12, 0.92);
-}
-
-.toolbar-search-cluster {
-  position: relative;
-  grid-column: 2;
-  width: min(560px, 48vw);
-  display: flex;
-  gap: 6px;
 }
 
 .tag-search-box {
@@ -581,9 +568,8 @@ textarea {
 }
 
 .sort-control {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
+  position: relative;
+  flex: 0 0 39px;
   height: 39px;
 }
 
@@ -614,61 +600,6 @@ textarea {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.7;
-}
-
-.hidden-visibility-button {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 55px);
-  display: grid;
-  width: 39px;
-  height: 39px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #151111;
-  color: #998a80;
-  cursor: pointer;
-}
-
-.hidden-visibility-button:hover:not(:disabled),
-.hidden-visibility-button.active {
-  border-color: #a36f32;
-  color: #f0c990;
-  box-shadow: 0 0 0 1px rgba(163, 111, 50, 0.18);
-}
-
-.hidden-visibility-button:disabled {
-  opacity: 0.42;
-  cursor: default;
-}
-
-.hidden-visibility-button svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.hidden-visibility-button > span {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  display: grid;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  place-items: center;
-  border: 1px solid #6d4a27;
-  border-radius: 9px;
-  background: #2d1e12;
-  color: #f0c990;
-  font-size: 9px;
-  font-weight: 800;
 }
 
 .sort-menu {
@@ -727,17 +658,6 @@ textarea {
   font-size: 11px;
   font-weight: 600;
   line-height: 1.45;
-}
-
-.toolbar-meta {
-  grid-column: 3;
-  min-width: 0;
-  justify-content: flex-end;
-  justify-self: end;
-  gap: 14px;
-  color: #c5b7ae;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .hidden-toggle {
@@ -1293,7 +1213,7 @@ textarea {
 
 .list-panel {
   display: grid;
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-rows: 104px minmax(0, 1fr);
 }
 
 .list-panel.active-panel {
@@ -1313,12 +1233,31 @@ textarea {
 
 .panel-heading {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 15px 0 17px;
+  display: grid;
+  grid-template-rows: minmax(24px, auto) 39px;
+  gap: 6px;
+  padding: 9px 15px 10px 17px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
+}
+
+.panel-heading-row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-heading .tag-search-box {
+  width: 100%;
+}
+
+.panel-search-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel-heading h2 {
@@ -2792,13 +2731,7 @@ button.context-menu-item {
   font-size: 13px;
 }
 
-.change-entry h3 {
-  margin: 0 0 9px;
-  color: var(--text);
-  font-size: 15px;
-}
-
-.change-entry ul {
+.change-list {
   display: grid;
   gap: 8px;
   margin: 0;
@@ -2806,7 +2739,7 @@ button.context-menu-item {
   list-style: none;
 }
 
-.change-entry li {
+.change-list li {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
   align-items: start;
@@ -3656,10 +3589,6 @@ button.context-menu-item {
 @media (max-height: 760px) {
   .app-header {
     flex-basis: 62px;
-  }
-
-  .workspace-toolbar {
-    flex-basis: 46px;
   }
 
   .action-footer {

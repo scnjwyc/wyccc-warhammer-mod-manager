@@ -122,6 +122,9 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertNotIn(removed_key, default_settings())
         self.assertFalse(default_settings()["check_outdated_mods"])
         self.assertFalse(default_settings()["search_highlight_mode"])
+        self.assertFalse(default_settings()["active_search_highlight_mode"])
+        self.assertFalse(default_settings()["inactive_search_highlight_mode"])
+        self.assertFalse(default_settings()["show_hidden_mods"])
         self.assertFalse(default_settings()["ai_enabled"])
         self.assertFalse(default_settings()["custom_battle_all_units_as_lords"])
         self.assertFalse(default_settings()["enable_script_logging"])
@@ -135,7 +138,7 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertNotIn("update_manifest_url", default_settings())
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.0")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.2")
 
     def test_workshop_page_open_preference_counts_are_normalized(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -146,13 +149,42 @@ class SettingsMigrationTests(unittest.TestCase):
 
         self.assertEqual(saved["workshop_page_open_counts"], {"browser": 9, "client": 0})
 
-    def test_search_highlight_mode_is_persisted_and_normalized(self) -> None:
+    def test_search_highlight_modes_are_independently_persisted_and_normalized(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             service = SettingsService(Path(temporary))
 
-            self.assertTrue(service.save({"search_highlight_mode": 1})["search_highlight_mode"])
-            self.assertTrue(service.get()["search_highlight_mode"])
-            self.assertFalse(service.save({"search_highlight_mode": ""})["search_highlight_mode"])
+            saved = service.save(
+                {
+                    "active_search_highlight_mode": 1,
+                    "inactive_search_highlight_mode": "",
+                }
+            )
+
+            self.assertTrue(saved["active_search_highlight_mode"])
+            self.assertFalse(saved["inactive_search_highlight_mode"])
+            self.assertTrue(service.get()["active_search_highlight_mode"])
+            self.assertFalse(service.get()["inactive_search_highlight_mode"])
+
+    def test_legacy_search_highlight_mode_initializes_both_list_preferences(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            (data_dir / "settings.json").write_text(
+                json.dumps({"schema_version": 16, "search_highlight_mode": True}),
+                encoding="utf-8",
+            )
+
+            migrated = SettingsService(data_dir).get()
+
+        self.assertTrue(migrated["active_search_highlight_mode"])
+        self.assertTrue(migrated["inactive_search_highlight_mode"])
+
+    def test_hidden_mod_visibility_is_persisted_and_normalized(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = SettingsService(Path(temporary))
+
+            self.assertTrue(service.save({"show_hidden_mods": 1})["show_hidden_mods"])
+            self.assertTrue(service.get()["show_hidden_mods"])
+            self.assertFalse(service.save({"show_hidden_mods": ""})["show_hidden_mods"])
 
     def test_schema_one_settings_migrate_to_background_refresh_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -310,7 +342,7 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-        self.assertEqual(migrated["last_seen_app_version"], "0.9.0")
+        self.assertEqual(migrated["last_seen_app_version"], "0.9.2")
 
     def test_schema_eight_settings_enable_live_mod_detection_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

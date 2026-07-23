@@ -4,7 +4,7 @@
 
 A lightweight mod manager that supports both Total War: WARHAMMER III and Total War: THREE KINGDOMS.
 
-The current version is `0.9.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `0.9.2`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 

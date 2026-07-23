@@ -62,16 +62,15 @@ const typeLabel = type => ({
         </div>
 
         <div class="changelog-list compact-log">
-          <section v-for="(entry, entryIndex) in info?.entries || []" :key="`${entry.title}:${entryIndex}`" class="change-entry">
-            <h3>{{ entry.title }}</h3>
-            <ul>
+          <ul v-if="info?.entries?.length" class="change-list">
+            <template v-for="(entry, entryIndex) in info.entries" :key="`${entry.title}:${entryIndex}`">
               <li v-for="(change, changeIndex) in entry.changes || []" :key="`${change.text}:${changeIndex}`">
                 <span class="change-type" :class="`type-${change.type}`">{{ typeLabel(change.type) }}</span>
                 <span>{{ change.text }}</span>
               </li>
-            </ul>
-          </section>
-          <p v-if="!info?.entries?.length" class="empty-changelog">{{ t('update.noVersionNotes') }}</p>
+            </template>
+          </ul>
+          <p v-else class="empty-changelog">{{ t('update.noVersionNotes') }}</p>
         </div>
       </div>
 
@@ -82,15 +81,14 @@ const typeLabel = type => ({
               <strong>v{{ release.version }}</strong>
               <time v-if="release.date">{{ release.date }}</time>
             </header>
-            <section v-for="(entry, entryIndex) in release.entries || []" :key="`${release.version}:${entryIndex}`" class="change-entry">
-              <h3>{{ entry.title }}</h3>
-              <ul>
+            <ul class="change-list">
+              <template v-for="(entry, entryIndex) in release.entries || []" :key="`${release.version}:${entryIndex}`">
                 <li v-for="(change, changeIndex) in entry.changes || []" :key="`${change.text}:${changeIndex}`">
                   <span class="change-type" :class="`type-${change.type}`">{{ typeLabel(change.type) }}</span>
                   <span>{{ change.text }}</span>
                 </li>
-              </ul>
-            </section>
+              </template>
+            </ul>
           </article>
           <p v-if="!changelog.length" class="empty-changelog">{{ t('update.noChangelog') }}</p>
         </div>

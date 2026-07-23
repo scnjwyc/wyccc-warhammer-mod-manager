@@ -38,6 +38,7 @@ export const SORT_OPTIONS = [
   { id: 'author', labelKey: 'search.sortAuthor' },
   { id: 'updated', labelKey: 'search.sortUpdated' },
   { id: 'created', labelKey: 'search.sortCreated' },
+  { id: 'subscription', labelKey: 'search.sortSubscription' },
 ]
 
 export const searchFieldLabel = field => t(field?.labelKey || 'search.fieldName')
@@ -222,6 +223,7 @@ export const sortDisplayedMods = (mods, mode = 'priority', descending = false, t
     else if (mode === 'author') comparison = compareText(left.author, right.author)
     else if (mode === 'updated') comparison = Number(left.updated_at || 0) - Number(right.updated_at || 0)
     else if (mode === 'created') comparison = Number(left.created_at || 0) - Number(right.created_at || 0)
+    else if (mode === 'subscription') comparison = Number(left.subscribed_at || 0) - Number(right.subscribed_at || 0)
     if (comparison === 0) comparison = compareText(left.pack_name, right.pack_name)
     return descending ? -comparison : comparison
   })

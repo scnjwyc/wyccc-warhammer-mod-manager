@@ -38,6 +38,33 @@ describe('visual-only list sorting guardrails', () => {
     const moveButtons = wrapper.findAll('.row-actions .icon-button').slice(0, 2)
     expect(moveButtons.every(button => button.attributes('disabled') !== undefined)).toBe(true)
   })
+
+  it('renders a list-specific search box and forwards its own search state', async () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: '未启用 MOD',
+        mods: [localMod],
+        searchTokens: [],
+        searchLogic: 'AND',
+        searchSuggestionMods: [localMod],
+      },
+    })
+
+    await wrapper.get('input').setValue('author:Wyccc')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('update:search-tokens')[0][0][0]).toMatchObject({
+      key: 'author',
+      value: 'Wyccc',
+    })
+
+    await wrapper.get('.search-logic-button').trigger('click')
+    expect(wrapper.emitted('update:search-logic')[0]).toEqual(['OR'])
+
+    expect(wrapper.get('[data-testid="search-highlight-button"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="sort-button"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="search-highlight-button"]').trigger('click')
+    expect(wrapper.emitted('toggle-search-highlight')).toHaveLength(1)
+  })
 })
 
 describe('Workshop publish dialog', () => {

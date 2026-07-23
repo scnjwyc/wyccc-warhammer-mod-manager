@@ -1,47 +1,29 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.9.0",
-  "published_at": "2026-07-21",
+  "version": "0.9.2",
+  "published_at": "2026-07-23",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.0/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.0/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.0/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "167f57d8209ab836025a5c03be2ec7bdf2601f17ddb3af61a3e9b7edecef7b2e",
-    "size": 61997194
+    "sha256": "8d2cd85391e4840d00548f26355c02ea328dacac97775b571e4a94c9706ad02d",
+    "size": 61998262
   },
   "changelog": [
-    {
-      "title": "\u65b0\u589e",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "\u53d1\u5e03\u6216\u66f4\u65b0 MOD \u540e\uff0c\u81ea\u52a8\u6253\u5f00\u5bf9\u5e94\u7684\u521b\u610f\u5de5\u574a\u9875\u9762\u3002"
-        }
-      ]
-    },
     {
       "title": "\u8c03\u6574",
       "changes": [
         {
           "type": "improvement",
-          "text": "\u4ece\u5b58\u6863\u4e2d\u52a0\u8f7d MOD \u65f6\uff0c\u4f1a\u65b0\u5efa\u201c\u5b58\u6863+\u5b58\u6863\u540d\u201d\u64ad\u653e\u96c6\uff0c\u5e76\u4e25\u683c\u4fdd\u7559\u5b58\u6863\u4e2d\u7684 MOD \u6392\u5e8f\u3002"
-        }
-      ]
-    },
-    {
-      "title": "\u4fee\u590d",
-      "changes": [
-        {
-          "type": "fix",
-          "text": "\u4fee\u590d\u81ea\u52a8\u66f4\u65b0\u5931\u8d25\u7684\u95ee\u9898\u3002"
+          "text": "\u652f\u6301\u6309\u7167\u8ba2\u9605\u65f6\u95f4\u6392\u5e8f\u3002"
         },
         {
-          "type": "fix",
-          "text": "\u5355\u4f4d\u89c4\u6a21\u4fee\u6539\u73b0\u5df2\u517c\u5bb9 Fully Custom Garrison \u53ca\u5176\u5b50 MOD\u3002"
+          "type": "improvement",
+          "text": "\u5df2\u542f\u7528 MOD \u5217\u8868\u548c\u672a\u542f\u7528 MOD \u5217\u8868\u7684\u641c\u7d22\u680f\u73b0\u5728\u5b8c\u5168\u72ec\u7acb\uff0c\u4e92\u4e0d\u5f71\u54cd\u3002"
         }
       ]
     }

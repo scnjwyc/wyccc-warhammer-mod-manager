@@ -31,6 +31,8 @@ describe('software update modal', () => {
     expect(wrapper.text()).toContain('发现新版本 v0.2.0')
     expect(wrapper.text()).toContain('新增自动更新。')
     expect(wrapper.text()).toContain('12.0 MB')
+    expect(wrapper.text()).not.toContain(updateInfo.entries[0].title)
+    expect(wrapper.findAll('h3')).toHaveLength(0)
     await wrapper.get('.primary-button').trigger('click')
     expect(wrapper.emitted('download')).toHaveLength(1)
 
@@ -58,5 +60,7 @@ describe('software update modal', () => {
     expect(wrapper.text()).toContain('更新日志')
     expect(wrapper.text()).toContain('v0.1.0')
     expect(wrapper.text()).toContain('修复启动问题。')
+    expect(wrapper.text()).not.toContain(updateInfo.entries[0].title)
+    expect(wrapper.findAll('h3')).toHaveLength(0)
   })
 })

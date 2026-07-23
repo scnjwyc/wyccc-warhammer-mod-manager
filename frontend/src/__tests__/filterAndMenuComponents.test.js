@@ -57,6 +57,7 @@ describe('display sort control', () => {
     expect(wrapper.text()).toContain('作者')
     expect(wrapper.text()).toContain('更新时间')
     expect(wrapper.text()).toContain('创建时间')
+    expect(wrapper.text()).toContain('订阅时间')
     expect(wrapper.text()).toContain('仅改变列表显示，不修改实际加载顺序')
   })
 })

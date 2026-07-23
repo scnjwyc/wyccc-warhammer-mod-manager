@@ -178,9 +178,13 @@ describe('anchored mod selection', () => {
     expect(store.mods.map(mod => mod.alias || '')).toEqual(['A', '', 'C'])
   })
 
-  it('persists highlight search mode and keeps nonmatching MODs visible', async () => {
+  it('keeps enabled and disabled MOD searches independently highlighted and filtered', async () => {
     const store = useAppStore()
-    store.settings = { language: 'zh-CN', search_highlight_mode: true }
+    store.settings = {
+      language: 'zh-CN',
+      active_search_highlight_mode: true,
+      inactive_search_highlight_mode: false,
+    }
     store.mods = [
       { id: 'active-match', effective_name: 'Alpha', pack_name: 'alpha.pack' },
       { id: 'active-muted', effective_name: 'Gamma', pack_name: 'gamma.pack' },
@@ -188,28 +192,70 @@ describe('anchored mod selection', () => {
       { id: 'inactive-match', effective_name: 'Alphabet', pack_name: 'alphabet.pack' },
     ]
     store.activeIds = ['active-match', 'active-muted']
-    store.searchTokens = [{ type: 'text', value: 'Alpha' }]
+    store.activeSearchTokens = [{ type: 'text', value: 'Alpha' }]
+    store.inactiveSearchTokens = [{ type: 'text', value: 'Beta' }]
     invokeMock.mockImplementation(method => {
       if (method === 'set_search_highlight_mode') {
         return Promise.resolve({
-          settings: { language: 'zh-CN', search_highlight_mode: false },
+          settings: {
+            language: 'zh-CN',
+            active_search_highlight_mode: false,
+            inactive_search_highlight_mode: false,
+          },
         })
       }
       return Promise.resolve({ items: [] })
     })
 
     expect(store.activeMods.map(mod => mod.id)).toEqual(['active-match', 'active-muted'])
-    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-muted', 'inactive-match'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-muted'])
     expect(store.activeSearchMatchIds).toEqual(['active-match'])
-    expect(store.inactiveSearchMatchIds).toEqual(['inactive-match'])
+    expect(store.inactiveSearchMatchIds).toEqual(['inactive-muted'])
 
-    await store.setSearchHighlightMode(false)
-    expect(invokeMock).toHaveBeenCalledWith('set_search_highlight_mode', false)
-    expect(store.settings.search_highlight_mode).toBe(false)
+    await store.setActiveSearchHighlightMode(false)
+    expect(invokeMock).toHaveBeenCalledWith('set_search_highlight_mode', false, 'active')
+    expect(store.settings.active_search_highlight_mode).toBe(false)
+    expect(store.settings.inactive_search_highlight_mode).toBe(false)
     expect(store.activeMods.map(mod => mod.id)).toEqual(['active-match'])
-    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-match'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-muted'])
     expect(store.activeIds).toEqual(['active-match', 'active-muted'])
     expect(store.mods).toHaveLength(4)
+  })
+
+  it('sorts enabled and disabled MOD lists independently', () => {
+    const store = useAppStore()
+    store.mods = [
+      { id: 'active-new', pack_name: 'z-active.pack', updated_at: 200 },
+      { id: 'active-old', pack_name: 'a-active.pack', updated_at: 100 },
+      { id: 'inactive-old', pack_name: 'y-inactive.pack', updated_at: 100 },
+      { id: 'inactive-new', pack_name: 'b-inactive.pack', updated_at: 300 },
+    ]
+    store.activeIds = ['active-new', 'active-old']
+
+    store.setActiveSortMode('updated')
+
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-new', 'active-old'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-old', 'inactive-new'])
+    expect(store.activeSortMode).toBe('updated')
+    expect(store.inactiveSortMode).toBe('priority')
+
+    store.setInactiveSortMode('updated')
+
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-new', 'active-old'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-new', 'inactive-old'])
+  })
+
+  it('derives hidden MOD visibility from the persisted basic setting', () => {
+    const store = useAppStore()
+    store.mods = [
+      { id: 'visible', effective_name: 'Visible', pack_name: 'visible.pack' },
+      { id: 'hidden', effective_name: 'Hidden', pack_name: 'hidden.pack', hidden: true },
+    ]
+    store.settings = { show_hidden_mods: false }
+
+    expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible'])
+    store.settings.show_hidden_mods = true
+    expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible', 'hidden'])
   })
 
   it('moves a multi-selection as one ordered block', () => {

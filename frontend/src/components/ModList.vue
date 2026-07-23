@@ -1,6 +1,8 @@
 <script setup>
 import { nextTick, ref, watch } from 'vue'
 import { localizeBackendMessage, t } from '../languages'
+import SortMenu from './SortMenu.vue'
+import TagSearchBox from './TagSearchBox.vue'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -13,6 +15,15 @@ const props = defineProps({
   typeMap: { type: Object, default: () => ({}) },
   visualSorted: { type: Boolean, default: false },
   warningCount: { type: Number, default: 0 },
+  searchTokens: { type: Array, default: () => [] },
+  searchLogic: { type: String, default: 'AND' },
+  searchSuggestionMods: { type: Array, default: () => [] },
+  searchTestId: { type: String, default: 'tag-search-box' },
+  searchHighlightMode: { type: Boolean, default: false },
+  searchHighlightTestId: { type: String, default: 'search-highlight-button' },
+  sortMode: { type: String, default: 'priority' },
+  sortDescending: { type: Boolean, default: false },
+  sortTestId: { type: String, default: 'sort-button' },
   searchActive: { type: Boolean, default: false },
   searchMatchIds: { type: Array, default: () => [] },
   searchFocusId: { type: String, default: '' },
@@ -28,6 +39,11 @@ const emit = defineEmits([
   'show-warnings',
   'select-all',
   'toggle-active',
+  'update:search-tokens',
+  'update:search-logic',
+  'toggle-search-highlight',
+  'update:sort-mode',
+  'update:sort-descending',
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
@@ -153,21 +169,56 @@ watch(
 <template>
   <section class="list-panel" :class="{ 'active-panel': active }">
     <header class="panel-heading">
-      <div>
-        <span v-if="active" class="eyebrow">{{ t('list.loadOrder') }}</span>
-        <h2>{{ title }}</h2>
+      <div class="panel-heading-row">
+        <div>
+          <span v-if="active" class="eyebrow">{{ t('list.loadOrder') }}</span>
+          <h2>{{ title }}</h2>
+        </div>
+        <button
+          v-if="active && warningCount"
+          type="button"
+          class="panel-warning-button"
+          data-testid="panel-warning-button"
+          @click="emit('show-warnings')"
+        >
+          <span aria-hidden="true">!</span>
+          {{ t('common.warningCount', { count: warningCount }) }}
+        </button>
+        <span class="count-badge">{{ mods.length }}</span>
       </div>
-      <button
-        v-if="active && warningCount"
-        type="button"
-        class="panel-warning-button"
-        data-testid="panel-warning-button"
-        @click="emit('show-warnings')"
-      >
-        <span aria-hidden="true">!</span>
-        {{ t('common.warningCount', { count: warningCount }) }}
-      </button>
-      <span class="count-badge">{{ mods.length }}</span>
+      <div class="panel-search-controls">
+        <TagSearchBox
+          :tokens="searchTokens"
+          :logic="searchLogic"
+          :mods="searchSuggestionMods"
+          :type-map="typeMap"
+          :test-id="searchTestId"
+          @update:tokens="emit('update:search-tokens', $event)"
+          @update:logic="emit('update:search-logic', $event)"
+        />
+        <button
+          type="button"
+          class="search-highlight-button"
+          :class="{ active: searchHighlightMode }"
+          :aria-pressed="searchHighlightMode"
+          :title="t('search.highlightModeHelp')"
+          :aria-label="t('search.highlightModeHelp')"
+          :data-testid="searchHighlightTestId"
+          @click="emit('toggle-search-highlight')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="5.5"></circle>
+            <path d="m15.2 15.2 4.3 4.3M11 8.5v5M8.5 11h5"></path>
+          </svg>
+        </button>
+        <SortMenu
+          :mode="sortMode"
+          :descending="sortDescending"
+          :test-id="sortTestId"
+          @update:mode="emit('update:sort-mode', $event)"
+          @update:descending="emit('update:sort-descending', $event)"
+        />
+      </div>
     </header>
 
     <div
