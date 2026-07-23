@@ -61,7 +61,7 @@ describe('game data modification modal', () => {
     }
   })
 
-  it('uses a 1-5 integer slider, a two-choice unit rule toggle, and emits all six game data settings', async () => {
+  it('uses independent category rule controls and emits all eight game data settings', async () => {
     const wrapper = mount(GameDataModificationModal, {
       props: {
         open: true,
@@ -69,6 +69,8 @@ describe('game data modification modal', () => {
           unit_model_multiplier: 2,
           unit_recruitment_capacity_multiplier: 3,
           single_entity_unit_mode: 'scale',
+          artillery_unit_mode: 'half',
+          war_machine_unit_mode: 'health',
           scale_lord_hero_health: false,
           disable_unit_friendly_fire: false,
           disable_spell_friendly_fire: true,
@@ -98,8 +100,23 @@ describe('game data modification modal', () => {
     expect(wrapper.text()).toContain('血量')
     expect(wrapper.text()).toContain('规模')
 
+    expect(
+      wrapper.get('[data-testid="artillery-unit-mode-half"]').attributes('aria-pressed'),
+    ).toBe('true')
+    expect(
+      wrapper.get('[data-testid="artillery-unit-mode-health"]').attributes('aria-pressed'),
+    ).toBe('false')
+    expect(
+      wrapper.get('[data-testid="war-machine-unit-mode-health"]').attributes('aria-pressed'),
+    ).toBe('true')
+    expect(
+      wrapper.get('[data-testid="war-machine-unit-mode-half"]').attributes('aria-pressed'),
+    ).toBe('false')
+
     await multiplier.setValue('4')
     await healthMode.trigger('click')
+    await wrapper.get('[data-testid="artillery-unit-mode-full"]').trigger('click')
+    await wrapper.get('[data-testid="war-machine-unit-mode-half"]').trigger('click')
     await wrapper.get('[data-testid="scale-lord-hero-health"]').setValue(true)
     await wrapper.get('[data-testid="disable-unit-friendly-fire"]').setValue(true)
     await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(false)
@@ -109,6 +126,8 @@ describe('game data modification modal', () => {
       unit_model_multiplier: 4,
       unit_recruitment_capacity_multiplier: 3,
       single_entity_unit_mode: 'health',
+      artillery_unit_mode: 'full',
+      war_machine_unit_mode: 'half',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,

@@ -20,6 +20,8 @@ describe('game data settings state', () => {
       language: 'zh-CN',
       unit_model_multiplier: 2,
       unit_recruitment_capacity_multiplier: 4,
+      artillery_unit_mode: 'half',
+      war_machine_unit_mode: 'health',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -33,6 +35,8 @@ describe('game data settings state', () => {
     await store.saveGameDataSettings({
       unit_model_multiplier: 2,
       unit_recruitment_capacity_multiplier: 4,
+      artillery_unit_mode: 'half',
+      war_machine_unit_mode: 'health',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,
@@ -42,6 +46,8 @@ describe('game data settings state', () => {
     expect(invokeMock).toHaveBeenCalledWith('save_game_data_settings', {
       unit_model_multiplier: 2,
       unit_recruitment_capacity_multiplier: 4,
+      artillery_unit_mode: 'half',
+      war_machine_unit_mode: 'health',
       scale_lord_hero_health: true,
       disable_unit_friendly_fire: true,
       disable_spell_friendly_fire: false,

@@ -26,10 +26,32 @@ const MULTIPLIER_LABEL = String.fromCharCode(0xd7)
 const UNIT_RECRUITMENT_CAPACITY_STEPS = [1, 2, 3, 4, 5, UNLIMITED_LABEL]
 const SINGLE_ENTITY_UNIT_MODE_HEALTH = 'health'
 const SINGLE_ENTITY_UNIT_MODE_SCALE = 'scale'
+const CATEGORY_UNIT_MODE_FULL = 'full'
+const CATEGORY_UNIT_MODE_OPTIONS = Object.freeze([
+  { value: 'health', labelKey: 'gameData.categoryUnitHealth' },
+  { value: 'half', labelKey: 'gameData.categoryUnitHalf' },
+  { value: 'full', labelKey: 'gameData.categoryUnitFull' },
+])
+const CATEGORY_UNIT_CONTROLS = Object.freeze([
+  {
+    setting: 'artillery_unit_mode',
+    testId: 'artillery',
+    labelKey: 'gameData.artilleryUnitMode',
+    helpKey: 'gameData.artilleryUnitModeHelp',
+  },
+  {
+    setting: 'war_machine_unit_mode',
+    testId: 'war-machine',
+    labelKey: 'gameData.warMachineUnitMode',
+    helpKey: 'gameData.warMachineUnitModeHelp',
+  },
+])
 const draft = reactive({
   unit_model_multiplier: 1,
   unit_recruitment_capacity_multiplier: 1,
   single_entity_unit_mode: SINGLE_ENTITY_UNIT_MODE_SCALE,
+  artillery_unit_mode: CATEGORY_UNIT_MODE_FULL,
+  war_machine_unit_mode: CATEGORY_UNIT_MODE_FULL,
   scale_lord_hero_health: false,
   disable_unit_friendly_fire: false,
   disable_spell_friendly_fire: false,
@@ -61,6 +83,13 @@ const normalizeSingleEntityUnitMode = value => (
     : SINGLE_ENTITY_UNIT_MODE_SCALE
 )
 
+const normalizeCategoryUnitMode = value => {
+  const normalized = String(value || '').trim().toLowerCase()
+  return CATEGORY_UNIT_MODE_OPTIONS.some(option => option.value === normalized)
+    ? normalized
+    : CATEGORY_UNIT_MODE_FULL
+}
+
 const unitSizeAvailable = computed(() => props.unitSizeSubscribed)
 const friendlyFireAvailable = computed(() => props.friendlyFireSubscribed)
 const unitCapacityAvailable = computed(() => props.unitCapacitySubscribed)
@@ -87,6 +116,8 @@ const resetDraft = () => {
     props.settings.unit_recruitment_capacity_multiplier ?? 1,
   )
   draft.single_entity_unit_mode = normalizeSingleEntityUnitMode(props.settings.single_entity_unit_mode)
+  draft.artillery_unit_mode = normalizeCategoryUnitMode(props.settings.artillery_unit_mode)
+  draft.war_machine_unit_mode = normalizeCategoryUnitMode(props.settings.war_machine_unit_mode)
   draft.scale_lord_hero_health = !!props.settings.scale_lord_hero_health
   draft.disable_unit_friendly_fire = !!props.settings.disable_unit_friendly_fire
   draft.disable_spell_friendly_fire = !!props.settings.disable_spell_friendly_fire
@@ -114,6 +145,8 @@ const currentSettings = () => ({
     draft.unit_recruitment_capacity_multiplier,
   ),
   single_entity_unit_mode: normalizeSingleEntityUnitMode(draft.single_entity_unit_mode),
+  artillery_unit_mode: normalizeCategoryUnitMode(draft.artillery_unit_mode),
+  war_machine_unit_mode: normalizeCategoryUnitMode(draft.war_machine_unit_mode),
   scale_lord_hero_health: !!draft.scale_lord_hero_health,
   disable_unit_friendly_fire: !!draft.disable_unit_friendly_fire,
   disable_spell_friendly_fire: !!draft.disable_spell_friendly_fire,
@@ -202,6 +235,36 @@ const submit = () => {
               </div>
             </div>
             <small>{{ t('gameData.singleEntityUnitModeHelp') }}</small>
+          </div>
+          <div
+            v-for="control in CATEGORY_UNIT_CONTROLS"
+            :key="control.setting"
+            class="single-entity-mode-control category-unit-mode-control"
+          >
+            <div class="single-entity-mode-row">
+              <strong>{{ t(control.labelKey) }}</strong>
+              <div
+                class="single-entity-mode-toggle category-unit-mode-toggle"
+                role="group"
+                :aria-label="t(control.labelKey)"
+                :data-testid="`${control.testId}-unit-mode`"
+              >
+                <button
+                  v-for="option in CATEGORY_UNIT_MODE_OPTIONS"
+                  :key="option.value"
+                  type="button"
+                  class="single-entity-mode-choice"
+                  :class="{ active: draft[control.setting] === option.value }"
+                  :aria-pressed="draft[control.setting] === option.value"
+                  :disabled="!!busy || !unitSizeAvailable"
+                  :data-testid="`${control.testId}-unit-mode-${option.value}`"
+                  @click="draft[control.setting] = option.value"
+                >
+                  {{ t(option.labelKey) }}
+                </button>
+              </div>
+            </div>
+            <small>{{ t(control.helpKey) }}</small>
           </div>
           <label class="switch-row character-health-toggle">
             <input
@@ -434,6 +497,11 @@ const submit = () => {
   border: 1px solid #594238;
   border-radius: 5px;
   background: #0e0b0b;
+}
+
+.category-unit-mode-toggle {
+  width: min(330px, 62%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .single-entity-mode-choice {
