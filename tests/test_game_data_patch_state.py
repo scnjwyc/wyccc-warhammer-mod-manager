@@ -24,7 +24,7 @@ UNIT_SIZE_WORKSHOP_ID = "3765783838"
 
 class GameDataPatchStateTests(unittest.TestCase):
     def test_builder_version_invalidates_compatibility_placeholder_patches(self) -> None:
-        self.assertEqual(GAME_DATA_BUILDER_VERSION, 10)
+        self.assertEqual(GAME_DATA_BUILDER_VERSION, 11)
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -46,6 +46,8 @@ class GameDataPatchStateTests(unittest.TestCase):
             "unit_model_multiplier": 2,
             "unit_recruitment_capacity_multiplier": 1,
             "single_entity_unit_mode": "scale",
+            "artillery_unit_mode": "full",
+            "war_machine_unit_mode": "full",
             "scale_lord_hero_health": False,
             "disable_unit_friendly_fire": False,
             "disable_spell_friendly_fire": False,
@@ -116,12 +118,16 @@ class GameDataPatchStateTests(unittest.TestCase):
             self.settings,
             single_entity_unit_mode="health",
         )
+        changed_artillery_mode = dict(self.settings, artillery_unit_mode="half")
+        changed_war_machine_mode = dict(self.settings, war_machine_unit_mode="health")
         changed_health_setting = dict(self.settings, scale_lord_hero_health=True)
         changed_subscription = {UNIT_SIZE_WORKSHOP_ID: False}
         variants = [
             self._inputs(settings=changed_settings),
             self._inputs(settings=changed_recruitment_capacity),
             self._inputs(settings=changed_single_entity_mode),
+            self._inputs(settings=changed_artillery_mode),
+            self._inputs(settings=changed_war_machine_mode),
             self._inputs(settings=changed_health_setting),
             self._inputs(playset_id="campaign"),
             self._inputs(active_ids=list(reversed(self.active_ids))),
@@ -176,6 +182,8 @@ class GameDataPatchStateTests(unittest.TestCase):
         disabled = {
             "unit_model_multiplier": 1,
             "single_entity_unit_mode": "scale",
+            "artillery_unit_mode": "health",
+            "war_machine_unit_mode": "half",
             "scale_lord_hero_health": False,
             "disable_unit_friendly_fire": False,
             "disable_spell_friendly_fire": False,

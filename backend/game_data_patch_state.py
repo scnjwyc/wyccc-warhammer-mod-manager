@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .game_data_settings import (
+    normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
     normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
@@ -23,7 +24,7 @@ from .start_options import (
 
 GAME_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_game_data_patch.json"
 FINGERPRINT_SCHEMA_VERSION = 1
-GAME_DATA_BUILDER_VERSION = 10
+GAME_DATA_BUILDER_VERSION = 11
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -44,6 +45,12 @@ def _normalized_settings(settings: Mapping[str, Any]) -> dict[str, int | bool | 
         ),
         "single_entity_unit_mode": normalize_single_entity_unit_mode(
             settings.get("single_entity_unit_mode", "scale")
+        ),
+        "artillery_unit_mode": normalize_category_unit_mode(
+            settings.get("artillery_unit_mode", "full")
+        ),
+        "war_machine_unit_mode": normalize_category_unit_mode(
+            settings.get("war_machine_unit_mode", "full")
         ),
         "scale_lord_hero_health": _coerce_bool(
             settings.get("scale_lord_hero_health", False)

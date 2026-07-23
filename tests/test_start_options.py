@@ -176,6 +176,8 @@ class StartOptionsPackTests(unittest.TestCase):
                         "unit_model_multiplier": 2.0,
                         "unit_recruitment_capacity_multiplier": 1,
                         "single_entity_unit_mode": "health",
+                        "artillery_unit_mode": "half",
+                        "war_machine_unit_mode": "health",
                         "scale_lord_hero_health": True,
                         "disable_unit_friendly_fire": False,
                         "disable_spell_friendly_fire": False,
@@ -187,6 +189,8 @@ class StartOptionsPackTests(unittest.TestCase):
                         "unit_model_multiplier": 1.0,
                         "unit_recruitment_capacity_multiplier": 1,
                         "single_entity_unit_mode": "scale",
+                        "artillery_unit_mode": "full",
+                        "war_machine_unit_mode": "full",
                         "scale_lord_hero_health": False,
                         "disable_unit_friendly_fire": True,
                         "disable_spell_friendly_fire": True,
@@ -197,6 +201,8 @@ class StartOptionsPackTests(unittest.TestCase):
                     {
                         "unit_model_multiplier": 1.0,
                         "single_entity_unit_mode": "scale",
+                        "artillery_unit_mode": "full",
+                        "war_machine_unit_mode": "full",
                         "scale_lord_hero_health": False,
                         "unit_recruitment_capacity_multiplier": 4,
                         "disable_unit_friendly_fire": False,
@@ -214,6 +220,8 @@ class StartOptionsPackTests(unittest.TestCase):
                             {
                                 "unit_model_multiplier": 2.0,
                                 "single_entity_unit_mode": "health",
+                                "artillery_unit_mode": "half",
+                                "war_machine_unit_mode": "health",
                                 "scale_lord_hero_health": True,
                                 "unit_recruitment_capacity_multiplier": 4,
                                 "disable_unit_friendly_fire": True,
@@ -231,10 +239,16 @@ class StartOptionsPackTests(unittest.TestCase):
                         or (key == "unit_recruitment_capacity_multiplier" and value != 1)
                         or (key == "single_entity_unit_mode" and value == "health")
                         or (
+                            key in {"artillery_unit_mode", "war_machine_unit_mode"}
+                            and value != "full"
+                        )
+                        or (
                             key not in {
                                 "unit_model_multiplier",
                                 "unit_recruitment_capacity_multiplier",
                                 "single_entity_unit_mode",
+                                "artillery_unit_mode",
+                                "war_machine_unit_mode",
                             }
                             and value
                         )

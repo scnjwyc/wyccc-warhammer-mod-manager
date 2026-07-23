@@ -17,6 +17,7 @@ from .game_data import (
     build_game_data_entries,
 )
 from .game_data_settings import (
+    normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
     normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
@@ -348,6 +349,20 @@ def _effective_game_data_settings(
             if unit_size_available
             else "scale"
         ),
+        "artillery_unit_mode": (
+            normalize_category_unit_mode(
+                settings.get("artillery_unit_mode", "full")
+            )
+            if unit_size_available
+            else "full"
+        ),
+        "war_machine_unit_mode": (
+            normalize_category_unit_mode(
+                settings.get("war_machine_unit_mode", "full")
+            )
+            if unit_size_available
+            else "full"
+        ),
         "scale_lord_hero_health": (
             bool(settings.get("scale_lord_hero_health")) if unit_size_available else False
         ),
@@ -385,6 +400,10 @@ def _enabled_game_data_options(settings: dict[str, int | bool | str]) -> list[st
         options.append("unit_model_multiplier")
         if settings["single_entity_unit_mode"] == "health":
             options.append("single_entity_unit_mode")
+        if settings["artillery_unit_mode"] != "full":
+            options.append("artillery_unit_mode")
+        if settings["war_machine_unit_mode"] != "full":
+            options.append("war_machine_unit_mode")
         if settings["scale_lord_hero_health"]:
             options.append("scale_lord_hero_health")
     if int(settings["unit_recruitment_capacity_multiplier"]) != 1:
@@ -405,6 +424,8 @@ def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
             "land_rows_scaled",
             "lord_hero_health_rows_scaled",
             "single_entity_health_rows_scaled",
+            "artillery_health_rows_scaled",
+            "war_machine_health_rows_scaled",
             "unit_friendly_fire_rows_changed",
             "unit_friendly_fire_kv_rules_changed",
             "unit_max_drag_width_changed",
