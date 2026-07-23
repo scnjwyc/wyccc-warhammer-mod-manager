@@ -392,4 +392,3 @@ Expected: all tests pass and the production build succeeds.
 - [ ] **Step 4: Review the final diff**
 
 Confirm every modified production field has a corresponding test, both category controls are independent, no changelog or version files changed, and the worktree contains no unrelated edits.
-
