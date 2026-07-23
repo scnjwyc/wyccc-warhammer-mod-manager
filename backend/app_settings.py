@@ -12,6 +12,7 @@ from .constants import (
 )
 from .games import DEFAULT_GAME_ID, GameDefinition, game_definitions, get_game_definition
 from .game_data_settings import (
+    normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
     normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
@@ -214,6 +215,8 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "unit_model_multiplier": 1,
         "unit_recruitment_capacity_multiplier": 1,
         "single_entity_unit_mode": "scale",
+        "artillery_unit_mode": "full",
+        "war_machine_unit_mode": "full",
         "scale_lord_hero_health": False,
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
@@ -488,6 +491,12 @@ class SettingsService:
         )
         result["single_entity_unit_mode"] = normalize_single_entity_unit_mode(
             result.get("single_entity_unit_mode", "scale")
+        )
+        result["artillery_unit_mode"] = normalize_category_unit_mode(
+            result.get("artillery_unit_mode", "full")
+        )
+        result["war_machine_unit_mode"] = normalize_category_unit_mode(
+            result.get("war_machine_unit_mode", "full")
         )
         result["theme"] = str(result.get("theme") or "crimson")
         language = str(result.get("language") or DEFAULT_LANGUAGE).strip()

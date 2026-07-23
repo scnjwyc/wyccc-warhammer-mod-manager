@@ -1129,6 +1129,8 @@ class ApiContractTests(unittest.TestCase):
                 [{
                     "unit_model_multiplier": 2.5,
                     "single_entity_unit_mode": "health",
+                    "artillery_unit_mode": "half",
+                    "war_machine_unit_mode": "health",
                     "scale_lord_hero_health": True,
                     "disable_unit_friendly_fire": True,
                     "disable_spell_friendly_fire": True,
@@ -1140,6 +1142,14 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(result["data"]["settings"]["unit_model_multiplier"], 3)
             self.assertEqual(
                 result["data"]["settings"]["single_entity_unit_mode"],
+                "health",
+            )
+            self.assertEqual(
+                result["data"]["settings"]["artillery_unit_mode"],
+                "half",
+            )
+            self.assertEqual(
+                result["data"]["settings"]["war_machine_unit_mode"],
                 "health",
             )
             self.assertTrue(result["data"]["settings"]["scale_lord_hero_health"])

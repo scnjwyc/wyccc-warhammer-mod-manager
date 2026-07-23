@@ -14,6 +14,9 @@ from .constants import (
 
 SINGLE_ENTITY_UNIT_MODE_SCALE = "scale"
 SINGLE_ENTITY_UNIT_MODE_HEALTH = "health"
+CATEGORY_UNIT_MODE_HEALTH = "health"
+CATEGORY_UNIT_MODE_HALF = "half"
+CATEGORY_UNIT_MODE_FULL = "full"
 
 
 def normalize_unit_scale_multiplier(value: Any) -> int:
@@ -56,4 +59,19 @@ def normalize_single_entity_unit_mode(value: Any) -> str:
         SINGLE_ENTITY_UNIT_MODE_HEALTH
         if str(value or "").strip().casefold() == SINGLE_ENTITY_UNIT_MODE_HEALTH
         else SINGLE_ENTITY_UNIT_MODE_SCALE
+    )
+
+
+def normalize_category_unit_mode(value: Any) -> str:
+    """Normalize artillery and war-machine adjustment rules."""
+    normalized = str(value or "").strip().casefold()
+    return (
+        normalized
+        if normalized
+        in {
+            CATEGORY_UNIT_MODE_HEALTH,
+            CATEGORY_UNIT_MODE_HALF,
+            CATEGORY_UNIT_MODE_FULL,
+        }
+        else CATEGORY_UNIT_MODE_FULL
     )

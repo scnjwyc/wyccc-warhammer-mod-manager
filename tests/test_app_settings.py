@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.app_settings import SettingsService, default_settings, detect_system_language
+from backend.game_data_settings import normalize_category_unit_mode
 from backend.models import GamePaths
 
 
@@ -132,6 +133,8 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertEqual(default_settings()["unit_model_multiplier"], 1)
         self.assertEqual(default_settings()["unit_recruitment_capacity_multiplier"], 1)
         self.assertEqual(default_settings()["single_entity_unit_mode"], "scale")
+        self.assertEqual(default_settings()["artillery_unit_mode"], "full")
+        self.assertEqual(default_settings()["war_machine_unit_mode"], "full")
         self.assertFalse(default_settings()["scale_lord_hero_health"])
         self.assertFalse(default_settings()["disable_unit_friendly_fire"])
         self.assertFalse(default_settings()["disable_spell_friendly_fire"])
@@ -414,6 +417,8 @@ class SettingsMigrationTests(unittest.TestCase):
                     "unit_model_multiplier": "75.5",
                     "unit_recruitment_capacity_multiplier": "75.5",
                     "single_entity_unit_mode": "health",
+                    "artillery_unit_mode": "HALF",
+                    "war_machine_unit_mode": "health",
                     "scale_lord_hero_health": 1,
                     "disable_unit_friendly_fire": 1,
                     "disable_spell_friendly_fire": "",
@@ -423,6 +428,8 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(saved["unit_model_multiplier"], 5)
             self.assertEqual(saved["unit_recruitment_capacity_multiplier"], 5)
             self.assertEqual(saved["single_entity_unit_mode"], "health")
+            self.assertEqual(saved["artillery_unit_mode"], "half")
+            self.assertEqual(saved["war_machine_unit_mode"], "health")
             self.assertTrue(saved["scale_lord_hero_health"])
             self.assertTrue(saved["disable_unit_friendly_fire"])
             self.assertFalse(saved["disable_spell_friendly_fire"])
@@ -430,6 +437,8 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(reopened["unit_model_multiplier"], 5)
             self.assertEqual(reopened["unit_recruitment_capacity_multiplier"], 5)
             self.assertEqual(reopened["single_entity_unit_mode"], "health")
+            self.assertEqual(reopened["artillery_unit_mode"], "half")
+            self.assertEqual(reopened["war_machine_unit_mode"], "health")
             self.assertTrue(reopened["scale_lord_hero_health"])
 
             self.assertEqual(
@@ -439,11 +448,21 @@ class SettingsMigrationTests(unittest.TestCase):
                 "scale",
             )
             self.assertTrue(reopened["disable_unit_friendly_fire"])
+            self.assertEqual(
+                service.save({"artillery_unit_mode": "unexpected"})[
+                    "artillery_unit_mode"
+                ],
+                "full",
+            )
 
             self.assertEqual(
                 service.save({"unit_model_multiplier": "0.1"})["unit_model_multiplier"],
                 1,
             )
+
+            self.assertEqual(normalize_category_unit_mode("health"), "health")
+            self.assertEqual(normalize_category_unit_mode("HALF"), "half")
+            self.assertEqual(normalize_category_unit_mode("unexpected"), "full")
 
             self.assertEqual(
                 service.save({"unit_model_multiplier": "invalid"})["unit_model_multiplier"],

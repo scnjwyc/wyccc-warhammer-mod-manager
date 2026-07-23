@@ -91,6 +91,8 @@ GAME_DATA_SETTING_KEYS = frozenset(
         "unit_model_multiplier",
         "unit_recruitment_capacity_multiplier",
         "single_entity_unit_mode",
+        "artillery_unit_mode",
+        "war_machine_unit_mode",
         "scale_lord_hero_health",
         "disable_unit_friendly_fire",
         "disable_spell_friendly_fire",
