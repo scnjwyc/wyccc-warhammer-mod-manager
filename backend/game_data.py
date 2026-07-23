@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .game_data_settings import (
+    CATEGORY_UNIT_MODE_FULL,
+    CATEGORY_UNIT_MODE_HALF,
+    CATEGORY_UNIT_MODE_HEALTH,
+    normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
     normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
@@ -123,6 +127,14 @@ class _Candidate:
     source_rank: int
     entry_rank: int
     row_rank: int
+
+
+@dataclass(frozen=True)
+class _UnitScalePolicy:
+    kind: str
+    priority: int
+    size_multiplier: float
+    compensate_health: bool
 
 
 def _require(payload: bytes, cursor: int, size: int, context: str) -> None:
@@ -390,6 +402,21 @@ def _scaled_i32(value: Any, multiplier: float, minimum: int | None = None) -> in
     return _clamped_i32(scaled)
 
 
+def _round_half_up_i32(value: int | float, minimum: int | None = None) -> int:
+    rounded = math.floor(float(value) + 0.5)
+    if minimum is not None:
+        rounded = max(rounded, minimum)
+    return _clamped_i32(rounded)
+
+
+def _scaled_unit_count(
+    value: Any,
+    multiplier: float,
+    minimum: int | None = None,
+) -> int:
+    return _round_half_up_i32(int(value or 0) * multiplier, minimum)
+
+
 def _leading_priority_markers(internal_name: str) -> int:
     return len(internal_name) - len(internal_name.lstrip("!"))
 
@@ -519,6 +546,60 @@ def _is_engine_backed(land_values: Mapping[str, Any]) -> bool:
     ) > 0
 
 
+def _category_size_multiplier(mode: str, multiplier: float) -> float:
+    if mode == CATEGORY_UNIT_MODE_HEALTH:
+        return 1.0
+    if mode == CATEGORY_UNIT_MODE_HALF:
+        return 1.0 + (multiplier - 1.0) * 0.5
+    return multiplier
+
+
+def _resolve_unit_scale_policy(
+    main_values: Mapping[str, Any],
+    land_values: Mapping[str, Any],
+    multiplier: float,
+    single_entity_health_mode: bool,
+    artillery_mode: str,
+    war_machine_mode: str,
+    scale_lord_hero_health: bool,
+) -> _UnitScalePolicy:
+    caste = str(main_values.get("caste") or "").strip().casefold()
+    if caste in {"lord", "hero"}:
+        return _UnitScalePolicy(
+            "character",
+            0,
+            1.0,
+            scale_lord_hero_health,
+        )
+    if (
+        int(main_values.get("num_men") or 0) == 1
+        and bool(main_values.get("is_monstrous"))
+    ):
+        return _UnitScalePolicy(
+            "single_entity",
+            1,
+            1.0 if single_entity_health_mode else multiplier,
+            single_entity_health_mode,
+        )
+
+    category = str(land_values.get("category") or "").strip().casefold()
+    if category == "artillery":
+        return _UnitScalePolicy(
+            "artillery",
+            2,
+            _category_size_multiplier(artillery_mode, multiplier),
+            artillery_mode != CATEGORY_UNIT_MODE_FULL,
+        )
+    if category == "war_machine":
+        return _UnitScalePolicy(
+            "war_machine",
+            3,
+            _category_size_multiplier(war_machine_mode, multiplier),
+            war_machine_mode != CATEGORY_UNIT_MODE_FULL,
+        )
+    return _UnitScalePolicy("normal", 4, multiplier, False)
+
+
 def _scaled_total_health_bonus(
     land_values: Mapping[str, Any],
     entity_values: Mapping[str, Any],
@@ -526,9 +607,8 @@ def _scaled_total_health_bonus(
 ) -> int:
     entity_hit_points = int(entity_values.get("hit_points") or 0)
     bonus_hit_points = int(land_values.get("bonus_hit_points") or 0)
-    scaled_total_hit_points = _scaled_i32(
-        entity_hit_points + bonus_hit_points,
-        multiplier,
+    scaled_total_hit_points = _round_half_up_i32(
+        (entity_hit_points + bonus_hit_points) * multiplier,
     )
     return _clamped_i32(scaled_total_hit_points - entity_hit_points)
 
@@ -552,6 +632,12 @@ def build_game_data_entries(
         )
         == "health"
     )
+    artillery_mode = normalize_category_unit_mode(
+        settings.get("artillery_unit_mode", CATEGORY_UNIT_MODE_FULL)
+    )
+    war_machine_mode = normalize_category_unit_mode(
+        settings.get("war_machine_unit_mode", CATEGORY_UNIT_MODE_FULL)
+    )
     disable_unit = _coerce_bool(settings.get("disable_unit_friendly_fire", False))
     disable_spell = _coerce_bool(settings.get("disable_spell_friendly_fire", False))
     scale_units = not math.isclose(multiplier, 1.0, rel_tol=0.0, abs_tol=1e-9)
@@ -565,6 +651,8 @@ def build_game_data_entries(
         "land_rows_scaled": 0,
         "lord_hero_health_rows_scaled": 0,
         "single_entity_health_rows_scaled": 0,
+        "artillery_health_rows_scaled": 0,
+        "war_machine_health_rows_scaled": 0,
         "unit_friendly_fire_rows_changed": 0,
         "unit_friendly_fire_kv_rules_changed": 0,
         "unit_max_drag_width_changed": 0,
@@ -582,7 +670,12 @@ def build_game_data_entries(
         output_tables.add("land_units_tables")
         needed_tables.add("_kv_rules_tables")
         output_tables.add("_kv_rules_tables")
-        if scale_lord_hero_health or single_entity_health_mode:
+        if (
+            scale_lord_hero_health
+            or single_entity_health_mode
+            or artillery_mode != CATEGORY_UNIT_MODE_FULL
+            or war_machine_mode != CATEGORY_UNIT_MODE_FULL
+        ):
             needed_tables.add("battle_entities_tables")
     if disable_unit or disable_spell:
         friendly_fire_tables = {
@@ -615,47 +708,61 @@ def build_game_data_entries(
         table_name: {} for table_name in needed_tables
     }
     if scale_units:
-        target_land_units: set[str] = set()
-        character_land_units: set[str] = set()
-        single_entity_health_main_units: set[str] = set()
-        single_entity_health_land_units: set[str] = set()
+        land_policies: dict[
+            str,
+            tuple[_UnitScalePolicy, str, int, int],
+        ] = {}
+        missing_health_land_units: list[str] = []
         for key, candidate in effective["main_units_tables"].items():
             values = candidate.row.values
-            caste = str(values.get("caste") or "").casefold()
-            land_unit = str(values.get("land_unit") or "")
-            if (
-                single_entity_health_mode
-                and caste not in {"lord", "hero"}
-                and land_unit
-                and int(values.get("num_men") or 0) == 1
-                and bool(values.get("is_monstrous"))
-            ):
-                land_candidate = effective["land_units_tables"].get(land_unit)
-                if land_candidate is not None and not _is_engine_backed(
-                    land_candidate.row.values
-                ):
-                    single_entity_health_main_units.add(key)
-                    single_entity_health_land_units.add(land_unit)
-        for key, candidate in effective["main_units_tables"].items():
-            values = candidate.row.values
-            caste = str(values.get("caste") or "").casefold()
             row = candidate.row
             land_unit = str(values.get("land_unit") or "")
-            if caste in {"lord", "hero"}:
-                if scale_lord_hero_health and land_unit:
-                    character_land_units.add(land_unit)
+            land_candidate = effective["land_units_tables"].get(land_unit)
+            land_values = land_candidate.row.values if land_candidate is not None else {}
+            policy = _resolve_unit_scale_policy(
+                values,
+                land_values,
+                multiplier,
+                single_entity_health_mode,
+                artillery_mode,
+                war_machine_mode,
+                scale_lord_hero_health,
+            )
+            original_count = int(values.get("num_men") or 0)
+            if policy.kind == "character" or math.isclose(
+                policy.size_multiplier,
+                1.0,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            ):
+                new_count = original_count
             else:
-                if land_unit and key not in single_entity_health_main_units:
-                    target_land_units.add(land_unit)
-                if key not in single_entity_health_main_units:
-                    new_count = _scaled_i32(
-                        values.get("num_men"),
-                        multiplier,
-                        minimum=1,
+                new_count = _scaled_unit_count(
+                    original_count,
+                    policy.size_multiplier,
+                    minimum=1,
+                )
+            row = _patch_i32(row, "num_men", new_count)
+            if new_count != original_count:
+                stats["unit_rows_scaled"] = int(stats["unit_rows_scaled"]) + 1
+
+            if land_candidate is not None:
+                current_land_policy = land_policies.get(land_unit)
+                if (
+                    current_land_policy is None
+                    or policy.priority < current_land_policy[0].priority
+                ):
+                    land_policies[land_unit] = (
+                        policy,
+                        key,
+                        original_count,
+                        new_count,
                     )
-                    row = _patch_i32(row, "num_men", new_count)
-                    if new_count != int(values.get("num_men") or 0):
-                        stats["unit_rows_scaled"] = int(stats["unit_rows_scaled"]) + 1
+            elif policy.compensate_health:
+                missing_health_land_units.append(
+                    f"{key} -> {land_unit or '<empty>'}"
+                )
+
             if adjust_recruitment_capacity:
                 campaign_cap = int(values.get("campaign_cap") or 0)
                 new_campaign_cap = (
@@ -674,26 +781,35 @@ def build_game_data_entries(
                     )
             patched_by_table["main_units_tables"][key] = row
 
-        missing_character_land_units = sorted(
-            key for key in character_land_units if key not in effective["land_units_tables"]
-        )
-        if missing_character_land_units:
+        if missing_health_land_units:
             raise ValueError(
-                "领主或英雄引用了不存在的 land_units 记录："
-                + ", ".join(missing_character_land_units[:5])
+                "需要血量补偿的单位引用了不存在的 land_units 记录："
+                + ", ".join(sorted(missing_health_land_units)[:5])
             )
 
         for key, candidate in effective["land_units_tables"].items():
             row = candidate.row
             values = row.values
-            if key in target_land_units:
+            land_policy = land_policies.get(key)
+            if land_policy is not None:
+                policy, main_unit_key, original_count, new_count = land_policy
+                size_multiplier = policy.size_multiplier
                 new_mounts = (
                     int(values.get("num_mounts") or 0)
                     if _is_engine_backed(values)
-                    else _scaled_i32(values.get("num_mounts"), multiplier)
+                    else _scaled_unit_count(
+                        values.get("num_mounts"),
+                        size_multiplier,
+                    )
                 )
-                new_engines = _scaled_i32(values.get("num_engines"), multiplier)
-                new_rank_depth = _scaled_i32(values.get("rank_depth"), multiplier)
+                new_engines = _scaled_unit_count(
+                    values.get("num_engines"),
+                    size_multiplier,
+                )
+                new_rank_depth = _scaled_unit_count(
+                    values.get("rank_depth"),
+                    size_multiplier,
+                )
                 row = _patch_i32(row, "num_mounts", new_mounts)
                 row = _patch_i32(row, "num_engines", new_engines)
                 row = _patch_i32(row, "rank_depth", new_rank_depth)
@@ -703,32 +819,37 @@ def build_game_data_entries(
                     or new_rank_depth != int(values.get("rank_depth") or 0)
                 ):
                     stats["land_rows_scaled"] = int(stats["land_rows_scaled"]) + 1
-            if key in character_land_units or key in single_entity_health_land_units:
+
+            if land_policy is not None and land_policy[0].compensate_health:
+                policy, main_unit_key, original_count, new_count = land_policy
                 entity_key = str(values.get("man_entity") or "")
                 entity = effective["battle_entities_tables"].get(entity_key)
                 if entity is None:
-                    unit_kind = (
-                        "领主或英雄"
-                        if key in character_land_units
-                        else "单体巨兽"
-                    )
                     raise ValueError(
-                        f"{unit_kind} {key} 引用了不存在的 battle_entity："
+                        f"{policy.kind} 单位 {main_unit_key} 的 land_units "
+                        f"记录 {key} 引用了不存在的 battle_entity："
                         f"{entity_key or '<empty>'}"
                     )
+                actual_size_ratio = (
+                    new_count / original_count
+                    if original_count > 0 and new_count > 0
+                    else 1.0
+                )
+                health_multiplier = multiplier / actual_size_ratio
                 bonus_hit_points = int(values.get("bonus_hit_points") or 0)
                 new_bonus_hit_points = _scaled_total_health_bonus(
                     values,
                     entity.row.values,
-                    multiplier,
+                    health_multiplier,
                 )
                 row = _patch_i32(row, "bonus_hit_points", new_bonus_hit_points)
                 if new_bonus_hit_points != bonus_hit_points:
-                    stat_key = (
-                        "lord_hero_health_rows_scaled"
-                        if key in character_land_units
-                        else "single_entity_health_rows_scaled"
-                    )
+                    stat_key = {
+                        "character": "lord_hero_health_rows_scaled",
+                        "single_entity": "single_entity_health_rows_scaled",
+                        "artillery": "artillery_health_rows_scaled",
+                        "war_machine": "war_machine_health_rows_scaled",
+                    }[policy.kind]
                     stats[stat_key] = int(stats[stat_key]) + 1
             patched_by_table["land_units_tables"][key] = row
 
