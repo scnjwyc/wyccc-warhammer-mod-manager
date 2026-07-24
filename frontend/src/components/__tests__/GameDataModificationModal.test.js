@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import GameDataModificationModal from '../GameDataModificationModal.vue'
-import { applyInterfaceLanguage } from '../../languages'
+import { applyInterfaceLanguage, t } from '../../languages'
 
 const componentSource = readFileSync(
   resolve(process.cwd(), 'src/components/GameDataModificationModal.vue'),
@@ -113,10 +113,23 @@ describe('game data modification modal', () => {
       wrapper.get('[data-testid="war-machine-unit-mode-half"]').attributes('aria-pressed'),
     ).toBe('false')
 
+    const artilleryHelp = wrapper.get('[data-testid="artillery-unit-mode-help"]')
+    const warMachineHelp = wrapper.get('[data-testid="war-machine-unit-mode-help"]')
+    expect(artilleryHelp.text()).toBe(t('gameData.categoryUnitHalfHelp'))
+    expect(warMachineHelp.text()).toBe(t('gameData.categoryUnitHealthHelp'))
+
+    await wrapper.get('[data-testid="artillery-unit-mode-health"]').trigger('click')
+    expect(artilleryHelp.text()).toBe(t('gameData.categoryUnitHealthHelp'))
+    expect(warMachineHelp.text()).toBe(t('gameData.categoryUnitHealthHelp'))
+
+    await wrapper.get('[data-testid="artillery-unit-mode-full"]').trigger('click')
+    expect(artilleryHelp.text()).toBe(t('gameData.categoryUnitFullHelp'))
+    expect(warMachineHelp.text()).toBe(t('gameData.categoryUnitHealthHelp'))
+
     await multiplier.setValue('4')
     await healthMode.trigger('click')
-    await wrapper.get('[data-testid="artillery-unit-mode-full"]').trigger('click')
     await wrapper.get('[data-testid="war-machine-unit-mode-half"]').trigger('click')
+    expect(warMachineHelp.text()).toBe(t('gameData.categoryUnitHalfHelp'))
     await wrapper.get('[data-testid="scale-lord-hero-health"]').setValue(true)
     await wrapper.get('[data-testid="disable-unit-friendly-fire"]').setValue(true)
     await wrapper.get('[data-testid="disable-spell-friendly-fire"]').setValue(false)

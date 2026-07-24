@@ -90,6 +90,12 @@ const normalizeCategoryUnitMode = value => {
     : CATEGORY_UNIT_MODE_FULL
 }
 
+const categoryUnitModeHelpKey = value => ({
+  health: 'gameData.categoryUnitHealthHelp',
+  half: 'gameData.categoryUnitHalfHelp',
+  full: 'gameData.categoryUnitFullHelp',
+}[normalizeCategoryUnitMode(value)])
+
 const unitSizeAvailable = computed(() => props.unitSizeSubscribed)
 const friendlyFireAvailable = computed(() => props.friendlyFireSubscribed)
 const unitCapacityAvailable = computed(() => props.unitCapacitySubscribed)
@@ -265,6 +271,12 @@ const submit = () => {
               </div>
             </div>
             <small>{{ t(control.helpKey) }}</small>
+            <small
+              class="category-unit-mode-help"
+              :data-testid="`${control.testId}-unit-mode-help`"
+            >
+              {{ t(categoryUnitModeHelpKey(draft[control.setting])) }}
+            </small>
           </div>
           <label class="switch-row character-health-toggle">
             <input
