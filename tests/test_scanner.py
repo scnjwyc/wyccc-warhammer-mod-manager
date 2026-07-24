@@ -455,9 +455,10 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result.mods[0].created_at, 1_690_000_000_000)
             self.assertEqual(result.mods[0].updated_at, 1_700_000_000_000)
 
-    def test_reads_workshop_subscription_time_from_steam_manifest(self) -> None:
+    def test_reads_workshop_subscription_time_from_the_active_steam_user(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            steam_root = root / "Steam"
             steam_library = root / "SteamLibrary"
             steamapps = steam_library / "steamapps"
             workshop = steamapps / "workshop" / "content" / "1142710"
@@ -477,16 +478,45 @@ class ScannerTests(unittest.TestCase):
 ''',
                 encoding="utf-8",
             )
+            (steam_root / "config").mkdir(parents=True)
+            (steam_root / "config" / "loginusers.vdf").write_text(
+                '''"users"
+{
+    "76561197960265729"
+    {
+        "AutoLogin" "1"
+        "Timestamp" "1800000001"
+    }
+}
+''',
+                encoding="utf-8",
+            )
+            subscription_file = steam_root / "userdata" / "1" / "ugc" / "1142710_subscriptions.vdf"
+            subscription_file.parent.mkdir(parents=True)
+            subscription_file.write_text(
+                '''"subscribedfiles"
+{
+    "appid" "1142710"
+    "0"
+    {
+        "publishedfileid" "123"
+        "time_subscribed" "1800000000"
+    }
+}
+''',
+                encoding="utf-8",
+            )
 
             result = ModScanner(OfflineWorkshopMetadata()).scan(
                 GamePaths(
                     workshop_path=str(workshop),
+                    steam_root=str(steam_root),
                     steam_library=str(steam_library),
                 ),
                 {"language": "en-US", "check_outdated_mods": False},
             )
 
-        self.assertEqual(result.mods[0].subscribed_at, 1_700_000_000_000)
+        self.assertEqual(result.mods[0].subscribed_at, 1_800_000_000_000)
 
     def test_mod_library_is_sorted_by_pack_file_name_not_display_title(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
