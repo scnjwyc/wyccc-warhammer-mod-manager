@@ -14,7 +14,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
         "entries": (
             (
                 "v093_fixed_title",
-                (("fix", "v093_three_kingdoms_saves"),),
+                (
+                    ("fix", "v093_three_kingdoms_saves"),
+                    ("fix", "v093_subscription_sort"),
+                ),
             ),
             (
                 "v093_adjusted_title",
@@ -367,6 +370,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
         "v093_fixed_title": "修复",
         "v093_three_kingdoms_saves": "修复切换至三国后无法正确读取三国存档的问题。",
+        "v093_subscription_sort": "修复按订阅时间排序存在的问题。",
         "v093_adjusted_title": "调整",
         "v093_category_unit_rules": "单位规模调整功能现在支持单独调整炮兵和战争机器规则。",
         "v092_adjusted_title": "调整",
@@ -516,6 +520,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "en-US": {
         "v093_fixed_title": "Fixed",
         "v093_three_kingdoms_saves": "Fixed an issue where switching to THREE KINGDOMS did not read its saves correctly.",
+        "v093_subscription_sort": "Fixed an issue with sorting MODs by subscription time.",
         "v093_adjusted_title": "Adjusted",
         "v093_category_unit_rules": "Unit scale adjustment now supports separate artillery and war-machine rules.",
         "v092_adjusted_title": "Adjusted",
@@ -665,6 +670,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "ko-KR": {
         "v093_fixed_title": "수정",
         "v093_three_kingdoms_saves": "삼국으로 전환한 후 삼국 저장 파일을 올바르게 읽지 못하던 문제를 수정했습니다.",
+        "v093_subscription_sort": "구독 시간순으로 MOD를 정렬할 때 발생하던 문제를 수정했습니다.",
         "v093_adjusted_title": "조정",
         "v093_category_unit_rules": "유닛 규모 조정에서 포병과 전쟁 기계 규칙을 별도로 설정할 수 있습니다.",
         "v092_adjusted_title": "조정",
@@ -814,6 +820,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "ru-RU": {
         "v093_fixed_title": "Исправлено",
         "v093_three_kingdoms_saves": "Исправлена проблема, из-за которой после переключения на Three Kingdoms неправильно читались её сохранения.",
+        "v093_subscription_sort": "Исправлена проблема сортировки MOD по времени подписки.",
         "v093_adjusted_title": "Изменено",
         "v093_category_unit_rules": "Изменение размера отрядов теперь поддерживает отдельные правила для артиллерии и боевых машин.",
         "v092_adjusted_title": "Изменено",
@@ -963,6 +970,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "ja-JP": {
         "v093_fixed_title": "修正",
         "v093_three_kingdoms_saves": "Three Kingdoms に切り替えた後、同作のセーブを正しく読み込めない問題を修正しました。",
+        "v093_subscription_sort": "購読日時による MOD の並べ替えに関する問題を修正しました。",
         "v093_adjusted_title": "調整",
         "v093_category_unit_rules": "ユニット規模の調整で、砲兵と戦争機械のルールを個別に設定できるようになりました。",
         "v092_adjusted_title": "調整",
@@ -1112,6 +1120,7 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "es-ES": {
         "v093_fixed_title": "Corregido",
         "v093_three_kingdoms_saves": "Se corrigió un problema por el que, al cambiar a Three Kingdoms, sus partidas no se leían correctamente.",
+        "v093_subscription_sort": "Se corrigió un problema al ordenar los MOD por fecha de suscripción.",
         "v093_adjusted_title": "Ajustado",
         "v093_category_unit_rules": "El ajuste del tamaño de unidad ahora admite reglas independientes para la artillería y las máquinas de guerra.",
         "v092_adjusted_title": "Ajustado",

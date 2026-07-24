@@ -163,7 +163,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertIn("`0.9.3`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], "0.9.2")
+        self.assertEqual(update_manifest["version"], APP_VERSION)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(

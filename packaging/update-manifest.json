@@ -1,29 +1,38 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.9.2",
-  "published_at": "2026-07-23",
+  "version": "0.9.3",
+  "published_at": "2026-07-24",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.3/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.2/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.3/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.3/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "8d2cd85391e4840d00548f26355c02ea328dacac97775b571e4a94c9706ad02d",
-    "size": 61998262
+    "sha256": "52f2bca3c0f6a7df9f636c3f54e483ae5d22cb3215da67bb5a79fa7354f68e5c",
+    "size": 62008077
   },
   "changelog": [
+    {
+      "title": "\u4fee\u590d",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "\u4fee\u590d\u5207\u6362\u81f3\u4e09\u56fd\u540e\u65e0\u6cd5\u6b63\u786e\u8bfb\u53d6\u4e09\u56fd\u5b58\u6863\u7684\u95ee\u9898\u3002"
+        },
+        {
+          "type": "fix",
+          "text": "\u4fee\u590d\u6309\u8ba2\u9605\u65f6\u95f4\u6392\u5e8f\u5b58\u5728\u7684\u95ee\u9898\u3002"
+        }
+      ]
+    },
     {
       "title": "\u8c03\u6574",
       "changes": [
         {
           "type": "improvement",
-          "text": "\u652f\u6301\u6309\u7167\u8ba2\u9605\u65f6\u95f4\u6392\u5e8f\u3002"
-        },
-        {
-          "type": "improvement",
-          "text": "\u5df2\u542f\u7528 MOD \u5217\u8868\u548c\u672a\u542f\u7528 MOD \u5217\u8868\u7684\u641c\u7d22\u680f\u73b0\u5728\u5b8c\u5168\u72ec\u7acb\uff0c\u4e92\u4e0d\u5f71\u54cd\u3002"
+          "text": "\u5355\u4f4d\u89c4\u6a21\u8c03\u6574\u529f\u80fd\u73b0\u5728\u652f\u6301\u5355\u72ec\u8c03\u6574\u70ae\u5175\u548c\u6218\u4e89\u673a\u5668\u89c4\u5219\u3002"
         }
       ]
     }
