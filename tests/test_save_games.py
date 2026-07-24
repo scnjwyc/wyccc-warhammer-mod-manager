@@ -9,10 +9,39 @@ from unittest.mock import patch
 
 from backend.api import API
 from backend.launcher import launch_game
-from backend.save_games import SaveGameService
+from backend.save_games import SaveGameService, default_save_directory
 
 
 class SaveGameTests(unittest.TestCase):
+    def test_default_save_directory_is_scoped_to_the_selected_game(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            app_data = Path(temporary) / "AppData"
+            three_kingdoms_directory = (
+                app_data / "The Creative Assembly" / "ThreeKingdoms" / "save_games"
+            )
+            warhammer_directory = (
+                app_data / "The Creative Assembly" / "Warhammer3" / "save_games"
+            )
+            with patch.dict(os.environ, {"APPDATA": str(app_data)}, clear=True):
+                self.assertEqual(default_save_directory("three_kingdoms"), three_kingdoms_directory)
+                self.assertEqual(default_save_directory("warhammer3"), warhammer_directory)
+                self.assertEqual(default_save_directory("unknown"), warhammer_directory)
+                self.assertEqual(
+                    SaveGameService(game_id="three_kingdoms").save_directory,
+                    three_kingdoms_directory,
+                )
+
+            custom_directory = Path(temporary) / "custom_saves"
+            with patch.dict(
+                os.environ,
+                {"APPDATA": str(app_data), "WYCCC_MM_SAVE_DIR": str(custom_directory)},
+                clear=True,
+            ):
+                self.assertEqual(
+                    default_save_directory("three_kingdoms"),
+                    custom_directory.resolve(strict=False),
+                )
+
     def test_extracts_ordered_mod_pack_names_and_filters_vanilla_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             save_dir = Path(temporary)
@@ -133,6 +162,45 @@ class SaveGameTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertEqual(response["data"]["save"]["name"], "campaign.save")
         self.assertEqual(response["data"]["pack_names"], ["example.pack"])
+
+    def test_api_switches_all_save_operations_to_the_selected_game(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            warhammer_saves = root / "warhammer_saves"
+            three_kingdoms_saves = root / "three_kingdoms_saves"
+            warhammer_saves.mkdir()
+            three_kingdoms_saves.mkdir()
+            (warhammer_saves / "warhammer.save").write_bytes(b"warhammer")
+            (three_kingdoms_saves / "three.save").write_bytes(
+                b"\0data.pack\0three_mod.pack\0"
+            )
+
+            def resolve_save_directory(game_id=None):
+                return three_kingdoms_saves if game_id == "three_kingdoms" else warhammer_saves
+
+            with patch("backend.save_games.default_save_directory", side_effect=resolve_save_directory):
+                api = API(root / "state")
+                with patch.object(api, "_sync_runtime_services"):
+                    switched = api.call("save_settings", [{"selected_game": "three_kingdoms"}])
+                listed = api.call("list_save_games")
+                with patch.object(api, "_vanilla_pack_names", return_value={"data.pack"}):
+                    save_mods = api.call("get_save_mods", ["three.save"])
+                with patch.object(api, "_launch_game", return_value={"save": {"name": "three.save"}}) as launch:
+                    continued = api.call("continue_game", [["a"], "token"])
+                with patch.object(api, "_sync_runtime_services"):
+                    switched_back = api.call("save_settings", [{"selected_game": "warhammer3"}])
+                listed_back = api.call("list_save_games")
+
+        self.assertTrue(switched["ok"])
+        self.assertEqual(listed["data"]["directory"], str(three_kingdoms_saves.resolve()))
+        self.assertEqual(listed["data"]["items"][0]["name"], "three.save")
+        self.assertTrue(save_mods["ok"])
+        self.assertEqual(save_mods["data"]["pack_names"], ["three_mod.pack"])
+        self.assertTrue(continued["ok"])
+        launch.assert_called_once_with(["a"], "token", "three.save")
+        self.assertTrue(switched_back["ok"])
+        self.assertEqual(listed_back["data"]["directory"], str(warhammer_saves.resolve()))
+        self.assertEqual(listed_back["data"]["items"][0]["name"], "warhammer.save")
 
 
 if __name__ == "__main__":

@@ -135,7 +135,7 @@ class API:
         self.scanner = ModScanner(self.workshop_service)
         self.load_order = LoadOrderService(self.data_dir / "backups")
         self.launch_path_aliases = LaunchPathAliases()
-        self.save_games = SaveGameService()
+        self._sync_save_games()
         self._assets: dict[str, ModAsset] = {}
         self._asset_aliases: dict[str, str] = {}
         self._thumbnail_cache: dict[str, tuple[str, str]] = {}
@@ -244,6 +244,9 @@ class API:
 
     def _active_game(self) -> GameDefinition:
         return self.settings_service.selected_game_definition()
+
+    def _sync_save_games(self) -> None:
+        self.save_games = SaveGameService(game_id=self._active_game().id)
 
     def _require_game_capability(self, capability: str, feature: str) -> None:
         if not bool(getattr(self._active_game(), capability, False)):
@@ -454,6 +457,7 @@ class API:
 
     def _save_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
         self.settings_service.save(changes)
+        self._sync_save_games()
         settings = self.settings_service.get_public()
         paths = self.settings_service.resolve_game_paths()
         self._assets.clear()

@@ -10,6 +10,10 @@ _PACK_NAME_RE = re.compile(r'^[^<>:"/\\|?*\x00-\x1f]{1,260}\.pack$', re.IGNORECA
 _PACK_SUFFIX = b".pack"
 _MAX_PACK_TOKEN_BYTES = 1024
 _LENGTH_PREFIX_BYTES = 4
+_SAVE_PROFILE_DIRECTORIES = {
+    "warhammer3": "Warhammer3",
+    "three_kingdoms": "ThreeKingdoms",
+}
 
 
 def _has_legacy_pack_terminator(content: bytes, token_end: int) -> bool:
@@ -23,7 +27,7 @@ def _has_matching_length_prefix(content: bytes, token_start: int, token_end: int
     return int.from_bytes(length_prefix, "little") == token_end - token_start
 
 
-def default_save_directory() -> Path:
+def default_save_directory(game_id: str | None = None) -> Path:
     override = (
         os.environ.get("WYCCC_MM_SAVE_DIR", "").strip()
         or os.environ.get("WYCCC_WM_SAVE_DIR", "").strip()
@@ -33,12 +37,25 @@ def default_save_directory() -> Path:
         return Path(override).expanduser().resolve(strict=False)
     app_data = os.environ.get("APPDATA", "").strip()
     root = Path(app_data) if app_data else Path.home() / "AppData" / "Roaming"
-    return root / "The Creative Assembly" / "Warhammer3" / "save_games"
+    profile_directory = _SAVE_PROFILE_DIRECTORIES.get(
+        str(game_id or "").strip(),
+        _SAVE_PROFILE_DIRECTORIES["warhammer3"],
+    )
+    return root / "The Creative Assembly" / profile_directory / "save_games"
 
 
 class SaveGameService:
-    def __init__(self, save_directory: Path | None = None):
-        self.save_directory = Path(save_directory or default_save_directory())
+    def __init__(
+        self,
+        save_directory: Path | None = None,
+        game_id: str | None = None,
+    ):
+        self.game_id = str(game_id or "warhammer3").strip()
+        self.save_directory = Path(
+            save_directory
+            if save_directory is not None
+            else default_save_directory(self.game_id)
+        )
 
     def list(self) -> list[dict[str, Any]]:
         if not self.save_directory.is_dir():
