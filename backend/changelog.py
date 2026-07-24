@@ -9,6 +9,20 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.3",
+        "date": "2026-07-24",
+        "entries": (
+            (
+                "v093_fixed_title",
+                (("fix", "v093_three_kingdoms_saves"),),
+            ),
+            (
+                "v093_adjusted_title",
+                (("improvement", "v093_category_unit_rules"),),
+            ),
+        ),
+    },
+    {
         "version": "0.9.2",
         "date": "2026-07-23",
         "entries": (
@@ -351,6 +365,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v093_fixed_title": "修复",
+        "v093_three_kingdoms_saves": "修复切换至三国后无法正确读取三国存档的问题。",
+        "v093_adjusted_title": "调整",
+        "v093_category_unit_rules": "单位规模调整功能现在支持单独调整炮兵和战争机器规则。",
         "v092_adjusted_title": "调整",
         "v092_subscription_sort": "支持按照订阅时间排序。",
         "v092_independent_mod_search": "已启用 MOD 列表和未启用 MOD 列表的搜索栏现在完全独立，互不影响。",
@@ -496,6 +514,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v093_fixed_title": "Fixed",
+        "v093_three_kingdoms_saves": "Fixed an issue where switching to THREE KINGDOMS did not read its saves correctly.",
+        "v093_adjusted_title": "Adjusted",
+        "v093_category_unit_rules": "Unit scale adjustment now supports separate artillery and war-machine rules.",
         "v092_adjusted_title": "Adjusted",
         "v092_subscription_sort": "Added sorting by subscription time.",
         "v092_independent_mod_search": "The search bars for enabled and disabled MOD lists now work completely independently.",
@@ -641,6 +663,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v093_fixed_title": "수정",
+        "v093_three_kingdoms_saves": "삼국으로 전환한 후 삼국 저장 파일을 올바르게 읽지 못하던 문제를 수정했습니다.",
+        "v093_adjusted_title": "조정",
+        "v093_category_unit_rules": "유닛 규모 조정에서 포병과 전쟁 기계 규칙을 별도로 설정할 수 있습니다.",
         "v092_adjusted_title": "조정",
         "v092_subscription_sort": "구독 시간순 정렬을 지원합니다.",
         "v092_independent_mod_search": "활성화된 MOD 목록과 비활성화된 MOD 목록의 검색창이 완전히 독립적으로 작동합니다.",
@@ -786,6 +812,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v093_fixed_title": "Исправлено",
+        "v093_three_kingdoms_saves": "Исправлена проблема, из-за которой после переключения на Three Kingdoms неправильно читались её сохранения.",
+        "v093_adjusted_title": "Изменено",
+        "v093_category_unit_rules": "Изменение размера отрядов теперь поддерживает отдельные правила для артиллерии и боевых машин.",
         "v092_adjusted_title": "Изменено",
         "v092_subscription_sort": "Добавлена сортировка по времени подписки.",
         "v092_independent_mod_search": "Поисковые поля списков включенных и отключенных MOD теперь работают полностью независимо.",
@@ -931,6 +961,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v093_fixed_title": "修正",
+        "v093_three_kingdoms_saves": "Three Kingdoms に切り替えた後、同作のセーブを正しく読み込めない問題を修正しました。",
+        "v093_adjusted_title": "調整",
+        "v093_category_unit_rules": "ユニット規模の調整で、砲兵と戦争機械のルールを個別に設定できるようになりました。",
         "v092_adjusted_title": "調整",
         "v092_subscription_sort": "購読日時による並べ替えに対応しました。",
         "v092_independent_mod_search": "有効な MOD と無効な MOD の検索欄が完全に独立して動作するようになりました。",
@@ -1076,6 +1110,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v093_fixed_title": "Corregido",
+        "v093_three_kingdoms_saves": "Se corrigió un problema por el que, al cambiar a Three Kingdoms, sus partidas no se leían correctamente.",
+        "v093_adjusted_title": "Ajustado",
+        "v093_category_unit_rules": "El ajuste del tamaño de unidad ahora admite reglas independientes para la artillería y las máquinas de guerra.",
         "v092_adjusted_title": "Ajustado",
         "v092_subscription_sort": "Ahora se admite ordenar por fecha de suscripción.",
         "v092_independent_mod_search": "Las barras de búsqueda de las listas de MOD activados y desactivados ahora funcionan de forma totalmente independiente.",
