@@ -433,6 +433,7 @@ class API:
 
     def _detect_paths(self, game_id: str = "") -> dict[str, Any]:
         result = self.settings_service.detect_and_save(str(game_id or ""))
+        self._sync_save_games()
         result["settings"] = self.settings_service.get_public()
         raw_paths = result.get("paths")
         if isinstance(raw_paths, dict):

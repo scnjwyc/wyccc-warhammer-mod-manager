@@ -699,6 +699,7 @@ class ApiContractTests(unittest.TestCase):
                     "get_public",
                     return_value={"selected_game": "three_kingdoms"},
                 ),
+                patch.object(api, "_sync_save_games") as sync_save_games,
                 patch.object(api, "detect_game_running", return_value=False),
                 patch.object(api, "_sync_runtime_services"),
             ):
@@ -706,6 +707,7 @@ class ApiContractTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         detect.assert_called_once_with("three_kingdoms")
+        sync_save_games.assert_called_once_with()
         self.assertTrue(result["data"]["path_health"]["game_ready"])
 
     def test_cover_file_picker_is_not_exposed_by_the_directory_api(self) -> None:
