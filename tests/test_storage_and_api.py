@@ -761,14 +761,17 @@ class ApiContractTests(unittest.TestCase):
                 "category": "units",
                 "visibility": 0,
             }
-            with patch(
-                "backend.api.publish_workshop_item",
-                return_value={
-                    "workshop_id": "123",
-                    "owner_id": "765",
-                    "owner_name": "Owner",
-                },
-            ) as publish:
+            with (
+                patch(
+                    "backend.api.publish_workshop_item",
+                    return_value={
+                        "workshop_id": "123",
+                        "owner_id": "765",
+                        "owner_name": "Owner",
+                    },
+                ) as publish,
+                patch.object(api, "_open_uri") as open_uri,
+            ):
                 updated = api.call("publish_workshop_item", [workshop_only.id, payload])
                 uploaded = api.call(
                     "publish_workshop_item",
@@ -781,6 +784,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(unavailable["data"]["eligible_mod_ids"], [])
         self.assertTrue(updated["ok"])
         self.assertEqual(publish.call_args_list[0].kwargs["workshop_id"], "123")
+        open_uri.assert_called_once_with("steam://url/CommunityFilePage/123")
         self.assertFalse(uploaded["ok"])
 
     def test_game_data_feature_status_retains_known_cache_after_refresh_error(self) -> None:

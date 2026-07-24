@@ -141,7 +141,7 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertNotIn("update_manifest_url", default_settings())
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.3")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.4")
 
     def test_workshop_page_open_preference_counts_are_normalized(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -345,7 +345,7 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-        self.assertEqual(migrated["last_seen_app_version"], "0.9.3")
+        self.assertEqual(migrated["last_seen_app_version"], "0.9.4")
 
     def test_schema_eight_settings_enable_live_mod_detection_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -546,6 +546,41 @@ def _is_engine_backed(land_values: Mapping[str, Any]) -> bool:
     ) > 0
 
 
+def _is_single_entity_unit(
+    main_values: Mapping[str, Any],
+    land_values: Mapping[str, Any],
+) -> bool:
+    """Identify monster units whose visible entity count is one.
+
+    ``main_units.num_men`` is not the visible entity count for composite
+    monsters: Necrofex Colossus, Arachnarok and Warsphinx, for example, have
+    several crew/man slots but a single mount.  Prefer the mount/engine
+    topology, then use the monster formation marker for unmounted monsters.
+    """
+    if str(main_values.get("caste") or "").strip().casefold() != "monster":
+        return False
+
+    mount = str(land_values.get("mount") or "").strip()
+    num_mounts = int(land_values.get("num_mounts") or 0)
+    if mount and num_mounts == 1:
+        return True
+
+    if (
+        _is_engine_backed(land_values)
+        and int(land_values.get("num_engines") or 0) == 1
+        and int(land_values.get("rank_depth") or 0) == 1
+    ):
+        return True
+
+    spacing = str(land_values.get("spacing") or "").strip().casefold()
+    return (
+        not mount
+        and not _is_engine_backed(land_values)
+        and int(land_values.get("rank_depth") or 0) == 1
+        and any(marker in spacing for marker in ("monster", "colossal", "dread_maw"))
+    )
+
+
 def _category_size_multiplier(mode: str, multiplier: float) -> float:
     if mode == CATEGORY_UNIT_MODE_HEALTH:
         return 1.0
@@ -571,10 +606,7 @@ def _resolve_unit_scale_policy(
             1.0,
             scale_lord_hero_health,
         )
-    if (
-        int(main_values.get("num_men") or 0) == 1
-        and bool(main_values.get("is_monstrous"))
-    ):
+    if _is_single_entity_unit(main_values, land_values):
         return _UnitScalePolicy(
             "single_entity",
             1,
@@ -590,7 +622,7 @@ def _resolve_unit_scale_policy(
             _category_size_multiplier(artillery_mode, multiplier),
             artillery_mode != CATEGORY_UNIT_MODE_FULL,
         )
-    if category == "war_machine":
+    if category == "war_machine" or caste in {"warmachine", "war_machine"}:
         return _UnitScalePolicy(
             "war_machine",
             3,

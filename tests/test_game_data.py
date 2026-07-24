@@ -783,6 +783,12 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_men": 4,
                             },
                             {
+                                "unit": "unit_war_beast_machine",
+                                "caste": "warmachine",
+                                "land_unit": "land_war_beast_machine",
+                                "num_men": 29,
+                            },
+                            {
                                 "unit": "unit_war_machine_lord",
                                 "caste": "lord",
                                 "land_unit": "land_war_machine_lord",
@@ -825,6 +831,16 @@ class GameDataPatchTests(unittest.TestCase):
                                 "rank_depth": 1,
                             },
                             {
+                                "key": "land_war_beast_machine",
+                                "category": "war_beast",
+                                "man_entity": "entity_war_beast_machine",
+                                "bonus_hit_points": 900,
+                                "mount": "war_beast_machine_mount",
+                                "num_mounts": 1,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                            },
+                            {
                                 "key": "land_war_machine_lord",
                                 "category": "war_machine",
                                 "man_entity": "entity_lord",
@@ -853,6 +869,7 @@ class GameDataPatchTests(unittest.TestCase):
                         [
                             {"key": "entity_artillery", "hit_points": 100},
                             {"key": "entity_war_machine", "hit_points": 200},
+                            {"key": "entity_war_beast_machine", "hit_points": 1100},
                             {"key": "entity_lord", "hit_points": 500},
                             {"key": "entity_engine_monster", "hit_points": 1000},
                         ],
@@ -875,6 +892,7 @@ class GameDataPatchTests(unittest.TestCase):
         main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
         self.assertEqual(main_rows["unit_artillery"]["num_men"], 5)
         self.assertEqual(main_rows["unit_war_machine"]["num_men"], 4)
+        self.assertEqual(main_rows["unit_war_beast_machine"]["num_men"], 29)
         self.assertEqual(main_rows["unit_war_machine_lord"]["num_men"], 1)
         self.assertEqual(main_rows["unit_engine_monster"]["num_men"], 1)
 
@@ -891,6 +909,11 @@ class GameDataPatchTests(unittest.TestCase):
             200 + land_rows["land_war_machine"]["bonus_hit_points"],
             400,
         )
+        self.assertEqual(land_rows["land_war_beast_machine"]["num_mounts"], 1)
+        self.assertEqual(
+            1100 + land_rows["land_war_beast_machine"]["bonus_hit_points"],
+            4000,
+        )
         self.assertEqual(land_rows["land_war_machine_lord"]["num_engines"], 1)
         self.assertEqual(
             500 + land_rows["land_war_machine_lord"]["bonus_hit_points"],
@@ -902,7 +925,7 @@ class GameDataPatchTests(unittest.TestCase):
             2200,
         )
         self.assertEqual(result.stats["artillery_health_rows_scaled"], 1)
-        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 1)
+        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 2)
 
     def test_lord_and_hero_health_scaling_is_opt_in_and_keeps_model_counts(self) -> None:
         source = DbSource(
@@ -1029,6 +1052,20 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_men": 1,
                                 "is_monstrous": True,
                             },
+                            {
+                                "unit": "unit_mounted_monster",
+                                "caste": "monster",
+                                "land_unit": "land_mounted_monster",
+                                "num_men": 5,
+                                "is_monstrous": True,
+                            },
+                            {
+                                "unit": "unit_hawk_flock",
+                                "caste": "monster",
+                                "land_unit": "land_hawk_flock",
+                                "num_men": 24,
+                                "is_monstrous": True,
+                            },
                         ],
                     ),
                 ),
@@ -1052,6 +1089,7 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_mounts": 0,
                                 "num_engines": 0,
                                 "rank_depth": 1,
+                                "spacing": "wh_main_monster",
                             },
                             {
                                 "key": "land_lone_monster",
@@ -1060,6 +1098,7 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_mounts": 0,
                                 "num_engines": 0,
                                 "rank_depth": 1,
+                                "spacing": "wh_main_monster",
                             },
                             {
                                 "key": "land_monster_engine",
@@ -1069,6 +1108,24 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_mounts": 0,
                                 "num_engines": 1,
                                 "rank_depth": 1,
+                            },
+                            {
+                                "key": "land_mounted_monster",
+                                "man_entity": "entity_mounted_monster",
+                                "bonus_hit_points": 600,
+                                "mount": "monster_mount",
+                                "num_mounts": 1,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                            },
+                            {
+                                "key": "land_hawk_flock",
+                                "man_entity": "entity_hawk_flock",
+                                "bonus_hit_points": 700,
+                                "num_mounts": 0,
+                                "num_engines": 0,
+                                "rank_depth": 5,
+                                "spacing": "wh_dlc05_cavalry_hawk_riders",
                             },
                         ],
                     ),
@@ -1083,6 +1140,8 @@ class GameDataPatchTests(unittest.TestCase):
                             {"key": "entity_star_dragon", "hit_points": 2000},
                             {"key": "entity_lone_monster", "hit_points": 1800},
                             {"key": "entity_monster_engine", "hit_points": 1000},
+                            {"key": "entity_mounted_monster", "hit_points": 2200},
+                            {"key": "entity_hawk_flock", "hit_points": 100},
                         ],
                     ),
                 ),
@@ -1104,12 +1163,17 @@ class GameDataPatchTests(unittest.TestCase):
         self.assertEqual(main_rows["unit_shared_land_non_monster"]["num_men"], 30)
         self.assertEqual(main_rows["unit_lone_monster"]["num_men"], 1)
         self.assertEqual(main_rows["unit_monster_engine"]["num_men"], 1)
+        self.assertEqual(main_rows["unit_mounted_monster"]["num_men"], 5)
+        self.assertEqual(main_rows["unit_hawk_flock"]["num_men"], 72)
 
         land_rows = {row["key"]: row for row in _rows_for(result, "land_units_tables")}
         self.assertEqual(land_rows["land_infantry"]["rank_depth"], 15)
         self.assertEqual(land_rows["land_star_dragon"]["rank_depth"], 1)
         self.assertEqual(land_rows["land_lone_monster"]["rank_depth"], 1)
         self.assertEqual(land_rows["land_monster_engine"]["rank_depth"], 1)
+        self.assertEqual(land_rows["land_mounted_monster"]["rank_depth"], 1)
+        self.assertEqual(land_rows["land_mounted_monster"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_hawk_flock"]["rank_depth"], 15)
         self.assertEqual(
             2000 + land_rows["land_star_dragon"]["bonus_hit_points"],
             (2000 + 400) * 3,
@@ -1122,10 +1186,14 @@ class GameDataPatchTests(unittest.TestCase):
             1000 + land_rows["land_monster_engine"]["bonus_hit_points"],
             (1000 + 500) * 3,
         )
+        self.assertEqual(
+            2200 + land_rows["land_mounted_monster"]["bonus_hit_points"],
+            (2200 + 600) * 3,
+        )
         self.assertEqual(land_rows["land_monster_engine"]["num_engines"], 1)
-        self.assertEqual(result.stats["single_entity_health_rows_scaled"], 3)
-        self.assertEqual(result.stats["unit_rows_scaled"], 2)
-        self.assertEqual(result.stats["land_rows_scaled"], 1)
+        self.assertEqual(result.stats["single_entity_health_rows_scaled"], 4)
+        self.assertEqual(result.stats["unit_rows_scaled"], 3)
+        self.assertEqual(result.stats["land_rows_scaled"], 2)
 
     def test_unit_multiplier_is_clamped_to_supported_range(self) -> None:
         source = DbSource(

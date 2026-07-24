@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.4",
+        "date": "2026-07-24",
+        "entries": (
+            (
+                "v094_adjusted_title",
+                (("improvement", "v094_unit_scale_classification"),),
+            ),
+        ),
+    },
+    {
         "version": "0.9.3",
         "date": "2026-07-24",
         "entries": (
@@ -368,6 +378,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v094_adjusted_title": "调整",
+        "v094_unit_scale_classification": "优化单位规模倍率的相关判定。",
         "v093_fixed_title": "修复",
         "v093_three_kingdoms_saves": "修复切换至三国后无法正确读取三国存档的问题。",
         "v093_subscription_sort": "修复按订阅时间排序存在的问题。",
@@ -518,6 +530,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v094_adjusted_title": "Adjusted",
+        "v094_unit_scale_classification": "Improved the classification logic used by unit scale multipliers.",
         "v093_fixed_title": "Fixed",
         "v093_three_kingdoms_saves": "Fixed an issue where switching to THREE KINGDOMS did not read its saves correctly.",
         "v093_subscription_sort": "Fixed an issue with sorting MODs by subscription time.",
@@ -668,6 +682,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v094_adjusted_title": "조정",
+        "v094_unit_scale_classification": "유닛 규모 배율의 판정 로직을 개선했습니다.",
         "v093_fixed_title": "수정",
         "v093_three_kingdoms_saves": "삼국으로 전환한 후 삼국 저장 파일을 올바르게 읽지 못하던 문제를 수정했습니다.",
         "v093_subscription_sort": "구독 시간순으로 MOD를 정렬할 때 발생하던 문제를 수정했습니다.",
@@ -818,6 +834,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v094_adjusted_title": "Изменено",
+        "v094_unit_scale_classification": "Улучшена логика определения правил множителя размера отрядов.",
         "v093_fixed_title": "Исправлено",
         "v093_three_kingdoms_saves": "Исправлена проблема, из-за которой после переключения на Three Kingdoms неправильно читались её сохранения.",
         "v093_subscription_sort": "Исправлена проблема сортировки MOD по времени подписки.",
@@ -968,6 +986,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v094_adjusted_title": "調整",
+        "v094_unit_scale_classification": "ユニット規模倍率の判定ロジックを改善しました。",
         "v093_fixed_title": "修正",
         "v093_three_kingdoms_saves": "Three Kingdoms に切り替えた後、同作のセーブを正しく読み込めない問題を修正しました。",
         "v093_subscription_sort": "購読日時による MOD の並べ替えに関する問題を修正しました。",
@@ -1118,6 +1138,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v094_adjusted_title": "Ajustado",
+        "v094_unit_scale_classification": "Se mejoró la lógica de clasificación de los multiplicadores del tamaño de unidad.",
         "v093_fixed_title": "Corregido",
         "v093_three_kingdoms_saves": "Se corrigió un problema por el que, al cambiar a Three Kingdoms, sus partidas no se leían correctamente.",
         "v093_subscription_sort": "Se corrigió un problema al ordenar los MOD por fecha de suscripción.",
