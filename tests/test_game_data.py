@@ -783,6 +783,12 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_men": 4,
                             },
                             {
+                                "unit": "unit_multi_engine_war_machine",
+                                "caste": "chariot",
+                                "land_unit": "land_multi_engine_war_machine",
+                                "num_men": 20,
+                            },
+                            {
                                 "unit": "unit_war_beast_machine",
                                 "caste": "warmachine",
                                 "land_unit": "land_war_beast_machine",
@@ -828,6 +834,16 @@ class GameDataPatchTests(unittest.TestCase):
                                 "engine": "engine_war_machine",
                                 "num_mounts": 2,
                                 "num_engines": 1,
+                                "rank_depth": 1,
+                            },
+                            {
+                                "key": "land_multi_engine_war_machine",
+                                "category": "war_machine",
+                                "man_entity": "entity_multi_engine_war_machine",
+                                "bonus_hit_points": 0,
+                                "engine": "engine_multi_war_machine",
+                                "num_mounts": 2,
+                                "num_engines": 4,
                                 "rank_depth": 1,
                             },
                             {
@@ -892,7 +908,8 @@ class GameDataPatchTests(unittest.TestCase):
         main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
         self.assertEqual(main_rows["unit_artillery"]["num_men"], 5)
         self.assertEqual(main_rows["unit_war_machine"]["num_men"], 4)
-        self.assertEqual(main_rows["unit_war_beast_machine"]["num_men"], 29)
+        self.assertEqual(main_rows["unit_multi_engine_war_machine"]["num_men"], 40)
+        self.assertEqual(main_rows["unit_war_beast_machine"]["num_men"], 58)
         self.assertEqual(main_rows["unit_war_machine_lord"]["num_men"], 1)
         self.assertEqual(main_rows["unit_engine_monster"]["num_men"], 1)
 
@@ -909,10 +926,18 @@ class GameDataPatchTests(unittest.TestCase):
             200 + land_rows["land_war_machine"]["bonus_hit_points"],
             400,
         )
-        self.assertEqual(land_rows["land_war_beast_machine"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_multi_engine_war_machine"]["num_mounts"], 2)
+        self.assertEqual(land_rows["land_multi_engine_war_machine"]["num_engines"], 8)
+        self.assertEqual(land_rows["land_multi_engine_war_machine"]["rank_depth"], 2)
+        self.assertEqual(
+            land_rows["land_multi_engine_war_machine"]["bonus_hit_points"],
+            0,
+        )
+        self.assertEqual(land_rows["land_war_beast_machine"]["num_mounts"], 2)
+        self.assertEqual(land_rows["land_war_beast_machine"]["rank_depth"], 2)
         self.assertEqual(
             1100 + land_rows["land_war_beast_machine"]["bonus_hit_points"],
-            4000,
+            2000,
         )
         self.assertEqual(land_rows["land_war_machine_lord"]["num_engines"], 1)
         self.assertEqual(
@@ -925,7 +950,7 @@ class GameDataPatchTests(unittest.TestCase):
             2200,
         )
         self.assertEqual(result.stats["artillery_health_rows_scaled"], 1)
-        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 2)
+        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 1)
 
     def test_lord_and_hero_health_scaling_is_opt_in_and_keeps_model_counts(self) -> None:
         source = DbSource(
@@ -1194,6 +1219,174 @@ class GameDataPatchTests(unittest.TestCase):
         self.assertEqual(result.stats["single_entity_health_rows_scaled"], 4)
         self.assertEqual(result.stats["unit_rows_scaled"], 3)
         self.assertEqual(result.stats["land_rows_scaled"], 2)
+
+    def test_single_entity_health_mode_handles_direct_one_model_units(self) -> None:
+        source = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\data__",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "unit_mutant_rat_ogre",
+                                "caste": "monster",
+                                "land_unit": "land_mutant_rat_ogre",
+                                "num_men": 1,
+                            },
+                            {
+                                "unit": "unit_eshin_maneater",
+                                "caste": "melee_infantry",
+                                "land_unit": "land_eshin_maneater",
+                                "num_men": 1,
+                            },
+                            {
+                                "unit": "unit_burning_chariot",
+                                "caste": "chariot",
+                                "land_unit": "land_burning_chariot",
+                                "num_men": 1,
+                            },
+                            {
+                                "unit": "unit_blood_shrine",
+                                "caste": "chariot",
+                                "land_unit": "land_blood_shrine",
+                                "num_men": 1,
+                            },
+                            {
+                                "unit": "unit_single_crew_war_machine",
+                                "caste": "warmachine",
+                                "land_unit": "land_single_crew_war_machine",
+                                "num_men": 1,
+                            },
+                            {
+                                "unit": "unit_single_crew_artillery",
+                                "caste": "artillery",
+                                "land_unit": "land_single_crew_artillery",
+                                "num_men": 1,
+                            },
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\data__",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {
+                                "key": "land_mutant_rat_ogre",
+                                "category": "inf_melee",
+                                "man_entity": "entity_mutant_rat_ogre",
+                                "bonus_hit_points": 100,
+                                "num_mounts": 0,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                                "spacing": "wh_main_monstrous_infantry_chaotic",
+                            },
+                            {
+                                "key": "land_eshin_maneater",
+                                "category": "inf_melee",
+                                "man_entity": "entity_eshin_maneater",
+                                "bonus_hit_points": 100,
+                                "num_mounts": 0,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                                "spacing": "wh_main_monster",
+                            },
+                            {
+                                "key": "land_burning_chariot",
+                                "category": "war_beast",
+                                "man_entity": "entity_burning_chariot",
+                                "bonus_hit_points": 100,
+                                "mount": "burning_chariot_mount",
+                                "num_mounts": 1,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                                "spacing": "wh_main_monster",
+                            },
+                            {
+                                "key": "land_blood_shrine",
+                                "category": "war_beast",
+                                "man_entity": "entity_blood_shrine",
+                                "bonus_hit_points": 100,
+                                "mount": "blood_shrine_mount",
+                                "num_mounts": 1,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                                "spacing": "wh_main_chariot",
+                            },
+                            {
+                                "key": "land_single_crew_war_machine",
+                                "category": "war_machine",
+                                "engine": "single_crew_war_machine_engine",
+                                "num_mounts": 0,
+                                "num_engines": 1,
+                                "rank_depth": 1,
+                            },
+                            {
+                                "key": "land_single_crew_artillery",
+                                "category": "war_beast",
+                                "engine": "single_crew_artillery_engine",
+                                "num_mounts": 0,
+                                "num_engines": 1,
+                                "rank_depth": 1,
+                            },
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\battle_entities_tables\\data__",
+                    _table_payload(
+                        "battle_entities_tables",
+                        39,
+                        [
+                            {"key": "entity_mutant_rat_ogre", "hit_points": 1000},
+                            {"key": "entity_eshin_maneater", "hit_points": 1000},
+                            {"key": "entity_burning_chariot", "hit_points": 1000},
+                            {"key": "entity_blood_shrine", "hit_points": 1000},
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        result = build_game_data_entries(
+            [source],
+            {
+                "unit_model_multiplier": 2,
+                "single_entity_unit_mode": "health",
+                "artillery_unit_mode": "full",
+                "war_machine_unit_mode": "full",
+            },
+        )
+
+        main_rows = {row["unit"]: row for row in _rows_for(result, "main_units_tables")}
+        for unit in (
+            "unit_mutant_rat_ogre",
+            "unit_eshin_maneater",
+            "unit_burning_chariot",
+            "unit_blood_shrine",
+        ):
+            self.assertEqual(main_rows[unit]["num_men"], 1)
+        self.assertEqual(main_rows["unit_single_crew_war_machine"]["num_men"], 2)
+        self.assertEqual(main_rows["unit_single_crew_artillery"]["num_men"], 2)
+
+        land_rows = {row["key"]: row for row in _rows_for(result, "land_units_tables")}
+        for land_unit in (
+            "land_mutant_rat_ogre",
+            "land_eshin_maneater",
+            "land_burning_chariot",
+            "land_blood_shrine",
+        ):
+            self.assertEqual(land_rows[land_unit]["rank_depth"], 1)
+            self.assertEqual(land_rows[land_unit]["bonus_hit_points"], 1200)
+        self.assertEqual(land_rows["land_burning_chariot"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_blood_shrine"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_single_crew_war_machine"]["num_engines"], 2)
+        self.assertEqual(land_rows["land_single_crew_artillery"]["num_engines"], 2)
+        self.assertEqual(result.stats["single_entity_health_rows_scaled"], 4)
 
     def test_unit_multiplier_is_clamped_to_supported_range(self) -> None:
         source = DbSource(

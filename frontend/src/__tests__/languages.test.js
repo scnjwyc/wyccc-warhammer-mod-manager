@@ -158,6 +158,23 @@ describe('built-in interface languages', () => {
     }
   })
 
+  it('limits the war-machine rule to single-model machines', () => {
+    const expectedTerms = {
+      'zh-CN': '蒸汽坦克',
+      'en-US': 'Steam Tanks',
+      'ko-KR': '증기 전차',
+      'ru-RU': 'паровым танкам',
+      'ja-JP': '蒸気戦車',
+      'es-ES': 'Tanques de Vapor',
+    }
+
+    for (const [language, expectedTerm] of Object.entries(expectedTerms)) {
+      applyInterfaceLanguage(language)
+      expect(t('gameData.warMachineUnitModeHelp'), language).toContain(expectedTerm)
+    }
+    applyInterfaceLanguage('zh-CN')
+  })
+
   it('describes launch-time game-data patch validation in every language', () => {
     const expected = {
       'zh-CN': ['启动游戏时', '配置组或顺序', '源 Pack', 'db.pack', '自动重新生成'],

@@ -9,6 +9,20 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.5",
+        "date": "2026-07-25",
+        "entries": (
+            (
+                "v095_fixed_title",
+                (("fix", "v095_update_mod_styles"),),
+            ),
+            (
+                "v095_adjusted_title",
+                (("improvement", "v095_multi_model_war_machines"),),
+            ),
+        ),
+    },
+    {
         "version": "0.9.4",
         "date": "2026-07-24",
         "entries": (
@@ -378,6 +392,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v095_fixed_title": "修复",
+        "v095_update_mod_styles": "修复更新 MOD 界面存在的一些样式问题。",
+        "v095_adjusted_title": "调整",
+        "v095_multi_model_war_machines": "再次优化单位规模倍率调整规则，多模组战争机器（如战争雪橇、战争车垒）现在将视为普通单位进行倍率调整。",
         "v094_adjusted_title": "调整",
         "v094_unit_scale_classification": "优化单位规模倍率的相关判定。",
         "v093_fixed_title": "修复",
@@ -530,6 +548,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v095_fixed_title": "Fixed",
+        "v095_update_mod_styles": "Fixed several style issues in the MOD update interface.",
+        "v095_adjusted_title": "Adjusted",
+        "v095_multi_model_war_machines": "Further improved unit scale rules: multi-model war machines such as War Sleds and War Wagons are now treated as regular units for scaling.",
         "v094_adjusted_title": "Adjusted",
         "v094_unit_scale_classification": "Improved the classification logic used by unit scale multipliers.",
         "v093_fixed_title": "Fixed",
@@ -682,6 +704,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v095_fixed_title": "수정",
+        "v095_update_mod_styles": "MOD 업데이트 화면의 일부 스타일 문제를 수정했습니다.",
+        "v095_adjusted_title": "조정",
+        "v095_multi_model_war_machines": "유닛 규모 규칙을 추가로 개선하여 전쟁 썰매와 전쟁 전차 같은 다중 모델 전쟁 기계를 이제 일반 유닛으로 취급합니다.",
         "v094_adjusted_title": "조정",
         "v094_unit_scale_classification": "유닛 규모 배율의 판정 로직을 개선했습니다.",
         "v093_fixed_title": "수정",
@@ -834,6 +860,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v095_fixed_title": "Исправлено",
+        "v095_update_mod_styles": "Исправлены некоторые проблемы со стилями интерфейса обновления MOD.",
+        "v095_adjusted_title": "Изменено",
+        "v095_multi_model_war_machines": "Дополнительно улучшены правила масштаба: боевые машины с несколькими моделями, например боевые сани и боевые повозки, теперь считаются обычными юнитами.",
         "v094_adjusted_title": "Изменено",
         "v094_unit_scale_classification": "Улучшена логика определения правил множителя размера отрядов.",
         "v093_fixed_title": "Исправлено",
@@ -986,6 +1016,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v095_fixed_title": "修正",
+        "v095_update_mod_styles": "MOD 更新画面にあったいくつかのスタイル問題を修正しました。",
+        "v095_adjusted_title": "調整",
+        "v095_multi_model_war_machines": "ユニット規模ルールをさらに改善し、戦争そりや戦争車両など複数モデルの戦争機械を通常ユニットとして扱うようにしました。",
         "v094_adjusted_title": "調整",
         "v094_unit_scale_classification": "ユニット規模倍率の判定ロジックを改善しました。",
         "v093_fixed_title": "修正",
@@ -1138,6 +1172,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v095_fixed_title": "Corregido",
+        "v095_update_mod_styles": "Se corrigieron algunos problemas de estilo en la interfaz de actualización de MODs.",
+        "v095_adjusted_title": "Ajustado",
+        "v095_multi_model_war_machines": "Se mejoraron de nuevo las reglas de tamaño de unidad: las máquinas de guerra con varios modelos, como los trineos y carros de guerra, ahora se tratan como unidades normales.",
         "v094_adjusted_title": "Ajustado",
         "v094_unit_scale_classification": "Se mejoró la lógica de clasificación de los multiplicadores del tamaño de unidad.",
         "v093_fixed_title": "Corregido",

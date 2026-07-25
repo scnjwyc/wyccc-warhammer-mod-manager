@@ -1,25 +1,34 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.9.4",
-  "published_at": "2026-07-24",
+  "version": "0.9.5",
+  "published_at": "2026-07-25",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.4/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.5/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.4/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.4/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.5/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.5/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "EAEEFE87C48063D05032AE5DA73B505D4E901903F0E35C26A718552C815DA7B0",
-    "size": 62008683
+    "sha256": "132bc2a0379ce924f0989bb7f06340abf2061a584534f63b7dd5bff15f5bd291",
+    "size": 62009975
   },
   "changelog": [
+    {
+      "title": "\u4fee\u590d",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "\u4fee\u590d\u66f4\u65b0 MOD \u754c\u9762\u5b58\u5728\u7684\u4e00\u4e9b\u6837\u5f0f\u95ee\u9898\u3002"
+        }
+      ]
+    },
     {
       "title": "\u8c03\u6574",
       "changes": [
         {
           "type": "improvement",
-          "text": "\u4f18\u5316\u5355\u4f4d\u89c4\u6a21\u500d\u7387\u7684\u76f8\u5173\u5224\u5b9a\u3002"
+          "text": "\u518d\u6b21\u4f18\u5316\u5355\u4f4d\u89c4\u6a21\u500d\u7387\u8c03\u6574\u89c4\u5219\uff0c\u591a\u6a21\u7ec4\u6218\u4e89\u673a\u5668\uff08\u5982\u6218\u4e89\u96ea\u6a47\u3001\u6218\u4e89\u8f66\u5792\uff09\u73b0\u5728\u5c06\u89c6\u4e3a\u666e\u901a\u5355\u4f4d\u8fdb\u884c\u500d\u7387\u8c03\u6574\u3002"
         }
       ]
     }

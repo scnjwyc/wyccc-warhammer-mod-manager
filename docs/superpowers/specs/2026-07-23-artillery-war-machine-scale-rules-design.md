@@ -42,7 +42,7 @@
 - 非人物角色且 `main_units.num_men = 1`、`main_units.is_monstrous = true` 时，归入现有单体单位规则。
 - 单体单位判定不再排除带有 `engine` 或 `num_engines` 的单位。即使其 `land_units.category` 是 `artillery` 或 `war_machine`，也优先归入单体单位规则。
 - 其余单位在 `land_units.category = artillery` 时归入炮兵规则。
-- 其余单位在 `land_units.category = war_machine` 时归入战争机器规则。
+- 其余单位仅在 `land_units.category = war_machine`（或 `main_units.caste` 为战争机器）且 `land_units.num_engines = 1` 时归入战争机器规则。多引擎编制（如战争车垒、重装战争雪橇）沿用普通单位规则。
 - 其他单位沿用普通单位规则。
 
 人物角色继续使用现有领主与英雄血量设置；单体单位继续使用现有单体“仅血量/规模”设置。

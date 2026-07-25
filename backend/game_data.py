@@ -546,38 +546,83 @@ def _is_engine_backed(land_values: Mapping[str, Any]) -> bool:
     ) > 0
 
 
+def _is_explicit_artillery_or_war_machine(
+    main_values: Mapping[str, Any],
+    land_values: Mapping[str, Any],
+) -> bool:
+    """Return whether the DB explicitly classifies a unit as artillery or a war machine.
+
+    The direct one-model fallback must not absorb single-crew artillery or
+    war machines.  Their category-specific rule still needs to apply even
+    when ``main_units.num_men`` is one.
+    """
+    caste = str(main_values.get("caste") or "").strip().casefold()
+    category = str(land_values.get("category") or "").strip().casefold()
+    return category in {"artillery", "war_machine"} or caste in {
+        "artillery",
+        "warmachine",
+        "war_machine",
+    }
+
+
+def _is_single_engine_war_machine(
+    main_values: Mapping[str, Any],
+    land_values: Mapping[str, Any],
+) -> bool:
+    """Return whether the dedicated war-machine rule applies.
+
+    Multi-engine formations such as War Wagons and War Sleds are treated as
+    normal units.  The category-specific rule is reserved for the individual
+    war machines that have exactly one engine.
+    """
+    caste = str(main_values.get("caste") or "").strip().casefold()
+    category = str(land_values.get("category") or "").strip().casefold()
+    return (
+        category == "war_machine" or caste in {"warmachine", "war_machine"}
+    ) and int(land_values.get("num_engines") or 0) == 1
+
+
 def _is_single_entity_unit(
     main_values: Mapping[str, Any],
     land_values: Mapping[str, Any],
 ) -> bool:
-    """Identify monster units whose visible entity count is one.
+    """Identify units whose visible entity count is one.
 
     ``main_units.num_men`` is not the visible entity count for composite
     monsters: Necrofex Colossus, Arachnarok and Warsphinx, for example, have
-    several crew/man slots but a single mount.  Prefer the mount/engine
-    topology, then use the monster formation marker for unmounted monsters.
+    several crew/man slots but a single mount.  Prefer that monster-specific
+    mount/engine topology, then fall back to a direct one-model formation.
+    Explicit artillery and war machines are excluded from the fallback so
+    their dedicated rules retain priority.
     """
-    if str(main_values.get("caste") or "").strip().casefold() != "monster":
-        return False
-
+    caste = str(main_values.get("caste") or "").strip().casefold()
     mount = str(land_values.get("mount") or "").strip()
     num_mounts = int(land_values.get("num_mounts") or 0)
-    if mount and num_mounts == 1:
-        return True
+    rank_depth = int(land_values.get("rank_depth") or 0)
+    if caste == "monster":
+        if mount and num_mounts == 1:
+            return True
 
-    if (
-        _is_engine_backed(land_values)
-        and int(land_values.get("num_engines") or 0) == 1
-        and int(land_values.get("rank_depth") or 0) == 1
-    ):
-        return True
+        if (
+            _is_engine_backed(land_values)
+            and int(land_values.get("num_engines") or 0) == 1
+            and rank_depth == 1
+        ):
+            return True
 
-    spacing = str(land_values.get("spacing") or "").strip().casefold()
+        spacing = str(land_values.get("spacing") or "").strip().casefold()
+        if (
+            not mount
+            and not _is_engine_backed(land_values)
+            and rank_depth == 1
+            and any(marker in spacing for marker in ("monster", "monstrous", "colossal", "dread_maw"))
+        ):
+            return True
+
     return (
-        not mount
-        and not _is_engine_backed(land_values)
-        and int(land_values.get("rank_depth") or 0) == 1
-        and any(marker in spacing for marker in ("monster", "colossal", "dread_maw"))
+        not _is_explicit_artillery_or_war_machine(main_values, land_values)
+        and int(main_values.get("num_men") or 0) == 1
+        and rank_depth == 1
     )
 
 
@@ -615,14 +660,14 @@ def _resolve_unit_scale_policy(
         )
 
     category = str(land_values.get("category") or "").strip().casefold()
-    if category == "artillery":
+    if category == "artillery" or caste == "artillery":
         return _UnitScalePolicy(
             "artillery",
             2,
             _category_size_multiplier(artillery_mode, multiplier),
             artillery_mode != CATEGORY_UNIT_MODE_FULL,
         )
-    if category == "war_machine" or caste in {"warmachine", "war_machine"}:
+    if _is_single_engine_war_machine(main_values, land_values):
         return _UnitScalePolicy(
             "war_machine",
             3,

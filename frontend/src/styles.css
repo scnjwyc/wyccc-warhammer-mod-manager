@@ -3352,12 +3352,8 @@ button.context-menu-item {
 }
 
 .publish-textarea {
-  resize: vertical;
-}
-
-.publish-textarea::-webkit-resizer {
-  background:
-    linear-gradient(135deg, transparent 0 52%, var(--gold-dark) 52% 60%, transparent 60% 70%, var(--gold-dark) 70% 78%, transparent 78%);
+  /* WebView renders a malformed native resize grip for these fields. */
+  resize: none;
 }
 
 .publish-pack-path {
