@@ -36,6 +36,7 @@ const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
+const modDragSource = ref(null)
 let runtimeTimer = 0
 let updateTimer = 0
 
@@ -198,6 +199,12 @@ const deletePlayset = async () => {
   try { await store.deleteCurrentPlayset() } catch { /* shared toast */ }
 }
 
+const toggleCurrentPlaysetHiddenMods = async () => {
+  try {
+    await store.setCurrentPlaysetShowHiddenMods(!store.showHidden)
+  } catch { /* shared toast */ }
+}
+
 const choosePlayset = async playsetId => {
   try { await store.switchPlayset(playsetId) } catch { /* shared toast */ }
 }
@@ -282,6 +289,8 @@ const toggleSingleMod = modId => (
     : store.enableMany([modId])
 )
 const handleListDrop = payload => store.handleModDrop(payload)
+const startModDrag = payload => { modDragSource.value = payload }
+const endModDrag = () => { modDragSource.value = null }
 const toggleSearchHighlight = async listName => {
   try {
     if (listName === 'active') {
@@ -701,6 +710,15 @@ onBeforeUnmount(() => {
         >
           {{ t('common.delete') }}
         </button>
+        <button
+          type="button"
+          class="header-button"
+          :disabled="!!store.busy || !store.currentPlayset"
+          data-testid="playset-hidden-mods-toggle"
+          @click="toggleCurrentPlaysetHiddenMods"
+        >
+          {{ t(store.showHidden ? 'app.hideHidden' : 'app.showHidden') }}
+        </button>
       </div>
 
       <div class="header-actions">
@@ -751,10 +769,13 @@ onBeforeUnmount(() => {
         :search-active="store.inactiveSearchHighlightActive"
         :search-match-ids="store.inactiveSearchMatchIds"
         :search-focus-id="inactiveSearchFocusId"
+        :drag-source="modDragSource"
         @select="store.selectMod"
         @enable="enableSelected"
         @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
+        @drag-start="startModDrag"
+        @drag-end="endModDrag"
         @context-menu="openModContextMenu"
         @select-all="store.selectAllMods"
         @update:search-tokens="store.setInactiveSearchTokens"
@@ -787,10 +808,13 @@ onBeforeUnmount(() => {
         :search-match-ids="store.activeSearchMatchIds"
         :search-focus-id="activeSearchFocusId"
         :warning-count="store.warningCount"
+        :drag-source="modDragSource"
         @select="store.selectMod"
         @disable="disableSelected"
         @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
+        @drag-start="startModDrag"
+        @drag-end="endModDrag"
         @move="store.move"
         @context-menu="openModContextMenu"
         @select-all="store.selectAllMods"

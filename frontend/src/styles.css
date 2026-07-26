@@ -1319,6 +1319,7 @@ textarea {
 }
 
 .mod-row {
+  position: relative;
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr) auto;
   align-items: center;
@@ -1361,6 +1362,36 @@ textarea {
 .mod-row.dragging {
   cursor: grabbing;
   opacity: 0.45;
+}
+
+.mod-row.drop-before::before,
+.mod-row.drop-after::after {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  left: 8px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--crimson-bright);
+  box-shadow: 0 0 8px rgba(210, 54, 65, 0.85);
+  content: '';
+  pointer-events: none;
+}
+
+.mod-row.drop-before::before {
+  top: -4px;
+}
+
+.mod-row.drop-after::after {
+  bottom: -4px;
+}
+
+.drop-insertion-marker {
+  height: 3px;
+  margin: 1px 8px 7px;
+  border-radius: 99px;
+  background: var(--crimson-bright);
+  box-shadow: 0 0 8px rgba(210, 54, 65, 0.85);
 }
 
 .mod-row.hidden-mod {

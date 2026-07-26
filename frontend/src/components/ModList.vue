@@ -27,6 +27,7 @@ const props = defineProps({
   searchActive: { type: Boolean, default: false },
   searchMatchIds: { type: Array, default: () => [] },
   searchFocusId: { type: String, default: '' },
+  dragSource: { type: Object, default: null },
 })
 
 const emit = defineEmits([
@@ -34,6 +35,8 @@ const emit = defineEmits([
   'enable',
   'disable',
   'drop-mods',
+  'drag-start',
+  'drag-end',
   'move',
   'context-menu',
   'show-warnings',
@@ -47,6 +50,7 @@ const emit = defineEmits([
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
+const dropPreview = ref(null)
 const rowElements = new Map()
 
 const positionOf = modId => props.orderIds.indexOf(modId) + 1
@@ -67,6 +71,25 @@ const setRowElement = (modId, element) => {
 const warningsOf = mod => (mod.warnings || []).filter(
   warning => props.active || warning?.code !== 'missing_dependency',
 )
+const targetList = () => (props.active ? 'active' : 'inactive')
+const currentDragSource = () => (
+  props.dragSource || (draggingIds.value.length
+    ? {
+        source: targetList(),
+        ids: draggingIds.value,
+        draggedId: draggingOriginId.value,
+      }
+    : null)
+)
+const canAcceptDrop = targetId => {
+  const source = currentDragSource()
+  if (!source) return true
+  if (props.active && props.sortMode !== 'priority' && source.source === 'active') return false
+  return !(source.source === targetList() && targetId && source.ids?.includes(targetId))
+}
+const clearDropPreview = () => {
+  dropPreview.value = null
+}
 
 const selectMod = (event, mod) => {
   emit('select', {
@@ -106,6 +129,8 @@ const onKeydown = event => {
 const clearDragging = () => {
   draggingIds.value = []
   draggingOriginId.value = ''
+  clearDropPreview()
+  emit('drag-end')
 }
 
 const onDragStart = (event, sourceId) => {
@@ -117,19 +142,49 @@ const onDragStart = (event, sourceId) => {
     : [sourceId]
   if (!draggingIds.value.length) draggingIds.value = [sourceId]
   draggingOriginId.value = sourceId
+  const payload = {
+    source: targetList(),
+    ids: draggingIds.value,
+    draggedId: sourceId,
+    sourceOrder: visibleOrder,
+  }
+  emit('drag-start', payload)
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('application/x-wyccc-mods', JSON.stringify({
-      source: props.active ? 'active' : 'inactive',
-      ids: draggingIds.value,
-      draggedId: sourceId,
-      sourceOrder: visibleOrder,
-    }))
+    event.dataTransfer.setData('application/x-wyccc-mods', JSON.stringify(payload))
     event.dataTransfer.setData('text/plain', draggingIds.value.join('\n'))
   }
 }
 
+const onRowDragOver = (event, targetId) => {
+  if (!canAcceptDrop(targetId)) {
+    clearDropPreview()
+    return
+  }
+  const bounds = event.currentTarget?.getBoundingClientRect?.()
+  const placement = !bounds || event.clientY < bounds.top + bounds.height / 2
+    ? 'before'
+    : 'after'
+  dropPreview.value = { targetId, placement }
+}
+
+const onListDragOver = event => {
+  if (event.target instanceof Element && event.target.closest('.mod-row')) return
+  if (!canAcceptDrop()) return
+  dropPreview.value = { targetId: '', placement: 'after' }
+}
+
+const onListDragLeave = event => {
+  const nextTarget = event.relatedTarget
+  if (nextTarget instanceof Node && event.currentTarget?.contains(nextTarget)) return
+  clearDropPreview()
+}
+
 const onDrop = (event, targetId = '') => {
+  if (!canAcceptDrop(targetId)) {
+    clearDragging()
+    return
+  }
   let payload = null
   try {
     const encoded = event.dataTransfer?.getData('application/x-wyccc-mods')
@@ -146,11 +201,15 @@ const onDrop = (event, targetId = '') => {
     }
   }
   if (payload?.ids?.length) {
+    const placement = dropPreview.value?.targetId === targetId
+      ? dropPreview.value.placement
+      : ''
     emit('drop-mods', {
       ...payload,
       target: props.active ? 'active' : 'inactive',
       targetId,
       targetOrder: props.mods.map(mod => mod.id),
+      ...(placement ? { placement } : {}),
     })
   }
   clearDragging()
@@ -226,7 +285,8 @@ watch(
       data-testid="mod-list"
       tabindex="0"
       @keydown="onKeydown"
-      @dragover.prevent
+      @dragover.prevent="onListDragOver"
+      @dragleave="onListDragLeave"
       @drop.prevent="onDrop($event)"
     >
       <div
@@ -242,6 +302,8 @@ watch(
           'visual-sorted': visualSorted,
           'search-match': isSearchMatch(mod.id),
           'search-muted': isSearchMuted(mod.id),
+          'drop-before': dropPreview?.targetId === mod.id && dropPreview?.placement === 'before',
+          'drop-after': dropPreview?.targetId === mod.id && dropPreview?.placement === 'after',
         }"
         role="button"
         tabindex="0"
@@ -254,7 +316,7 @@ watch(
         @contextmenu.prevent.stop="onContextMenu($event, mod)"
         @dragstart="onDragStart($event, mod.id)"
         @dragend="clearDragging"
-        @dragover.prevent
+        @dragover.prevent.stop="onRowDragOver($event, mod.id)"
         @drop.prevent.stop="onDrop($event, mod.id)"
       >
         <span class="mod-thumbnail">
@@ -334,6 +396,12 @@ watch(
           @click.stop="emit('enable', mod.id)"
         >＋</button>
       </div>
+
+      <div
+        v-if="dropPreview?.targetId === '' && dropPreview?.placement === 'after'"
+        class="drop-insertion-marker"
+        aria-hidden="true"
+      ></div>
 
       <div v-if="mods.length === 0" class="empty-state">
         <span class="empty-mark">W</span>

@@ -87,22 +87,20 @@ describe('language settings', () => {
     expect(wrapper.text()).not.toContain('Merged 目录')
   })
 
-  it('keeps hidden MODs hidden by default and saves the visibility preference', async () => {
+  it('leaves hidden MOD visibility to the current playset instead of global settings', async () => {
     const wrapper = mount(SettingsModal, {
       props: {
         open: true,
-        settings: { language: 'zh-CN' },
+        settings: { language: 'zh-CN', show_hidden_mods: true },
         health: {},
       },
       global: { plugins: [createPinia()] },
     })
 
-    const visibility = wrapper.get('[data-testid="show-hidden-mods"]')
-    expect(visibility.element.checked).toBe(false)
-    await visibility.setValue(true)
+    expect(wrapper.find('[data-testid="show-hidden-mods"]').exists()).toBe(false)
     await wrapper.get('.primary-button').trigger('click')
 
-    expect(wrapper.emitted('save')[0][0].show_hidden_mods).toBe(true)
+    expect(wrapper.emitted('save')[0][0]).not.toHaveProperty('show_hidden_mods')
   })
 
   it('shows editable keyboard shortcuts and saves their enabled preference', async () => {

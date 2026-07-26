@@ -198,6 +198,7 @@ class API:
             "create_playset": self._create_playset,
             "rename_playset": self._rename_playset,
             "update_playset": self._update_playset,
+            "set_playset_show_hidden_mods": self._set_playset_show_hidden_mods,
             "delete_playset": self._delete_playset,
             "switch_playset": self._switch_playset,
             "list_backups": self._list_backups,
@@ -311,11 +312,17 @@ class API:
 
     def _get_bootstrap(self) -> dict[str, Any]:
         settings = self.settings_service.get_public()
+        self.state_repository.migrate_legacy_show_hidden_mods(
+            bool(settings.get("show_hidden_mods"))
+        )
         paths = self.settings_service.resolve_game_paths()
         game_id = paths.game_id
         target = self._active_order_path(paths.game_path) if paths.game_path else Path()
         self._last_order_token = file_token(target) if paths.game_path else "missing"
         current_playset = self.state_repository.get_current_playset(game_id)
+        current_playset["hidden_mod_ids"] = sorted(
+            self.state_repository.get_playset_hidden_mod_ids(current_playset["id"], game_id)
+        )
         private_settings = self.settings_service.get()
         running = self._current_runtime_running()
         return {
@@ -381,6 +388,13 @@ class API:
                 for workshop_id, status in self._game_data_subscription_cache.items()
             }
             known = self._game_data_subscription_cache_known
+        source = "live" if live_success else ("memory" if known else "unavailable")
+        if not known:
+            local = self._local_game_data_feature_status()
+            if local is not None:
+                cached = local
+                known = True
+                source = "local"
         return {
             "items": {
                 key: {
@@ -396,7 +410,26 @@ class API:
             },
             "warning": warning,
             "known": known,
-            "source": "live" if live_success else ("memory" if known else "unavailable"),
+            "source": source,
+        }
+
+    def _local_game_data_feature_status(self) -> dict[str, dict[str, Any]] | None:
+        workshop_path = self.settings_service.resolve_game_paths().workshop_path
+        if not workshop_path:
+            return None
+        workshop_root = Path(workshop_path)
+        if not workshop_root.is_dir():
+            return None
+        return {
+            item["workshop_id"]: {
+                "subscribed": (
+                    workshop_root
+                    / item["workshop_id"]
+                    / item["pack_name"]
+                ).is_file(),
+                "title": item["title"],
+            }
+            for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
         }
 
     def _check_for_updates(self, manual: bool = True) -> dict[str, Any]:
@@ -596,6 +629,10 @@ class API:
             settings = self.settings_service.get()
             paths = self.settings_service.resolve_game_paths()
             game_id = paths.game_id
+            current_playset = self.state_repository.get_current_playset(game_id)
+            hidden_mod_ids = self.state_repository.get_playset_hidden_mod_ids(
+                current_playset["id"], game_id
+            )
             health = self._path_health(paths)
             if not health["game_ready"]:
                 raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
@@ -627,7 +664,9 @@ class API:
                         "https://steamcommunity.com/sharedfiles/filedetails/"
                         f"?id={mod.workshop_id}"
                     )
-                mod.hidden = bool(custom.get("hidden"))
+                mod.hidden = bool(
+                    hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
+                )
                 raw_ignored_warning_codes = custom.get("ignored_warning_codes")
                 mod.ignored_warning_codes = (
                     list(raw_ignored_warning_codes)
@@ -728,7 +767,13 @@ class API:
 
     def _set_mod_hidden(self, mod_id: str, hidden: bool) -> dict[str, Any]:
         asset = self._require_asset(mod_id)
-        asset.hidden = self.state_repository.set_mod_hidden(asset.id, hidden)
+        game_id = self._active_game().id
+        asset.hidden = self.state_repository.set_playset_mod_hidden(
+            self.state_repository.get_current_playset_id(game_id),
+            asset.id,
+            hidden,
+            game_id,
+        )
         return asset.to_dict()
 
     def _set_mod_warning_ignored(
@@ -1115,12 +1160,26 @@ class API:
     def _list_playsets(self) -> list[dict[str, Any]]:
         return self.state_repository.list_playsets(self._active_game().id)
 
+    def _apply_playset_hidden_mods(self, playset_id: str, game_id: str) -> list[str]:
+        hidden_mod_ids = self.state_repository.get_playset_hidden_mod_ids(playset_id, game_id)
+        if not self._assets:
+            return sorted(hidden_mod_ids)
+        effective_hidden_ids: list[str] = []
+        for asset in self._assets.values():
+            asset.hidden = bool(hidden_mod_ids.intersection([asset.id, *asset.alternate_ids]))
+            if asset.hidden:
+                effective_hidden_ids.append(asset.id)
+        return sorted(effective_hidden_ids)
+
     def _current_playset_payload(self) -> dict[str, Any]:
         game_id = self._active_game().id
         current = self.state_repository.get_current_playset(game_id)
         canonical_ids = self._canonicalize_mod_ids(current["mod_ids"])
         if canonical_ids != current["mod_ids"]:
             current = self.state_repository.update_current_playset(canonical_ids, game_id)
+        current["hidden_mod_ids"] = self._apply_playset_hidden_mods(
+            current["id"], game_id
+        )
         present = [mod_id for mod_id in canonical_ids if mod_id in self._assets]
         missing = [mod_id for mod_id in canonical_ids if mod_id not in self._assets]
         self._refresh_missing_dependency_warnings(present)
@@ -1134,10 +1193,15 @@ class API:
 
     def _create_playset(self, name: str, mod_ids: list[str]) -> dict[str, Any]:
         game_id = self._active_game().id
+        current_playset = self.state_repository.get_current_playset(game_id)
         self.state_repository.create_playset(
             name,
             self._canonicalize_mod_ids(mod_ids),
             game_id,
+            show_hidden_mods=bool(current_playset.get("show_hidden_mods")),
+            hidden_mod_ids=sorted(
+                self.state_repository.get_playset_hidden_mod_ids(current_playset["id"], game_id)
+            ),
         )
         return self._current_playset_payload()
 
@@ -1166,6 +1230,15 @@ class API:
             "current_playset": self.state_repository.get_current_playset(game_id),
             "missing_dependency_warnings": self._missing_dependency_warnings_payload(),
         }
+
+    def _set_playset_show_hidden_mods(self, show_hidden_mods: bool) -> dict[str, Any]:
+        game_id = self._active_game().id
+        self.state_repository.set_playset_show_hidden_mods(
+            self.state_repository.get_current_playset_id(game_id),
+            bool(show_hidden_mods),
+            game_id,
+        )
+        return self._current_playset_payload()
 
     def _delete_playset(self, playset_id: str) -> dict[str, Any]:
         self.state_repository.delete_playset(playset_id, self._active_game().id)

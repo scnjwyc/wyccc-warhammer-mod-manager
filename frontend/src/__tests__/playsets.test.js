@@ -128,6 +128,62 @@ describe('playset state', () => {
     expect(store.dirty).toBe(false)
   })
 
+  it('uses the selected playset to decide whether hidden MODs are displayed', async () => {
+    const defaultWithHiddenMods = { ...defaultPlayset, show_hidden_mods: false }
+    const other = {
+      id: 'other',
+      name: 'Visible hidden MODs',
+      is_default: false,
+      mod_ids: ['b'],
+      show_hidden_mods: false,
+    }
+    invokeMock.mockResolvedValue({
+      playsets: [{ ...defaultWithHiddenMods, show_hidden_mods: true }, other],
+      current_playset: { ...defaultWithHiddenMods, show_hidden_mods: true },
+      ordered_mod_ids: ['a', 'b'],
+      missing_mod_ids: [],
+    })
+    const store = useAppStore()
+    store.playsets = [defaultWithHiddenMods, other]
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['a', 'b']
+
+    expect(store.showHidden).toBe(false)
+    await store.setCurrentPlaysetShowHiddenMods(true)
+
+    expect(invokeMock).toHaveBeenCalledWith('set_playset_show_hidden_mods', true)
+    expect(store.showHidden).toBe(true)
+
+    store.currentPlaysetId = 'other'
+    expect(store.showHidden).toBe(false)
+  })
+
+  it('refreshes MOD hidden flags when the current playset changes', () => {
+    const store = useAppStore()
+    const first = { ...defaultPlayset, hidden_mod_ids: ['a'] }
+    const other = { id: 'other', name: 'Other', mod_ids: ['b'], hidden_mod_ids: ['b'] }
+    store.mods = [
+      { id: 'a', pack_name: 'a.pack', hidden: false },
+      { id: 'b', pack_name: 'b.pack', hidden: false },
+    ]
+
+    store.applyPlaysetPayload({
+      playsets: [first, other],
+      current_playset: first,
+      ordered_mod_ids: ['a'],
+      missing_mod_ids: [],
+    })
+    expect(store.mods.map(mod => [mod.id, mod.hidden])).toEqual([['a', true], ['b', false]])
+
+    store.applyPlaysetPayload({
+      playsets: [first, other],
+      current_playset: other,
+      ordered_mod_ids: ['b'],
+      missing_mod_ids: [],
+    })
+    expect(store.mods.map(mod => [mod.id, mod.hidden])).toEqual([['a', false], ['b', true]])
+  })
+
   it('imports directly into the current playset and clears its previous missing entries', async () => {
     const imported = {
       ...defaultPlayset,

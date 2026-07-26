@@ -9,6 +9,24 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.6",
+        "date": "2026-07-26",
+        "entries": (
+            (
+                "v096_added_title",
+                (("feature", "v096_drag_insert_preview"),),
+            ),
+            (
+                "v096_adjusted_title",
+                (
+                    ("improvement", "v096_move_hidden_toggle"),
+                    ("improvement", "v096_playset_hidden_settings"),
+                    ("improvement", "v096_error_messages"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.9.5",
         "date": "2026-07-25",
         "entries": (
@@ -392,6 +410,12 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v096_added_title": "新增",
+        "v096_drag_insert_preview": "MOD 拖拽时增加定位特效。",
+        "v096_adjusted_title": "调整",
+        "v096_move_hidden_toggle": "将显示/隐藏 MOD 按钮移动到播放集旁边。",
+        "v096_playset_hidden_settings": "现在每个播放集的隐藏 MOD 设定互相独立。",
+        "v096_error_messages": "优化部分错误提示。",
         "v095_fixed_title": "修复",
         "v095_update_mod_styles": "修复更新 MOD 界面存在的一些样式问题。",
         "v095_adjusted_title": "调整",
@@ -548,6 +572,12 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v096_added_title": "Added",
+        "v096_drag_insert_preview": "Added an insertion-position effect while dragging MODs.",
+        "v096_adjusted_title": "Adjusted",
+        "v096_move_hidden_toggle": "Moved the show/hide MOD button next to the playset controls.",
+        "v096_playset_hidden_settings": "Hidden MOD settings are now independent for each playset.",
+        "v096_error_messages": "Improved several error messages.",
         "v095_fixed_title": "Fixed",
         "v095_update_mod_styles": "Fixed several style issues in the MOD update interface.",
         "v095_adjusted_title": "Adjusted",
@@ -704,6 +734,12 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v096_added_title": "추가",
+        "v096_drag_insert_preview": "MOD를 드래그할 때 삽입 위치 효과를 추가했습니다.",
+        "v096_adjusted_title": "조정",
+        "v096_move_hidden_toggle": "MOD 표시/숨기기 버튼을 플레이 세트 컨트롤 옆으로 옮겼습니다.",
+        "v096_playset_hidden_settings": "이제 플레이 세트마다 숨긴 MOD 설정을 독립적으로 관리합니다.",
+        "v096_error_messages": "일부 오류 메시지를 개선했습니다.",
         "v095_fixed_title": "수정",
         "v095_update_mod_styles": "MOD 업데이트 화면의 일부 스타일 문제를 수정했습니다.",
         "v095_adjusted_title": "조정",
@@ -860,6 +896,12 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v096_added_title": "Добавлено",
+        "v096_drag_insert_preview": "Добавлен эффект положения вставки при перетаскивании MOD.",
+        "v096_adjusted_title": "Изменено",
+        "v096_move_hidden_toggle": "Кнопка показа и скрытия MOD перенесена рядом с управлением наборами.",
+        "v096_playset_hidden_settings": "Настройки скрытых MOD теперь независимы для каждого набора.",
+        "v096_error_messages": "Улучшены некоторые сообщения об ошибках.",
         "v095_fixed_title": "Исправлено",
         "v095_update_mod_styles": "Исправлены некоторые проблемы со стилями интерфейса обновления MOD.",
         "v095_adjusted_title": "Изменено",
@@ -1016,6 +1058,12 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v096_added_title": "追加",
+        "v096_drag_insert_preview": "MOD のドラッグ中に挿入位置エフェクトを追加しました。",
+        "v096_adjusted_title": "調整",
+        "v096_move_hidden_toggle": "MOD の表示・非表示ボタンをプレイセットの操作項目の横へ移動しました。",
+        "v096_playset_hidden_settings": "プレイセットごとに非表示 MOD の設定を個別に管理するようにしました。",
+        "v096_error_messages": "一部のエラーメッセージを改善しました。",
         "v095_fixed_title": "修正",
         "v095_update_mod_styles": "MOD 更新画面にあったいくつかのスタイル問題を修正しました。",
         "v095_adjusted_title": "調整",
@@ -1172,6 +1220,12 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v096_added_title": "Añadido",
+        "v096_drag_insert_preview": "Se añadió un efecto que indica la posición de inserción al arrastrar MODs.",
+        "v096_adjusted_title": "Ajustado",
+        "v096_move_hidden_toggle": "Se movió el botón para mostrar u ocultar MODs junto a los controles del conjunto.",
+        "v096_playset_hidden_settings": "La configuración de MODs ocultos ahora es independiente en cada conjunto.",
+        "v096_error_messages": "Se mejoraron algunos mensajes de error.",
         "v095_fixed_title": "Corregido",
         "v095_update_mod_styles": "Se corrigieron algunos problemas de estilo en la interfaz de actualización de MODs.",
         "v095_adjusted_title": "Ajustado",

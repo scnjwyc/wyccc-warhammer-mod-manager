@@ -795,6 +795,12 @@ class GameDataPatchTests(unittest.TestCase):
                                 "num_men": 29,
                             },
                             {
+                                "unit": "unit_multi_mount_war_beast_machine",
+                                "caste": "warmachine",
+                                "land_unit": "land_multi_mount_war_beast_machine",
+                                "num_men": 20,
+                            },
+                            {
                                 "unit": "unit_war_machine_lord",
                                 "caste": "lord",
                                 "land_unit": "land_war_machine_lord",
@@ -857,6 +863,16 @@ class GameDataPatchTests(unittest.TestCase):
                                 "rank_depth": 1,
                             },
                             {
+                                "key": "land_multi_mount_war_beast_machine",
+                                "category": "war_beast",
+                                "man_entity": "entity_multi_mount_war_beast_machine",
+                                "bonus_hit_points": 100,
+                                "mount": "multi_mount_war_beast_machine_mount",
+                                "num_mounts": 2,
+                                "num_engines": 0,
+                                "rank_depth": 1,
+                            },
+                            {
                                 "key": "land_war_machine_lord",
                                 "category": "war_machine",
                                 "man_entity": "entity_lord",
@@ -886,6 +902,7 @@ class GameDataPatchTests(unittest.TestCase):
                             {"key": "entity_artillery", "hit_points": 100},
                             {"key": "entity_war_machine", "hit_points": 200},
                             {"key": "entity_war_beast_machine", "hit_points": 1100},
+                            {"key": "entity_multi_mount_war_beast_machine", "hit_points": 1000},
                             {"key": "entity_lord", "hit_points": 500},
                             {"key": "entity_engine_monster", "hit_points": 1000},
                         ],
@@ -909,7 +926,8 @@ class GameDataPatchTests(unittest.TestCase):
         self.assertEqual(main_rows["unit_artillery"]["num_men"], 5)
         self.assertEqual(main_rows["unit_war_machine"]["num_men"], 4)
         self.assertEqual(main_rows["unit_multi_engine_war_machine"]["num_men"], 40)
-        self.assertEqual(main_rows["unit_war_beast_machine"]["num_men"], 58)
+        self.assertEqual(main_rows["unit_war_beast_machine"]["num_men"], 29)
+        self.assertEqual(main_rows["unit_multi_mount_war_beast_machine"]["num_men"], 40)
         self.assertEqual(main_rows["unit_war_machine_lord"]["num_men"], 1)
         self.assertEqual(main_rows["unit_engine_monster"]["num_men"], 1)
 
@@ -933,12 +951,15 @@ class GameDataPatchTests(unittest.TestCase):
             land_rows["land_multi_engine_war_machine"]["bonus_hit_points"],
             0,
         )
-        self.assertEqual(land_rows["land_war_beast_machine"]["num_mounts"], 2)
-        self.assertEqual(land_rows["land_war_beast_machine"]["rank_depth"], 2)
+        self.assertEqual(land_rows["land_war_beast_machine"]["num_mounts"], 1)
+        self.assertEqual(land_rows["land_war_beast_machine"]["rank_depth"], 1)
         self.assertEqual(
             1100 + land_rows["land_war_beast_machine"]["bonus_hit_points"],
-            2000,
+            4000,
         )
+        self.assertEqual(land_rows["land_multi_mount_war_beast_machine"]["num_mounts"], 4)
+        self.assertEqual(land_rows["land_multi_mount_war_beast_machine"]["rank_depth"], 2)
+        self.assertEqual(land_rows["land_multi_mount_war_beast_machine"]["bonus_hit_points"], 100)
         self.assertEqual(land_rows["land_war_machine_lord"]["num_engines"], 1)
         self.assertEqual(
             500 + land_rows["land_war_machine_lord"]["bonus_hit_points"],
@@ -950,7 +971,7 @@ class GameDataPatchTests(unittest.TestCase):
             2200,
         )
         self.assertEqual(result.stats["artillery_health_rows_scaled"], 1)
-        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 1)
+        self.assertEqual(result.stats["war_machine_health_rows_scaled"], 2)
 
     def test_lord_and_hero_health_scaling_is_opt_in_and_keeps_model_counts(self) -> None:
         source = DbSource(

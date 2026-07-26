@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.5',
+    appVersion: '0.9.6',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -123,7 +123,9 @@ export const useAppStore = defineStore('app', {
     modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
     modTypeRanks: (state) => Object.fromEntries(state.modTypes.map((item, index) => [item.id, index])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
-    showHidden: state => Boolean(state.settings?.show_hidden_mods),
+    showHidden() {
+      return Boolean(this.currentPlayset?.show_hidden_mods)
+    },
     warningItems(state) {
       const active = new Set(state.activeIds)
       const items = state.warnings
@@ -469,6 +471,10 @@ export const useAppStore = defineStore('app', {
     applyPlaysetPayload(data, replaceOrder = true) {
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+      if (Array.isArray(data.current_playset?.hidden_mod_ids)) {
+        const hiddenIds = new Set(data.current_playset.hidden_mod_ids)
+        for (const mod of this.mods) mod.hidden = hiddenIds.has(mod.id)
+      }
       if (Object.prototype.hasOwnProperty.call(data, 'missing_dependency_warnings')) {
         this.applyMissingDependencyWarnings(data.missing_dependency_warnings)
       }
@@ -571,6 +577,20 @@ export const useAppStore = defineStore('app', {
         return data.current_playset
       })
     },
+    async setCurrentPlaysetShowHiddenMods(showHidden) {
+      return this.withBusy(t('busy.saveSettings'), async () => {
+        const data = await invoke('set_playset_show_hidden_mods', Boolean(showHidden))
+        this.applyPlaysetPayload(data)
+        if (!this.showHidden && this.modMap.get(this.selectedId)?.hidden) {
+          const next = [...this.activeMods, ...this.inactiveMods][0]
+          this.selectedId = next?.id || ''
+          this.selectedIds = this.selectedId ? [this.selectedId] : []
+          this.selectionAnchorId = this.selectedId
+          await this.loadPreview(this.selectedId)
+        }
+        return data.current_playset
+      })
+    },
     enable(modId) {
       this.enableMany([modId])
     },
@@ -605,13 +625,15 @@ export const useAppStore = defineStore('app', {
         visibleSet.has(id) ? queue.shift() : id
       ))
     },
-    enableManyAt(modIds, targetId = '') {
+    enableManyAt(modIds, targetId = '', placement = '') {
       const moving = [...new Set(modIds || [])]
         .filter(id => this.modMap.has(id) && !this.activeIds.includes(id))
       if (!moving.length) return
       const next = [...this.activeIds]
       const targetIndex = targetId ? next.indexOf(targetId) : -1
-      const insertionIndex = targetIndex >= 0 ? targetIndex : next.length
+      const insertionIndex = targetIndex >= 0
+        ? targetIndex + (placement === 'after' ? 1 : 0)
+        : next.length
       next.splice(insertionIndex, 0, ...moving)
       this.replaceActiveIds(next)
       this.dirty = true
@@ -629,7 +651,7 @@ export const useAppStore = defineStore('app', {
         this.recordCurrentPlaysetChange()
       }
     },
-    disableManyToInactive(modIds, targetId = '', targetOrder = []) {
+    disableManyToInactive(modIds, targetId = '', targetOrder = [], placement = '') {
       const selected = new Set(modIds || [])
       const moving = this.activeIds.filter(id => selected.has(id))
       if (!moving.length) return
@@ -637,7 +659,9 @@ export const useAppStore = defineStore('app', {
       const base = this.alignInactiveOrderToVisible(targetOrder)
       const remaining = base.filter(id => !selected.has(id))
       const targetIndex = targetId ? remaining.indexOf(targetId) : -1
-      const insertionIndex = targetIndex >= 0 ? targetIndex : remaining.length
+      const insertionIndex = targetIndex >= 0
+        ? targetIndex + (placement === 'after' ? 1 : 0)
+        : remaining.length
       remaining.splice(insertionIndex, 0, ...moving)
       this.inactiveOrderIds = remaining
       this.inactiveOrderCustomized = true
@@ -647,7 +671,7 @@ export const useAppStore = defineStore('app', {
     reorder(sourceId, targetId) {
       this.reorderMany([sourceId], targetId, sourceId)
     },
-    reorderMany(modIds, targetId, draggedId = '') {
+    reorderMany(modIds, targetId, draggedId = '', placement = '') {
       const selected = new Set(modIds || [])
       const moving = this.activeIds.filter(id => selected.has(id))
       if (!moving.length || (targetId && selected.has(targetId))) return
@@ -659,7 +683,11 @@ export const useAppStore = defineStore('app', {
       const remainingTargetIndex = targetId ? remaining.indexOf(targetId) : -1
       const insertionIndex = !targetId
         ? remaining.length
-        : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
+        : placement === 'before'
+          ? remainingTargetIndex
+          : placement === 'after'
+            ? remainingTargetIndex + 1
+            : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
       const next = [
         ...remaining.slice(0, insertionIndex),
         ...moving,
@@ -670,7 +698,7 @@ export const useAppStore = defineStore('app', {
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
-    reorderInactiveMany(modIds, targetId, draggedId = '', visibleOrder = []) {
+    reorderInactiveMany(modIds, targetId, draggedId = '', visibleOrder = [], placement = '') {
       const selected = new Set(modIds || [])
       if (targetId && selected.has(targetId)) return
       const base = this.alignInactiveOrderToVisible(visibleOrder)
@@ -684,7 +712,11 @@ export const useAppStore = defineStore('app', {
       const remainingTargetIndex = targetId ? remaining.indexOf(targetId) : -1
       const insertionIndex = !targetId
         ? remaining.length
-        : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
+        : placement === 'before'
+          ? remainingTargetIndex
+          : placement === 'after'
+            ? remainingTargetIndex + 1
+            : (anchorIndex < targetIndex ? remainingTargetIndex + 1 : remainingTargetIndex)
       const next = [
         ...remaining.slice(0, insertionIndex),
         ...moving,
@@ -700,13 +732,13 @@ export const useAppStore = defineStore('app', {
       const ids = payload?.ids || []
       if (!ids.length || !['active', 'inactive'].includes(source) || !['active', 'inactive'].includes(target)) return
       if (source === 'active' && target === 'active') {
-        if (this.activeSortMode === 'priority') this.reorderMany(ids, payload.targetId, payload.draggedId)
+        if (this.activeSortMode === 'priority') this.reorderMany(ids, payload.targetId, payload.draggedId, payload.placement)
       } else if (source === 'inactive' && target === 'inactive') {
-        this.reorderInactiveMany(ids, payload.targetId, payload.draggedId, payload.targetOrder)
+        this.reorderInactiveMany(ids, payload.targetId, payload.draggedId, payload.targetOrder, payload.placement)
       } else if (source === 'inactive' && target === 'active') {
-        this.enableManyAt(ids, payload.targetId)
+        this.enableManyAt(ids, payload.targetId, payload.placement)
       } else {
-        this.disableManyToInactive(ids, payload.targetId, payload.targetOrder)
+        this.disableManyToInactive(ids, payload.targetId, payload.targetOrder, payload.placement)
       }
     },
     move(modId, direction) {

@@ -239,6 +239,44 @@ describe('ModList previews and source collisions', () => {
     })
   })
 
+  it('previews the insertion side under the cursor and emits it on drop', async () => {
+    const mods = ['a', 'b', 'c'].map(id => ({
+      ...duplicateMod,
+      id,
+      pack_name: `${id}.pack`,
+      effective_name: id.toUpperCase(),
+    }))
+    const wrapper = mount(ModList, {
+      props: { title: 'Mods', mods, orderIds: ['a', 'b', 'c'] },
+    })
+    const values = {}
+    const dataTransfer = {
+      effectAllowed: '',
+      setData: (type, value) => { values[type] = value },
+      getData: type => values[type] || '',
+    }
+    const rows = wrapper.findAll('.mod-row')
+    Object.defineProperty(rows[1].element, 'getBoundingClientRect', {
+      value: () => ({ top: 100, height: 80 }),
+    })
+
+    await rows[0].trigger('dragstart', { dataTransfer })
+    await rows[1].trigger('dragover', { dataTransfer, clientY: 120 })
+    expect(rows[1].classes()).toContain('drop-before')
+
+    await rows[1].trigger('dragover', { dataTransfer, clientY: 170 })
+    expect(rows[1].classes()).toContain('drop-after')
+    await wrapper.get('[data-testid="mod-list"]').trigger('dragover', { dataTransfer })
+    expect(wrapper.find('.drop-insertion-marker').exists()).toBe(true)
+    await rows[1].trigger('dragover', { dataTransfer, clientY: 170 })
+    await rows[1].trigger('drop', { dataTransfer })
+
+    expect(wrapper.emitted('drop-mods')[0][0]).toMatchObject({
+      targetId: 'b',
+      placement: 'after',
+    })
+  })
+
   it('accepts a selected active batch dropped into the inactive list', async () => {
     const activeMods = ['a', 'b'].map(id => ({ ...duplicateMod, id, pack_name: `${id}.pack` }))
     const inactiveMods = ['c', 'd'].map(id => ({ ...duplicateMod, id, pack_name: `${id}.pack` }))

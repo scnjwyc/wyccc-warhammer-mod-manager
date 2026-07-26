@@ -224,6 +224,15 @@ describe('built-in interface languages', () => {
     expect(message).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
+  it('explains an unavailable game data subscription check in English', () => {
+    applyInterfaceLanguage('en-US')
+    const message = localizeBackendMessage(
+      '无法确认游戏数据功能的 Workshop 订阅状态，已取消启动',
+    )
+    expect(message).toContain('Unable to verify the Workshop subscription')
+    expect(message).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('keeps each static interface catalog free of unrelated writing systems', () => {
     const forbiddenByLanguage = {
       'zh-CN': /[\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff]/u,

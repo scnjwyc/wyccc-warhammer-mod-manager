@@ -565,21 +565,35 @@ def _is_explicit_artillery_or_war_machine(
     }
 
 
-def _is_single_engine_war_machine(
+def _is_single_module_war_machine(
     main_values: Mapping[str, Any],
     land_values: Mapping[str, Any],
 ) -> bool:
     """Return whether the dedicated war-machine rule applies.
 
     Multi-engine formations such as War Wagons and War Sleds are treated as
-    normal units.  The category-specific rule is reserved for the individual
-    war machines that have exactly one engine.
+    normal units.  The category-specific rule is reserved for individual war
+    machines represented by exactly one engine, or by exactly one mount.  The
+    latter structure is used by flying war machines such as Thunderbarges and
+    Sky Junks, which have no ``engine`` record.
     """
     caste = str(main_values.get("caste") or "").strip().casefold()
     category = str(land_values.get("category") or "").strip().casefold()
-    return (
+    is_war_machine = (
         category == "war_machine" or caste in {"warmachine", "war_machine"}
-    ) and int(land_values.get("num_engines") or 0) == 1
+    )
+    if is_war_machine and int(land_values.get("num_engines") or 0) == 1:
+        return True
+
+    return (
+        caste in {"warmachine", "war_machine"}
+        and category == "war_beast"
+        and bool(str(land_values.get("mount") or "").strip())
+        and not str(land_values.get("engine") or "").strip()
+        and int(land_values.get("num_mounts") or 0) == 1
+        and int(land_values.get("num_engines") or 0) == 0
+        and int(land_values.get("rank_depth") or 0) == 1
+    )
 
 
 def _is_single_entity_unit(
@@ -667,7 +681,7 @@ def _resolve_unit_scale_policy(
             _category_size_multiplier(artillery_mode, multiplier),
             artillery_mode != CATEGORY_UNIT_MODE_FULL,
         )
-    if _is_single_engine_war_machine(main_values, land_values):
+    if _is_single_module_war_machine(main_values, land_values):
         return _UnitScalePolicy(
             "war_machine",
             3,

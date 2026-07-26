@@ -46,6 +46,7 @@ const entries = {
   'common.originalName': ['原名：{name}', 'Original name: {name}', '원래 이름: {name}', 'Исходное название: {name}', '元の名前：{name}'],
   'common.backendFailure': ['后端操作失败', 'The backend operation failed', '백엔드 작업에 실패했습니다', 'Ошибка операции сервера', 'バックエンド操作に失敗しました'],
   'common.operationFailed': ['操作失败', 'Operation failed', '작업 실패', 'Операция не выполнена', '操作に失敗しました'],
+  'gameData.subscriptionUnavailable': ['无法确认游戏数据功能的 Workshop 订阅状态，已取消启动', 'Unable to verify the Workshop subscription required for game data features, so game launch was cancelled', '게임 데이터 기능에 필요한 창작마당 구독을 확인할 수 없어 게임 실행을 취소했습니다', 'Не удалось проверить подписку Мастерской, необходимую для функций изменения игровых данных, поэтому запуск игры отменён', 'ゲームデータ機能に必要なワークショップのサブスクリプションを確認できなかったため、ゲームの起動を中止しました'],
 
   'status.refreshingWorkshop': ['正在后台刷新工坊信息', 'Refreshing Workshop information in the background', '창작마당 정보를 백그라운드에서 새로 고치는 중', 'Фоновое обновление данных Мастерской', 'バックグラウンドでワークショップ情報を更新中'],
   'status.savingOrder': ['正在写入当前顺序', 'Saving the current order', '현재 순서를 저장하는 중', 'Сохранение текущего порядка', '現在の順序を保存中'],
@@ -629,6 +630,7 @@ const spanishEntries = {
   "common.originalName": "Nombre original: {name}",
   "common.backendFailure": "La operación de backend falló",
   "common.operationFailed": "Operación fallida",
+  "gameData.subscriptionUnavailable": "No se pudo verificar la suscripción de Workshop necesaria para las funciones de datos del juego, por lo que se canceló el inicio del juego",
   "status.refreshingWorkshop": "Actualización de la información del taller en segundo plano",
   "status.savingOrder": "Guardar el pedido actual",
   "status.saveFailed": "Error al guardar instantáneamente. Por favor inténtalo de nuevo",
@@ -1471,6 +1473,9 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   }
   if (value === '该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用') {
     return t('warnings.outdatedMessage')
+  }
+  if (value === '无法确认游戏数据功能的 Workshop 订阅状态，已取消启动') {
+    return t('gameData.subscriptionUnavailable')
   }
   return t(fallbackKey)
 }

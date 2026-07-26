@@ -95,6 +95,18 @@ describe('deliberately small product scope', () => {
     expect(apiSource).not.toContain('"apply_preset"')
   })
 
+  it('keeps hidden MOD visibility next to playset actions and out of global settings', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+    const settingsSource = read(resolve(frontendRoot, 'src/components/SettingsModal.vue'))
+    const deleteAction = appSource.indexOf('@click="deletePlayset"')
+    const visibilityAction = appSource.indexOf('data-testid="playset-hidden-mods-toggle"')
+
+    expect(deleteAction).toBeGreaterThan(-1)
+    expect(visibilityAction).toBeGreaterThan(deleteAction)
+    expect(appSource).toContain('@click="toggleCurrentPlaysetHiddenMods"')
+    expect(settingsSource).not.toContain('data-testid="show-hidden-mods"')
+  })
+
   it('uses fixed Data and Workshop scanning without RPFM path configuration', () => {
     const settingsSource = read(resolve(frontendRoot, 'src/components/SettingsModal.vue'))
     const backendSettings = read(resolve(repositoryRoot, 'backend/app_settings.py'))

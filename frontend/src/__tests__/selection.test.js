@@ -245,16 +245,20 @@ describe('anchored mod selection', () => {
     expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-new', 'inactive-old'])
   })
 
-  it('derives hidden MOD visibility from the persisted basic setting', () => {
+  it('derives hidden MOD visibility from the selected playset', () => {
     const store = useAppStore()
     store.mods = [
       { id: 'visible', effective_name: 'Visible', pack_name: 'visible.pack' },
       { id: 'hidden', effective_name: 'Hidden', pack_name: 'hidden.pack', hidden: true },
     ]
-    store.settings = { show_hidden_mods: false }
+    store.playsets = [
+      { id: 'default', name: 'Default', mod_ids: [], show_hidden_mods: false },
+      { id: 'show-hidden', name: 'Show hidden', mod_ids: [], show_hidden_mods: true },
+    ]
+    store.currentPlaysetId = 'default'
 
     expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible'])
-    store.settings.show_hidden_mods = true
+    store.currentPlaysetId = 'show-hidden'
     expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible', 'hidden'])
   })
 
@@ -418,6 +422,44 @@ describe('anchored mod selection', () => {
     expect(store.mods[0].warnings).toEqual([])
     expect(store.mods[0].ignored_warning_codes).toEqual(['missing_dependency'])
     expect(store.warningCount).toBe(0)
+  })
+
+  it('uses the explicit drop placement for reordering and cross-list insertion', () => {
+    const store = useAppStore()
+    store.mods = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, pack_name: `${id}.pack` }))
+    store.activeIds = ['a', 'b', 'c', 'd']
+    store.inactiveOrderIds = ['a', 'b', 'c', 'd', 'e']
+    store.recordCurrentPlaysetChange = vi.fn()
+
+    store.handleModDrop({
+      source: 'active',
+      target: 'active',
+      ids: ['b'],
+      draggedId: 'b',
+      targetId: 'd',
+      placement: 'before',
+    })
+    expect(store.activeIds).toEqual(['a', 'c', 'b', 'd'])
+
+    store.handleModDrop({
+      source: 'active',
+      target: 'active',
+      ids: ['b'],
+      draggedId: 'b',
+      targetId: 'd',
+      placement: 'after',
+    })
+    expect(store.activeIds).toEqual(['a', 'c', 'd', 'b'])
+
+    store.handleModDrop({
+      source: 'inactive',
+      target: 'active',
+      ids: ['e'],
+      draggedId: 'e',
+      targetId: 'c',
+      placement: 'after',
+    })
+    expect(store.activeIds).toEqual(['a', 'c', 'e', 'd', 'b'])
   })
 
   it('subscribes to workshop dependencies and enables installed or pending items', async () => {

@@ -85,7 +85,61 @@ class StorageContractTests(unittest.TestCase):
                 schema_version = connection.execute(
                     "SELECT value FROM system_info WHERE key = 'schema_version'"
                 ).fetchone()[0]
-            self.assertEqual(schema_version, "8")
+            self.assertEqual(schema_version, "10")
+
+    def test_legacy_global_hidden_flags_are_copied_into_each_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "state.db"
+            with closing(sqlite3.connect(database)) as connection:
+                connection.executescript(
+                    """
+                    CREATE TABLE system_info (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE user_mod_data (
+                        mod_id TEXT PRIMARY KEY,
+                        alias TEXT NOT NULL DEFAULT '',
+                        notes TEXT NOT NULL DEFAULT '',
+                        mod_type TEXT NOT NULL DEFAULT 'unknown',
+                        mod_types TEXT NOT NULL DEFAULT '[]',
+                        published_workshop_id TEXT NOT NULL DEFAULT '',
+                        hidden INTEGER NOT NULL DEFAULT 0,
+                        ignored_warning_codes TEXT NOT NULL DEFAULT '[]',
+                        updated_at INTEGER NOT NULL
+                    );
+                    CREATE TABLE playsets (
+                        id TEXT PRIMARY KEY,
+                        game_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        show_hidden_mods INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    );
+                    CREATE TABLE playset_items (
+                        playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                        mod_id TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        PRIMARY KEY (playset_id, mod_id)
+                    );
+                    INSERT INTO app_state(key, value) VALUES
+                        ('current_playset_id:warhammer3', 'default'),
+                        ('playsets_initialized:warhammer3', '1');
+                    INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES
+                        ('default', 'warhammer3', '默认', 1, 1),
+                        ('custom', 'warhammer3', '常用', 1, 1);
+                    INSERT INTO user_mod_data(mod_id, hidden, updated_at)
+                    VALUES('legacy-hidden', 1, 1);
+                    """
+                )
+
+            repository = StateRepository(database)
+            self.assertEqual(
+                repository.get_playset_hidden_mod_ids('default'),
+                {'legacy-hidden'},
+            )
+            self.assertEqual(
+                repository.get_playset_hidden_mod_ids('custom'),
+                {'legacy-hidden'},
+            )
 
     def test_legacy_presets_migrate_to_playsets_and_current_order_becomes_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -173,6 +227,7 @@ class StorageContractTests(unittest.TestCase):
             self.assertEqual([item["name"] for item in warhammer], ["默认", "常用"])
             self.assertTrue(all(item["game_id"] == "warhammer3" for item in warhammer))
             self.assertEqual(warhammer[1]["mod_ids"], ["favorite-b", "favorite-a"])
+            self.assertFalse(warhammer[0]["show_hidden_mods"])
             self.assertEqual(len(three_kingdoms), 1)
             self.assertTrue(three_kingdoms[0]["is_default"])
             self.assertEqual(three_kingdoms[0]["mod_ids"], [])
@@ -188,6 +243,54 @@ class StorageContractTests(unittest.TestCase):
             self.assertEqual(created["mod_ids"], ["three-a"])
             with self.assertRaisesRegex(ValueError, "不属于当前游戏"):
                 repository.switch_playset("favorite", "three_kingdoms")
+
+    def test_hidden_mod_visibility_is_saved_per_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = StateRepository(Path(temporary) / "state.db")
+            repository.migrate_legacy_show_hidden_mods(True)
+
+            default_playset = repository.get_current_playset()
+            self.assertTrue(default_playset["show_hidden_mods"])
+
+            other = repository.create_playset(
+                "Only active MODs",
+                ["a"],
+                show_hidden_mods=False,
+            )
+            self.assertFalse(other["show_hidden_mods"])
+
+            repository.switch_playset(default_playset["id"])
+            self.assertTrue(repository.get_current_playset()["show_hidden_mods"])
+            repository.set_playset_show_hidden_mods(default_playset["id"], False)
+            self.assertFalse(repository.get_current_playset()["show_hidden_mods"])
+
+            # The legacy preference is a one-time seed and cannot overwrite
+            # later per-playset choices.
+            repository.migrate_legacy_show_hidden_mods(True)
+            self.assertFalse(repository.get_current_playset()["show_hidden_mods"])
+
+    def test_mod_hidden_flags_are_isolated_by_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = StateRepository(Path(temporary) / "state.db")
+            default_playset = repository.get_current_playset()
+            repository.set_playset_mod_hidden(default_playset["id"], "shared-mod", True)
+
+            other = repository.create_playset("Other", ["shared-mod"])
+            self.assertEqual(
+                repository.get_playset_hidden_mod_ids(other["id"]),
+                set(),
+            )
+
+            repository.set_playset_mod_hidden(other["id"], "other-only", True)
+            self.assertEqual(
+                repository.get_playset_hidden_mod_ids(other["id"]),
+                {"other-only"},
+            )
+            repository.switch_playset(default_playset["id"])
+            self.assertEqual(
+                repository.get_playset_hidden_mod_ids(default_playset["id"]),
+                {"shared-mod"},
+            )
 
     def test_sqlite_schema_and_user_intent_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -315,6 +418,7 @@ class StorageContractTests(unittest.TestCase):
                     "preset_items",
                     "playsets",
                     "playset_items",
+                    "playset_hidden_mods",
                     "load_order_backups",
                     "data_sync_items",
                 },
@@ -358,6 +462,27 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(inactive["ok"])
         self.assertTrue(inactive["data"]["settings"]["active_search_highlight_mode"])
         self.assertTrue(inactive["data"]["settings"]["inactive_search_highlight_mode"])
+
+    def test_hidden_mod_visibility_uses_the_current_playset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / "state")
+            api.settings_service.save({"show_hidden_mods": True})
+
+            bootstrap = api.call("get_bootstrap")
+            self.assertTrue(bootstrap["ok"])
+            self.assertTrue(bootstrap["data"]["current_playset"]["show_hidden_mods"])
+
+            created = api.call("create_playset", ["Second", []])
+            self.assertTrue(created["ok"])
+            self.assertTrue(created["data"]["current_playset"]["show_hidden_mods"])
+
+            updated = api.call("set_playset_show_hidden_mods", [False])
+            self.assertTrue(updated["ok"])
+            self.assertFalse(updated["data"]["current_playset"]["show_hidden_mods"])
+
+            switched = api.call("switch_playset", ["default"])
+            self.assertTrue(switched["ok"])
+            self.assertTrue(switched["data"]["current_playset"]["show_hidden_mods"])
 
     @staticmethod
     def _prepare_launch_api(root: Path) -> tuple[API, dict]:
@@ -809,6 +934,39 @@ class ApiContractTests(unittest.TestCase):
             all(item["subscribed"] for item in cached["data"]["items"].values())
         )
 
+    def test_game_data_feature_status_uses_installed_packs_when_steam_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "1142710"
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            unit_directory = workshop / unit_item["workshop_id"]
+            unit_directory.mkdir(parents=True)
+            write_pack(unit_directory / unit_item["pack_name"])
+            api = API(root / "state")
+            paths = GamePaths(
+                game_id="warhammer3",
+                workshop_path=str(workshop),
+            )
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=SteamworksBridgeError("Steam offline"),
+                ),
+                patch.object(
+                    api.settings_service,
+                    "resolve_game_paths",
+                    return_value=paths,
+                ),
+            ):
+                status = api.call("get_game_data_feature_status")
+
+        self.assertTrue(status["ok"])
+        self.assertTrue(status["data"]["known"])
+        self.assertEqual(status["data"]["source"], "local")
+        self.assertTrue(status["data"]["items"]["unit_size"]["subscribed"])
+        self.assertFalse(status["data"]["items"]["friendly_fire"]["subscribed"])
+        self.assertIn("Steam offline", status["data"]["warning"])
+
     def test_launch_refreshes_subscriptions_and_ensures_patch_before_starting_game(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -841,6 +999,52 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(all(ensure.call_args.kwargs["subscription_state"].values()))
         query.assert_called_once()
         launch.assert_called_once()
+
+    def test_launch_uses_installed_feature_pack_when_steam_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            api.call("save_game_data_settings", [{"unit_model_multiplier": 2.0}])
+            workshop = root / "workshop" / "1142710"
+            unit_item = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]
+            unit_directory = workshop / unit_item["workshop_id"]
+            unit_directory.mkdir(parents=True)
+            write_pack(unit_directory / unit_item["pack_name"])
+            resolved = api.settings_service.resolve_game_paths()
+            paths = GamePaths(
+                game_id=resolved.game_id,
+                game_path=resolved.game_path,
+                data_path=resolved.data_path,
+                workshop_path=str(workshop),
+            )
+            patch_result = self._game_data_patch_result(root)
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    side_effect=SteamworksBridgeError("Steam offline"),
+                ),
+                patch.object(
+                    api.settings_service,
+                    "resolve_game_paths",
+                    return_value=paths,
+                ),
+                patch(
+                    "backend.api.ensure_game_data_patch",
+                    return_value=patch_result,
+                ) as ensure,
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value={"path": "", "options": [], "entry_count": 0, "game_data": {}},
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call("launch_game", [[], scan["data"]["order_token"]])
+
+        self.assertTrue(launched["ok"])
+        self.assertTrue(
+            ensure.call_args.kwargs["subscription_state"][unit_item["workshop_id"]]
+        )
 
     def test_launch_stages_runtime_packs_in_data_when_portable_path_is_unicode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

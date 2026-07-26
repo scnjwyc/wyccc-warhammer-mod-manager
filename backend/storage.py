@@ -21,7 +21,7 @@ from .mod_types import (
 
 DEFAULT_PLAYSET_ID = "default"
 DEFAULT_PLAYSET_NAME = "默认"
-PLAYSET_SCHEMA_VERSION = "8"
+PLAYSET_SCHEMA_VERSION = "10"
 MOD_TYPE_ORDER_STATE_KEY = "mod_type_order"
 
 
@@ -113,6 +113,7 @@ class StateRepository:
                     id TEXT PRIMARY KEY,
                     game_id TEXT NOT NULL,
                     name TEXT NOT NULL,
+                    show_hidden_mods INTEGER NOT NULL DEFAULT 0,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
                 );
@@ -181,7 +182,17 @@ class StateRepository:
                     ),
                 )
             self._ensure_playset_schema(connection)
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS playset_hidden_mods (
+                    playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                    mod_id TEXT NOT NULL,
+                    PRIMARY KEY (playset_id, mod_id)
+                )
+                """
+            )
             self._initialize_playsets(connection)
+            self._migrate_legacy_hidden_mods_to_playsets(connection)
             connection.execute(
                 "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', ?)",
                 (PLAYSET_SCHEMA_VERSION,),
@@ -195,6 +206,14 @@ class StateRepository:
         }
         if "game_id" not in columns:
             cls._migrate_legacy_playsets_to_game_scope(connection)
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(playsets)").fetchall()
+            }
+        if "show_hidden_mods" not in columns:
+            connection.execute(
+                "ALTER TABLE playsets ADD COLUMN show_hidden_mods INTEGER NOT NULL DEFAULT 0"
+            )
         connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS playsets_game_name_unique "
             "ON playsets(game_id, name COLLATE NOCASE)"
@@ -217,6 +236,7 @@ class StateRepository:
                 id TEXT PRIMARY KEY,
                 game_id TEXT NOT NULL,
                 name TEXT NOT NULL,
+                show_hidden_mods INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )
@@ -233,7 +253,10 @@ class StateRepository:
             """
         )
         connection.executemany(
-            "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
+            """
+            INSERT INTO playsets(id, game_id, name, show_hidden_mods, created_at, updated_at)
+            VALUES(?, ?, ?, 0, ?, ?)
+            """,
             [
                 (
                     str(row["id"]),
@@ -252,6 +275,36 @@ class StateRepository:
                 for row in item_rows
             ],
         )
+
+    @classmethod
+    def _migrate_legacy_hidden_mods_to_playsets(cls, connection: sqlite3.Connection) -> None:
+        """Copy the former global hidden flags into every existing playset once."""
+        migration_key = "playset_hidden_mods_migrated"
+        if connection.execute(
+            "SELECT 1 FROM app_state WHERE key = ?", (migration_key,)
+        ).fetchone():
+            return
+        hidden_mod_ids = [
+            str(row["mod_id"])
+            for row in connection.execute(
+                "SELECT mod_id FROM user_mod_data WHERE hidden = 1"
+            ).fetchall()
+            if str(row["mod_id"])
+        ]
+        playset_ids = [
+            str(row["id"])
+            for row in connection.execute("SELECT id FROM playsets").fetchall()
+        ]
+        if hidden_mod_ids and playset_ids:
+            connection.executemany(
+                "INSERT OR IGNORE INTO playset_hidden_mods(playset_id, mod_id) VALUES(?, ?)",
+                [
+                    (playset_id, mod_id)
+                    for playset_id in playset_ids
+                    for mod_id in hidden_mod_ids
+                ],
+            )
+        cls._write_app_state(connection, migration_key, "1")
 
     @classmethod
     def _initialize_playsets(cls, connection: sqlite3.Connection) -> None:
@@ -902,7 +955,7 @@ class StateRepository:
         with self._lock, self._connect() as connection:
             playset_rows = connection.execute(
                 """
-                SELECT id, game_id, name, created_at, updated_at
+                SELECT id, game_id, name, show_hidden_mods, created_at, updated_at
                 FROM playsets
                 WHERE game_id = ?
                 ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, name COLLATE NOCASE, id
@@ -928,6 +981,7 @@ class StateRepository:
                 "game_id": row["game_id"],
                 "name": row["name"],
                 "is_default": row["id"] == default_id,
+                "show_hidden_mods": bool(row["show_hidden_mods"]),
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "mod_ids": items_by_playset.get(row["id"], []),
@@ -958,6 +1012,50 @@ class StateRepository:
         current_id = self.get_current_playset_id(game_id)
         return next(item for item in self.list_playsets(game_id) if item["id"] == current_id)
 
+    def get_playset_hidden_mod_ids(
+        self,
+        playset_id: str,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> set[str]:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            rows = connection.execute(
+                "SELECT mod_id FROM playset_hidden_mods WHERE playset_id = ?",
+                (playset_id,),
+            ).fetchall()
+        return {str(row["mod_id"]) for row in rows if str(row["mod_id"])}
+
+    def set_playset_mod_hidden(
+        self,
+        playset_id: str,
+        mod_id: str,
+        hidden: bool,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> bool:
+        game_id = _normalized_game_id(game_id)
+        normalized_mod_id = str(mod_id or "").strip()
+        if not normalized_mod_id:
+            raise ValueError("MOD ID 不能为空")
+        now = int(time.time() * 1000)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            if hidden:
+                connection.execute(
+                    "INSERT OR IGNORE INTO playset_hidden_mods(playset_id, mod_id) VALUES(?, ?)",
+                    (playset_id, normalized_mod_id),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM playset_hidden_mods WHERE playset_id = ? AND mod_id = ?",
+                    (playset_id, normalized_mod_id),
+                )
+            connection.execute(
+                "UPDATE playsets SET updated_at = ? WHERE id = ? AND game_id = ?",
+                (now, playset_id, game_id),
+            )
+        return bool(hidden)
+
     def are_playsets_initialized(self, game_id: str = DEFAULT_GAME_ID) -> bool:
         game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
@@ -981,11 +1079,20 @@ class StateRepository:
         name: str,
         mod_ids: list[str],
         game_id: str = DEFAULT_GAME_ID,
+        show_hidden_mods: bool = False,
+        hidden_mod_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         game_id = _normalized_game_id(game_id)
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("播放集名称不能为空")
+        normalized_hidden_ids = list(
+            dict.fromkeys(
+                str(mod_id or "").strip()
+                for mod_id in (hidden_mod_ids or [])
+                if str(mod_id or "").strip()
+            )
+        )
         now = int(time.time() * 1000)
         playset_id = uuid.uuid4().hex
         with self._lock, self._connect() as connection:
@@ -995,9 +1102,17 @@ class StateRepository:
             ).fetchone():
                 raise ValueError("播放集名称已存在")
             connection.execute(
-                "INSERT INTO playsets(id, game_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?)",
-                (playset_id, game_id, clean_name, now, now),
+                """
+                INSERT INTO playsets(id, game_id, name, show_hidden_mods, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (playset_id, game_id, clean_name, int(bool(show_hidden_mods)), now, now),
             )
+            if normalized_hidden_ids:
+                connection.executemany(
+                    "INSERT INTO playset_hidden_mods(playset_id, mod_id) VALUES(?, ?)",
+                    [(playset_id, mod_id) for mod_id in normalized_hidden_ids],
+                )
             normalized = self._replace_playset_items(connection, playset_id, mod_ids)
             self._write_app_state(
                 connection,
@@ -1015,6 +1130,40 @@ class StateRepository:
                 "1",
             )
         return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
+
+    def set_playset_show_hidden_mods(
+        self,
+        playset_id: str,
+        show_hidden_mods: bool,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> dict[str, Any]:
+        game_id = _normalized_game_id(game_id)
+        now = int(time.time() * 1000)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            connection.execute(
+                """
+                UPDATE playsets
+                SET show_hidden_mods = ?, updated_at = ?
+                WHERE id = ? AND game_id = ?
+                """,
+                (int(bool(show_hidden_mods)), now, playset_id, game_id),
+            )
+        return next(item for item in self.list_playsets(game_id) if item["id"] == playset_id)
+
+    def migrate_legacy_show_hidden_mods(self, show_hidden_mods: bool) -> None:
+        """Seed each existing playset from the retired global preference once."""
+        migration_key = "playset_show_hidden_mods_migrated"
+        with self._lock, self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM app_state WHERE key = ?", (migration_key,)
+            ).fetchone():
+                return
+            connection.execute(
+                "UPDATE playsets SET show_hidden_mods = ?",
+                (int(bool(show_hidden_mods)),),
+            )
+            self._write_app_state(connection, migration_key, "1")
 
     def rename_playset(
         self,
