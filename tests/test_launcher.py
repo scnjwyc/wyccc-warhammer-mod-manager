@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.launcher import is_game_running, launch_game
+from backend.launcher import is_game_running, launch_game, terminate_game
 
 
 class LauncherProcessTests(unittest.TestCase):
@@ -90,6 +90,24 @@ class LauncherProcessTests(unittest.TestCase):
             patch("backend.launcher._windows_process_entries", side_effect=OSError("denied")),
         ):
             self.assertFalse(is_game_running())
+
+    def test_windows_termination_only_targets_the_configured_game_executable(self) -> None:
+        with (
+            patch("backend.launcher.os.name", "nt"),
+            patch(
+                "backend.launcher._windows_process_entries",
+                return_value=[(41, "Warhammer3.exe"), (42, "Warhammer3.exe")],
+            ),
+            patch(
+                "backend.launcher._windows_executable_path",
+                side_effect=[r"C:\\Tools\\Warhammer3.exe", r"C:\\Games\\Warhammer III\\Warhammer3.exe"],
+            ),
+            patch("backend.launcher._windows_terminate_process") as terminate,
+        ):
+            result = terminate_game(r"C:\Games\Warhammer III\Warhammer3.exe")
+
+        self.assertEqual(result, {"process_ids": [42]})
+        terminate.assert_called_once_with(42)
 
     def test_launch_reports_the_selected_game_executable_when_it_is_already_running(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

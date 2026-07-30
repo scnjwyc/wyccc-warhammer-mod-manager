@@ -2124,6 +2124,31 @@ button.context-menu-item {
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.58), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
+.confirmation-backdrop {
+  z-index: 90;
+}
+
+.confirmation-modal {
+  width: min(500px, 92vw);
+}
+
+.confirmation-modal-body {
+  padding: 23px 24px 25px;
+}
+
+.confirmation-message {
+  margin: 0;
+  color: #eadcd0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.confirmation-modal-footer {
+  justify-content: flex-end;
+  gap: 9px;
+}
+
 .settings-modal {
   display: grid;
   width: min(980px, 96vw);

@@ -233,6 +233,18 @@ describe('built-in interface languages', () => {
     expect(message).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
+  it('preserves technical mod details for game data source failures in English', () => {
+    applyInterfaceLanguage('en-US')
+    const message = localizeBackendMessage(
+      '游戏数据来源 MOD "WYD" [pack: wyd.pack, source: Workshop] 读取失败：'
+      + '无法解压 Pack 条目 db\\\\battle_entities_tables\\\\wyd_date：'
+      + 'Error 3 while decompressing data: unknown compression method',
+    )
+    expect(message).toContain('The backend operation failed:')
+    expect(message).toContain('MOD "WYD" [pack: wyd.pack, source: Workshop]')
+    expect(message).toContain('db\\\\battle_entities_tables\\\\wyd_date')
+  })
+
   it('keeps each static interface catalog free of unrelated writing systems', () => {
     const forbiddenByLanguage = {
       'zh-CN': /[\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff]/u,

@@ -166,6 +166,23 @@ describe('deliberately small product scope', () => {
     expect(stylesSource).toMatch(/\.settings-page-scroll\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/s)
   })
 
+  it('replaces browser confirmation popups with the centered themed confirmation modal', () => {
+    const appSource = read(resolve(frontendRoot, 'src/App.vue'))
+    const typeManagerSource = read(resolve(frontendRoot, 'src/components/TypeManagerModal.vue'))
+    const confirmationSource = read(resolve(frontendRoot, 'src/components/ConfirmationModal.vue'))
+    const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))
+
+    for (const source of [appSource, typeManagerSource]) {
+      expect(source).not.toMatch(/window\s*\.\s*confirm/)
+    }
+    expect(appSource).toContain('import ConfirmationModal')
+    expect(typeManagerSource).toContain('import ConfirmationModal')
+    expect(confirmationSource).toContain('Teleport to="body"')
+    expect(confirmationSource).toContain('role="alertdialog"')
+    expect(stylesSource).toMatch(/\.confirmation-backdrop\s*\{[^}]*z-index:\s*90/s)
+    expect(stylesSource).toMatch(/\.confirmation-modal\s*\{[^}]*width:\s*min\(500px,\s*92vw\)/s)
+  })
+
   it('centers the warning entry in the enabled-list heading instead of using a bottom strip', () => {
     const appSource = read(resolve(frontendRoot, 'src/App.vue'))
     const stylesSource = read(resolve(frontendRoot, 'src/styles.css'))

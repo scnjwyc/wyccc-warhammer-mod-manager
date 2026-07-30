@@ -63,7 +63,7 @@ const sameIds = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.6',
+    appVersion: '0.9.7',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -797,6 +797,16 @@ export const useAppStore = defineStore('app', {
         this.notify(t('toast.gameLaunched', {
           game: localizedSelectedGameName(this.settings),
           pid: data.process.pid,
+        }))
+        return data
+      })
+    },
+    async terminateGame() {
+      return this.withBusy(t('busy.terminateGame'), async () => {
+        const data = await invoke('terminate_game')
+        this.runtime = data.runtime || { ...this.runtime, running: false }
+        this.notify(t('toast.gameTerminated', {
+          count: (data.process_ids || []).length,
         }))
         return data
       })

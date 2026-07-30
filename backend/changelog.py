@@ -9,6 +9,27 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.7",
+        "date": "2026-07-30",
+        "entries": (
+            (
+                "v097_added_title",
+                (("feature", "v097_end_game_process_button"),),
+            ),
+            (
+                "v097_adjusted_title",
+                (
+                    ("improvement", "v097_confirmation_dialog_ui"),
+                    ("improvement", "v097_error_message_wording"),
+                ),
+            ),
+            (
+                "v097_fixed_title",
+                (("fix", "v097_mod_data_compatibility"),),
+            ),
+        ),
+    },
+    {
         "version": "0.9.6",
         "date": "2026-07-26",
         "entries": (
@@ -406,10 +427,15 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     },
 )
 
-
-
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v097_added_title": "新增",
+        "v097_end_game_process_button": "启动游戏后，原“启动游戏”按钮会变为“结束游戏进程”按钮，便于快速结束游戏。",
+        "v097_adjusted_title": "调整",
+        "v097_confirmation_dialog_ui": "优化所有确认弹窗的 UI。",
+        "v097_error_message_wording": "优化部分错误信息文本，使其更易懂。",
+        "v097_fixed_title": "修复",
+        "v097_mod_data_compatibility": "修复游戏数据修改功能与部分 MOD 不兼容的问题。",
         "v096_added_title": "新增",
         "v096_drag_insert_preview": "MOD 拖拽时增加定位特效。",
         "v096_adjusted_title": "调整",
@@ -572,6 +598,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v097_added_title": "Added",
+        "v097_end_game_process_button": "After launching the game, the Launch game button becomes End game process for quick termination.",
+        "v097_adjusted_title": "Adjusted",
+        "v097_confirmation_dialog_ui": "Improved the UI of all confirmation dialogs.",
+        "v097_error_message_wording": "Improved several error messages to make them easier to understand.",
+        "v097_fixed_title": "Fixed",
+        "v097_mod_data_compatibility": "Fixed compatibility issues between game-data modification and some MODs.",
         "v096_added_title": "Added",
         "v096_drag_insert_preview": "Added an insertion-position effect while dragging MODs.",
         "v096_adjusted_title": "Adjusted",
@@ -734,6 +767,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v097_added_title": "추가",
+        "v097_end_game_process_button": "게임을 시작하면 게임 시작 버튼이 빠른 종료를 위한 게임 프로세스 종료 버튼으로 바뀝니다.",
+        "v097_adjusted_title": "조정",
+        "v097_confirmation_dialog_ui": "모든 확인 대화 상자의 UI를 개선했습니다.",
+        "v097_error_message_wording": "일부 오류 메시지 문구를 더 이해하기 쉽게 개선했습니다.",
+        "v097_fixed_title": "수정",
+        "v097_mod_data_compatibility": "게임 데이터 수정 기능이 일부 MOD와 호환되지 않던 문제를 수정했습니다.",
         "v096_added_title": "추가",
         "v096_drag_insert_preview": "MOD를 드래그할 때 삽입 위치 효과를 추가했습니다.",
         "v096_adjusted_title": "조정",
@@ -896,6 +936,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v097_added_title": "Добавлено",
+        "v097_end_game_process_button": "После запуска игры кнопка запуска превращается в кнопку завершения процесса игры для быстрого выхода.",
+        "v097_adjusted_title": "Изменено",
+        "v097_confirmation_dialog_ui": "Улучшен интерфейс всех окон подтверждения.",
+        "v097_error_message_wording": "Некоторые сообщения об ошибках стали понятнее.",
+        "v097_fixed_title": "Исправлено",
+        "v097_mod_data_compatibility": "Исправлена несовместимость изменения игровых данных с некоторыми MOD.",
         "v096_added_title": "Добавлено",
         "v096_drag_insert_preview": "Добавлен эффект положения вставки при перетаскивании MOD.",
         "v096_adjusted_title": "Изменено",
@@ -1058,6 +1105,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v097_added_title": "追加",
+        "v097_end_game_process_button": "ゲーム起動後、「ゲームを起動」ボタンが素早く終了できる「ゲームプロセスを終了」ボタンに変わります。",
+        "v097_adjusted_title": "調整",
+        "v097_confirmation_dialog_ui": "すべての確認ダイアログの UI を改善しました。",
+        "v097_error_message_wording": "一部のエラーメッセージをより分かりやすく改善しました。",
+        "v097_fixed_title": "修正",
+        "v097_mod_data_compatibility": "ゲームデータ変更機能が一部の MOD と互換性を持たない問題を修正しました。",
         "v096_added_title": "追加",
         "v096_drag_insert_preview": "MOD のドラッグ中に挿入位置エフェクトを追加しました。",
         "v096_adjusted_title": "調整",
@@ -1220,6 +1274,13 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v097_added_title": "Añadido",
+        "v097_end_game_process_button": "Después de iniciar el juego, el botón Iniciar juego se convierte en Terminar proceso del juego para cerrarlo rápidamente.",
+        "v097_adjusted_title": "Ajustado",
+        "v097_confirmation_dialog_ui": "Se mejoró la interfaz de todos los cuadros de confirmación.",
+        "v097_error_message_wording": "Se mejoraron algunos mensajes de error para que sean más fáciles de entender.",
+        "v097_fixed_title": "Corregido",
+        "v097_mod_data_compatibility": "Se corrigieron problemas de compatibilidad entre la modificación de datos del juego y algunos MODs.",
         "v096_added_title": "Añadido",
         "v096_drag_insert_preview": "Se añadió un efecto que indica la posición de inserción al arrastrar MODs.",
         "v096_adjusted_title": "Ajustado",

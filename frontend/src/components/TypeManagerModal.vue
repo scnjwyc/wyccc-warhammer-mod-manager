@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import { localizedModTypeName, t } from '../languages'
+import ConfirmationModal from './ConfirmationModal.vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -11,13 +12,17 @@ const props = defineProps({
 const emit = defineEmits(['close', 'create', 'update', 'delete', 'move'])
 const newTypeName = ref('')
 const edits = reactive({})
+const pendingDeleteType = ref(null)
 
 watch(
   () => [props.open, props.types],
   () => {
     for (const key of Object.keys(edits)) delete edits[key]
     for (const type of props.types) edits[type.id] = type.name
-    if (!props.open) newTypeName.value = ''
+    if (!props.open) {
+      newTypeName.value = ''
+      pendingDeleteType.value = null
+    }
   },
   { immediate: true, deep: true },
 )
@@ -39,7 +44,13 @@ const updateType = type => {
 
 const deleteType = type => {
   if (props.busy) return
-  if (!window.confirm(t('types.deleteConfirm', { name: type.name, unknown: t('modType.unknown') }))) return
+  pendingDeleteType.value = type
+}
+
+const confirmDeleteType = () => {
+  const type = pendingDeleteType.value
+  if (!type || props.busy) return
+  pendingDeleteType.value = null
   emit('delete', type.id)
 }
 </script>
@@ -106,5 +117,14 @@ const deleteType = type => {
         <button type="button" class="secondary-button" @click="emit('close')">{{ t('common.done') }}</button>
       </footer>
     </section>
+
+    <ConfirmationModal
+      :open="!!pendingDeleteType"
+      :message="pendingDeleteType ? t('types.deleteConfirm', { name: pendingDeleteType.name, unknown: t('modType.unknown') }) : ''"
+      :confirm-label="t('common.delete')"
+      danger
+      @close="pendingDeleteType = null"
+      @confirm="confirmDeleteType"
+    />
   </div>
 </template>

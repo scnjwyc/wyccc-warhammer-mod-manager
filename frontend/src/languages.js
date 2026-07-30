@@ -24,6 +24,7 @@ const entries = {
   'language.jaJP': ['日语', 'Japanese', '일본어', 'Японский', '日本語'],
   'language.esES': ['西班牙语', 'Spanish', '스페인어', 'Испанский', 'スペイン語'],
   'common.cancel': ['取消', 'Cancel', '취소', 'Отмена', 'キャンセル'],
+  'common.confirm': ['确认', 'Confirm', '확인', 'Подтвердить', '確認'],
   'common.close': ['关闭', 'Close', '닫기', 'Закрыть', '閉じる'],
   'common.save': ['保存', 'Save', '저장', 'Сохранить', '保存'],
   'common.delete': ['删除', 'Delete', '삭제', 'Удалить', '削除'],
@@ -46,6 +47,8 @@ const entries = {
   'common.originalName': ['原名：{name}', 'Original name: {name}', '원래 이름: {name}', 'Исходное название: {name}', '元の名前：{name}'],
   'common.backendFailure': ['后端操作失败', 'The backend operation failed', '백엔드 작업에 실패했습니다', 'Ошибка операции сервера', 'バックエンド操作に失敗しました'],
   'common.operationFailed': ['操作失败', 'Operation failed', '작업 실패', 'Операция не выполнена', '操作に失敗しました'],
+  'confirmation.eyebrow': ['操作确认', 'ACTION CONFIRMATION', '작업 확인', 'ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ', '操作の確認'],
+  'confirmation.title': ['请确认操作', 'Confirm action', '작업을 확인하세요', 'Подтвердите действие', '操作を確認'],
   'gameData.subscriptionUnavailable': ['无法确认游戏数据功能的 Workshop 订阅状态，已取消启动', 'Unable to verify the Workshop subscription required for game data features, so game launch was cancelled', '게임 데이터 기능에 필요한 창작마당 구독을 확인할 수 없어 게임 실행을 취소했습니다', 'Не удалось проверить подписку Мастерской, необходимую для функций изменения игровых данных, поэтому запуск игры отменён', 'ゲームデータ機能に必要なワークショップのサブスクリプションを確認できなかったため、ゲームの起動を中止しました'],
 
   'status.refreshingWorkshop': ['正在后台刷新工坊信息', 'Refreshing Workshop information in the background', '창작마당 정보를 백그라운드에서 새로 고치는 중', 'Фоновое обновление данных Мастерской', 'バックグラウンドでワークショップ情報を更新中'],
@@ -78,7 +81,9 @@ const entries = {
   'app.saveList': ['存档列表', 'Save list', '저장 목록', 'Список сохранений', 'セーブ一覧'],
   'app.continueGame': ['继续游戏', 'Continue game', '게임 계속', 'Продолжить игру', 'ゲームを続ける'],
   'app.launchGame': ['启动游戏', 'Launch game', '게임 실행', 'Запустить игру', 'ゲームを起動'],
+  'app.terminateGame': ['结束游戏进程', 'End game process', '게임 프로세스 종료', 'Завершить процесс игры', 'ゲームプロセスを終了'],
   'app.gameRunningShort': ['游戏运行中', 'Game running', '게임 실행 중', 'Игра запущена', 'ゲーム実行中'],
+  'app.confirmTerminateGame': ['确定要强制结束游戏进程吗？未保存的游戏进度将丢失。', 'Force-end the game process? Any unsaved game progress will be lost.', '게임 프로세스를 강제 종료할까요? 저장하지 않은 진행 상황은 손실됩니다.', 'Принудительно завершить процесс игры? Несохранённый прогресс будет потерян.', 'ゲームプロセスを強制終了しますか？保存していない進行状況は失われます。'],
   'app.promptNewPlayset': ['输入新播放集名称（将复制当前播放集内容）', 'Enter a name for the new playset (the current playset will be copied)', '새 플레이 세트 이름을 입력하세요(현재 플레이 세트가 복사됩니다)', 'Введите имя нового набора (текущий набор будет скопирован)', '新しいプレイセット名を入力してください（現在の内容をコピーします）'],
   'app.promptRenamePlayset': ['输入播放集的新名称', 'Enter a new name for the playset', '플레이 세트의 새 이름을 입력하세요', 'Введите новое имя набора', 'プレイセットの新しい名前を入力してください'],
   'app.confirmDeletePlayset': ['确定删除播放集“{name}”吗？删除后将切换到“{defaultName}”。', 'Delete the playset “{name}”? “{defaultName}” will become active.', '플레이 세트 “{name}”을(를) 삭제할까요? 삭제 후 “{defaultName}” 플레이 세트로 전환됩니다.', 'Удалить набор «{name}»? После удаления будет выбран набор «{defaultName}».', 'プレイセット「{name}」を削除しますか？削除後は「{defaultName}」に切り替わります。'],
@@ -496,6 +501,7 @@ const entries = {
   'busy.deletePlayset': ['删除播放集', 'Deleting playset', '플레이 세트 삭제 중', 'Удаление набора', 'プレイセットを削除中'],
   'busy.switchPlayset': ['切换播放集', 'Switching playset', '플레이 세트 전환 중', 'Переключение набора', 'プレイセットを切替中'],
   'busy.launchGame': ['启动游戏', 'Launching game', '게임 실행 중', 'Запуск игры', 'ゲームを起動中'],
+  'busy.terminateGame': ['结束游戏进程', 'Ending game process', '게임 프로세스 종료 중', 'Завершение процесса игры', 'ゲームプロセスを終了中'],
   'busy.continueGame': ['继续游戏', 'Continuing game', '게임 계속하는 중', 'Продолжение игры', 'ゲームを再開中'],
   'busy.readSaves': ['读取存档列表', 'Reading save list', '저장 목록 읽는 중', 'Чтение списка сохранений', 'セーブ一覧を読み込み中'],
   'busy.readSaveMods': ['读取存档 MOD', 'Reading save MODs', '저장 MOD 읽는 중', 'Чтение MOD сохранения', 'セーブ MOD を読み込み中'],
@@ -553,6 +559,7 @@ const entries = {
   'toast.playsetSwitched': ['已切换到播放集“{name}”', 'Switched to playset “{name}”', '플레이 세트 “{name}”(으)로 전환됨', 'Выбран набор «{name}»', 'プレイセット「{name}」に切り替えました'],
   'toast.playsetMissing': ['播放集中有 {count} 个 Pack 未安装', '{count} Packs in the playset are not installed', '플레이 세트의 Pack {count}개가 설치되지 않음', 'В наборе не установлено Pack: {count}', 'プレイセット内の Pack {count}件が未インストールです'],
   'toast.gameLaunched': ['{game} 已启动（PID {pid}）', '{game} launched (PID {pid})', '{game} 실행됨(PID {pid})', '{game} запущена (PID {pid})', '{game} を起動しました（PID {pid}）'],
+  'toast.gameTerminated': ['已结束 {count} 个游戏进程', 'Ended {count} game process(es)', '{count}개의 게임 프로세스를 종료했습니다', 'Завершено процессов игры: {count}', '{count} 件のゲームプロセスを終了しました'],
   'toast.loadingSave': ['正在载入 {name}', 'Loading {name}', '{name} 불러오는 중', 'Загрузка {name}', '{name} を読み込み中'],
   'toast.settingsSaved': ['设置已保存', 'Settings saved', '설정이 저장됨', 'Настройки сохранены', '設定を保存しました'],
   'toast.gameDataSaved': ['游戏数据设置已保存', 'Game data settings saved', '게임 데이터 설정이 저장되었습니다', 'Настройки игровых данных сохранены', 'ゲームデータ設定を保存しました'],
@@ -608,6 +615,7 @@ const spanishEntries = {
   "language.jaJP": "japonés",
   "language.esES": "Español",
   "common.cancel": "Cancelar",
+  "common.confirm": "Confirmar",
   "common.close": "Cerrar",
   "common.save": "Guardar",
   "common.delete": "Eliminar",
@@ -630,6 +638,8 @@ const spanishEntries = {
   "common.originalName": "Nombre original: {name}",
   "common.backendFailure": "La operación de backend falló",
   "common.operationFailed": "Operación fallida",
+  "confirmation.eyebrow": "CONFIRMACIÓN DE ACCIÓN",
+  "confirmation.title": "Confirmar acción",
   "gameData.subscriptionUnavailable": "No se pudo verificar la suscripción de Workshop necesaria para las funciones de datos del juego, por lo que se canceló el inicio del juego",
   "status.refreshingWorkshop": "Actualización de la información del taller en segundo plano",
   "status.savingOrder": "Guardar el pedido actual",
@@ -1168,7 +1178,9 @@ Object.assign(spanishEntries, {
   'app.saveList': 'Lista de partidas guardadas',
   'app.continueGame': 'Continuar partida',
   'app.launchGame': 'Iniciar juego',
+  'app.terminateGame': 'Finalizar proceso del juego',
   'app.gameRunningShort': 'Juego en ejecución',
+  'app.confirmTerminateGame': '¿Forzar el cierre del proceso del juego? Se perderá cualquier progreso sin guardar.',
   'app.promptNewPlayset': 'Introduce un nombre para el nuevo conjunto; se copiará el conjunto actual.',
   'app.promptRenamePlayset': 'Introduce un nombre nuevo para el conjunto.',
   'app.confirmDeletePlayset': '¿Eliminar el conjunto “{name}”? Se activará “{defaultName}”.',
@@ -1352,6 +1364,7 @@ Object.assign(spanishEntries, {
   'busy.deletePlayset': 'Eliminando conjunto',
   'busy.switchPlayset': 'Cambiando de conjunto',
   'busy.launchGame': 'Iniciando juego',
+  'busy.terminateGame': 'Finalizando proceso del juego',
   'busy.continueGame': 'Continuando partida',
   'busy.readSaves': 'Leyendo la lista de partidas guardadas',
   'busy.readSaveMods': 'Leyendo MODs de la partida',
@@ -1388,6 +1401,7 @@ Object.assign(spanishEntries, {
   'toast.playsetSwitched': 'Se cambió al conjunto “{name}”',
   'toast.playsetMissing': 'No están instalados {count} Packs del conjunto',
   'toast.gameLaunched': '{game} iniciado (PID {pid})',
+  'toast.gameTerminated': 'Se finalizaron {count} procesos del juego',
   'toast.pathsDetected': '{game} localizado',
   'toast.modInfoSaved': 'Información del MOD guardada',
   'toast.aiSaved': 'La IA generó y guardó el título y el resumen en el idioma actual',
@@ -1455,6 +1469,7 @@ export const localizedModTypeName = type => (
 )
 
 const hanPattern = /[\u3400-\u9fff]/u
+const backendTechnicalDetailPattern = /^(游戏数据来源 .+读取失败：|无法解压 Pack 条目 |无法读取 Pack：)/u
 
 export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
   const value = String(message || '').trim()
@@ -1476,6 +1491,9 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   }
   if (value === '无法确认游戏数据功能的 Workshop 订阅状态，已取消启动') {
     return t('gameData.subscriptionUnavailable')
+  }
+  if (language === 'en-US' && backendTechnicalDetailPattern.test(value)) {
+    return `${t(fallbackKey)}: ${value}`
   }
   return t(fallbackKey)
 }

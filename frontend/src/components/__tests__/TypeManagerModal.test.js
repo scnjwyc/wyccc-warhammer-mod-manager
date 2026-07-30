@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
+import ConfirmationModal from '../ConfirmationModal.vue'
 import TypeManagerModal from '../TypeManagerModal.vue'
 
 const types = [
@@ -25,7 +26,6 @@ describe('TypeManagerModal', () => {
   })
 
   it('locks defaults and supports adding, editing, and deleting custom types', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const wrapper = mount(TypeManagerModal, { props: { open: true, types } })
 
     expect(wrapper.get('.type-manager-row.builtIn').text()).toContain('默认')
@@ -42,7 +42,11 @@ describe('TypeManagerModal', () => {
     expect(wrapper.emitted('create')[0][0]).toBe('兼容补丁')
 
     await wrapper.findAll('button').find(button => button.text() === '删除').trigger('click')
+    expect(wrapper.emitted('delete')).toBeUndefined()
+    const confirmation = wrapper.findComponent(ConfirmationModal)
+    expect(confirmation.props('open')).toBe(true)
+    confirmation.vm.$emit('confirm')
+    await wrapper.vm.$nextTick()
     expect(wrapper.emitted('delete')[0][0]).toBe('custom:audio')
-    confirm.mockRestore()
   })
 })

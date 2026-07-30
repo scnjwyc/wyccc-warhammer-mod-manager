@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.9.6",
-  "published_at": "2026-07-26",
+  "version": "0.9.7",
+  "published_at": "2026-07-30",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.6/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.7/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.6/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.6/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.7/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.7/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "8e41d4a58c00317dad3ef1cf326dd02ccfe53f67ed11d5f8a4c7f9d3a07f2d10",
-    "size": 62015524
+    "sha256": "6588cfc5be67e1d67c90b03d1df9c4ec37d764ca51b44b81d7297c83ce90cf5d",
+    "size": 62028506
   },
   "changelog": [
     {
@@ -19,7 +19,7 @@
       "changes": [
         {
           "type": "feature",
-          "text": "MOD \u62d6\u62fd\u65f6\u589e\u52a0\u5b9a\u4f4d\u7279\u6548\u3002"
+          "text": "\u542f\u52a8\u6e38\u620f\u540e\uff0c\u539f\u201c\u542f\u52a8\u6e38\u620f\u201d\u6309\u94ae\u4f1a\u53d8\u4e3a\u201c\u7ed3\u675f\u6e38\u620f\u8fdb\u7a0b\u201d\u6309\u94ae\uff0c\u4fbf\u4e8e\u5feb\u901f\u7ed3\u675f\u6e38\u620f\u3002"
         }
       ]
     },
@@ -28,15 +28,20 @@
       "changes": [
         {
           "type": "improvement",
-          "text": "\u5c06\u663e\u793a/\u9690\u85cf MOD \u6309\u94ae\u79fb\u52a8\u5230\u64ad\u653e\u96c6\u65c1\u8fb9\u3002"
+          "text": "\u4f18\u5316\u6240\u6709\u786e\u8ba4\u5f39\u7a97\u7684 UI\u3002"
         },
         {
           "type": "improvement",
-          "text": "\u73b0\u5728\u6bcf\u4e2a\u64ad\u653e\u96c6\u7684\u9690\u85cf MOD \u8bbe\u5b9a\u4e92\u76f8\u72ec\u7acb\u3002"
-        },
+          "text": "\u4f18\u5316\u90e8\u5206\u9519\u8bef\u4fe1\u606f\u6587\u672c\uff0c\u4f7f\u5176\u66f4\u6613\u61c2\u3002"
+        }
+      ]
+    },
+    {
+      "title": "\u4fee\u590d",
+      "changes": [
         {
-          "type": "improvement",
-          "text": "\u4f18\u5316\u90e8\u5206\u9519\u8bef\u63d0\u793a\u3002"
+          "type": "fix",
+          "text": "\u4fee\u590d\u6e38\u620f\u6570\u636e\u4fee\u6539\u529f\u80fd\u4e0e\u90e8\u5206 MOD \u4e0d\u517c\u5bb9\u7684\u95ee\u9898\u3002"
         }
       ]
     }

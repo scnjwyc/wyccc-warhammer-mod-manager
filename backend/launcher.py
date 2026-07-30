@@ -107,11 +107,11 @@ def _normalized_executable_path(path: str | Path) -> str:
     return os.path.normcase(os.path.abspath(value)) if value else ""
 
 
-def is_game_running(
+def _matching_game_process_ids(
     expected_executable: str | Path = "",
     *,
     process_name: str = WH3_PROCESS_NAME,
-) -> bool:
+) -> list[int]:
     expected_process_name = str(process_name or WH3_PROCESS_NAME).casefold()
     if os.name == "nt":
         try:
@@ -121,31 +121,102 @@ def is_game_running(
                 if process_name.casefold() == expected_process_name
             ]
             if not matches:
-                return False
+                return []
             configured_path = _normalized_executable_path(expected_executable)
             if not configured_path:
-                return True
+                return matches
+            verified_matches: list[int] = []
             for process_id in matches:
                 process_path = _windows_executable_path(process_id)
                 if process_path:
                     if _normalized_executable_path(process_path) == configured_path:
-                        return True
+                        verified_matches.append(process_id)
                     continue
                 if _windows_process_has_visible_window(process_id):
-                    return True
-            return False
+                    verified_matches.append(process_id)
+            return verified_matches
         except OSError:
-            return False
+            return []
     try:
         completed = subprocess.run(
             ["pgrep", "-f", str(process_name or WH3_PROCESS_NAME)],
             capture_output=True,
+            text=True,
             check=False,
             timeout=5,
         )
-        return completed.returncode == 0
+        if completed.returncode != 0:
+            return []
+        return [
+            int(value)
+            for value in completed.stdout.splitlines()
+            if value.strip().isdigit()
+        ]
     except (OSError, subprocess.SubprocessError):
-        return False
+        return []
+
+
+def is_game_running(
+    expected_executable: str | Path = "",
+    *,
+    process_name: str = WH3_PROCESS_NAME,
+) -> bool:
+    return bool(
+        _matching_game_process_ids(
+            expected_executable,
+            process_name=process_name,
+        )
+    )
+
+
+def _windows_terminate_process(process_id: int) -> None:
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.TerminateProcess.argtypes = (wintypes.HANDLE, wintypes.UINT)
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(0x0001 | 0x00100000, False, int(process_id))
+    if not handle:
+        raise OSError(ctypes.get_last_error(), f"Unable to open game process {process_id}")
+    try:
+        if not kernel32.TerminateProcess(handle, 1):
+            raise OSError(
+                ctypes.get_last_error(),
+                f"Unable to terminate game process {process_id}",
+            )
+        wait_result = kernel32.WaitForSingleObject(handle, 5_000)
+        if wait_result == 0x00000102:
+            raise OSError(f"Timed out waiting for game process {process_id} to exit")
+        if wait_result == 0xFFFFFFFF:
+            raise OSError(ctypes.get_last_error(), "WaitForSingleObject failed")
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def terminate_game(
+    expected_executable: str | Path = "",
+    *,
+    process_name: str = WH3_PROCESS_NAME,
+) -> dict[str, list[int]]:
+    """Force-stop only the game process matched by the active game configuration."""
+    process_ids = _matching_game_process_ids(
+        expected_executable,
+        process_name=process_name,
+    )
+    if os.name == "nt":
+        for process_id in process_ids:
+            _windows_terminate_process(process_id)
+    else:
+        for process_id in process_ids:
+            os.kill(process_id, 15)
+    return {"process_ids": process_ids}
 
 
 def launch_game(

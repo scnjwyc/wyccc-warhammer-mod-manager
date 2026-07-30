@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 import struct
@@ -7,9 +8,14 @@ import tempfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping, Sequence
 
-from .constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS
+from .constants import (
+    GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    PACK_TYPE_MOVIE,
+    SOURCE_DATA,
+    SOURCE_WORKSHOP,
+)
 from .game_data import (
     TABLE_PREFIXES,
     DbSource,
@@ -23,6 +29,7 @@ from .game_data_settings import (
     normalize_unit_scale_multiplier,
 )
 from .models import ModAsset
+from .scanner import read_pack_type
 
 
 RUNTIME_PACK_NAME = "!!!!wyccc_runtime_options.pack"
@@ -60,6 +67,85 @@ INTRO_MOVIES = (
 class PackEntry:
     name: str
     payload: bytes
+
+
+@dataclass(frozen=True)
+class GameDataSourceSpec:
+    """One Pack whose DB records can affect the generated overlay."""
+
+    path: Path
+    asset: ModAsset | None
+    role: str
+
+
+@dataclass(frozen=True)
+class GameDataSourceSnapshotEntry:
+    spec: GameDataSourceSpec
+    source: DbSource
+    size: int
+    mtime_ns: int
+    content_sha256: str
+
+    def input_record(self) -> dict[str, Any]:
+        asset = self.spec.asset
+        return {
+            "role": self.spec.role,
+            "pack_name": self.spec.path.name,
+            "source": str(asset.source) if asset is not None else self.spec.role,
+            "workshop_id": str(asset.workshop_id) if asset is not None else "",
+            "file": {
+                "path": str(self.spec.path),
+                "size": self.size,
+                "mtime_ns": self.mtime_ns,
+                "target_db_sha256": self.content_sha256,
+            },
+        }
+
+
+@dataclass(frozen=True)
+class GameDataSourceSnapshot:
+    entries: tuple[GameDataSourceSnapshotEntry, ...]
+
+    @property
+    def sources(self) -> tuple[DbSource, ...]:
+        return tuple(entry.source for entry in self.entries)
+
+    def input_records(self, role: str) -> list[dict[str, Any]]:
+        return [
+            entry.input_record()
+            for entry in self.entries
+            if entry.spec.role == role
+        ]
+
+    def first_input_record(self, role: str) -> dict[str, Any]:
+        return next(
+            (
+                entry.input_record()
+                for entry in self.entries
+                if entry.spec.role == role
+            ),
+            {"missing": True},
+        )
+
+    def diagnostics(self) -> dict[str, Any]:
+        explicit = self.input_records("explicit")
+        movies = self.input_records("auto_movie")
+        return {
+            "source_count": len(self.entries),
+            "explicit_pack_names": [item["pack_name"] for item in explicit],
+            "auto_movie_pack_names": [item["pack_name"] for item in movies],
+            "source_pack_names": [
+                entry.spec.path.name
+                for entry in self.entries
+                if entry.spec.role != "vanilla"
+            ],
+        }
+
+
+def _has_compression_frame(raw: bytes) -> bool:
+    """Recognize CA payloads that have a compression frame despite a bad index flag."""
+    compression_magic = {b"\x28\xb5\x2f\xfd", b"\x04\x22\x4d\x18"}
+    return any(raw[offset : offset + 4] in compression_magic for offset in (0, 4))
 
 
 def _decompress_payload(raw: bytes, name: str) -> bytes:
@@ -119,7 +205,7 @@ def _decompress_payload(raw: bytes, name: str) -> bytes:
                 return zlib.decompress(raw[offset:], window_bits)
             except zlib.error as exc:
                 last_error = exc
-    raise ValueError(f"无法解压权限表 {name}：{last_error or '未知压缩格式'}")
+    raise ValueError(f"无法解压 Pack 条目 {name}：{last_error or '未知压缩格式'}")
 
 
 def read_pack_entries(
@@ -170,7 +256,19 @@ def read_pack_entries(
                 payload = stream.read(file_size)
                 if len(payload) != file_size:
                     raise ValueError(f"Pack 内文件不完整：{name}")
-                entries.append(PackEntry(name, _decompress_payload(payload, name) if compressed else payload))
+                # A few third-party Packs contain a valid Zstandard/LZ4 frame
+                # but mark the index entry as uncompressed.  Accept only an
+                # unmistakable frame at the payload start (or after CA's size
+                # prefix), so ordinary uncompressed entries are untouched.
+                needs_decompression = compressed or _has_compression_frame(payload)
+                entries.append(
+                    PackEntry(
+                        name,
+                        _decompress_payload(payload, name)
+                        if needs_decompression
+                        else payload,
+                    )
+                )
             return entries
     except OSError as exc:
         raise ValueError(f"无法读取 Pack：{path}") from exc
@@ -280,7 +378,12 @@ def _build_permission_table(pack_paths: Iterable[Path]) -> bytes:
     )
 
 
-def write_pfh5_pack(path: Path, entries: Iterable[PackEntry]) -> Path:
+def write_pfh5_pack(
+    path: Path,
+    entries: Iterable[PackEntry],
+    *,
+    pack_header_mask: int = 3,
+) -> Path:
     normalized = list(entries)
     if not normalized:
         raise ValueError("运行时 Pack 没有可写入内容")
@@ -292,7 +395,15 @@ def write_pfh5_pack(path: Path, entries: Iterable[PackEntry]) -> Path:
     content = b"".join(
         (
             b"PFH5",
-            struct.pack("<6i", 3, 0, 0, len(normalized), len(index), 0x7FFFFFFF),
+            struct.pack(
+                "<6i",
+                int(pack_header_mask),
+                0,
+                0,
+                len(normalized),
+                len(index),
+                0x7FFFFFFF,
+            ),
             index,
             *(entry.payload for entry in normalized),
         )
@@ -434,30 +545,192 @@ def _changed_game_data_rows(stats: dict[str, int | float]) -> int:
     )
 
 
-def _collect_game_data_sources(
-    data_path: str,
-    assets: dict[str, ModAsset],
-    active_ids: list[str],
-) -> tuple[DbSource, ...]:
+def _path_key(path: Path) -> str:
+    return os.path.normcase(str(path.resolve(strict=False)))
+
+
+def _movie_pack_paths(directory: Path) -> list[Path]:
+    """Find Packs that the game can load automatically from one search root."""
+    if not directory.is_dir():
+        return []
+    try:
+        pack_paths = sorted(
+            (
+                item.resolve(strict=False)
+                for item in directory.iterdir()
+                if item.is_file() and item.suffix.casefold() == ".pack"
+            ),
+            key=lambda item: (item.name.casefold(), item.name),
+        )
+    except OSError as exc:
+        raise ValueError(f"无法扫描自动加载 Movie Pack 目录 {directory}：{exc}") from exc
+    return [path for path in pack_paths if read_pack_type(path) == PACK_TYPE_MOVIE]
+
+
+def resolve_game_data_source_specs(
+    data_path: str | Path,
+    assets: Mapping[str, ModAsset],
+    active_ids: Sequence[str],
+) -> tuple[GameDataSourceSpec, ...]:
+    """Resolve every Pack that can affect a game-data patch for this launch.
+
+    A Movie Pack in Data is always discovered by the game.  A Movie Pack next
+    to an explicitly enabled external Pack is also reachable because that
+    directory is added to the launch file as a working directory.  They must
+    therefore participate in both effective-row selection and the cache key.
+    """
+    data_root = Path(data_path).resolve(strict=False)
     active_assets = [
         assets[mod_id]
         for mod_id in active_ids
         if mod_id in assets and Path(assets[mod_id].path).is_file()
     ]
-    active_paths = [Path(asset.path).resolve(strict=False) for asset in active_assets]
-    db_pack = (Path(data_path) / "db.pack").resolve(strict=False)
-    prioritized_paths = list(dict.fromkeys([*active_paths, db_pack]))
-    return tuple(
-        DbSource(
-            path.name,
-            tuple(
-                GameDataEntry(entry.name, entry.payload)
-                for entry in read_pack_entries(path, TABLE_PREFIXES)
-            ),
+    asset_by_path = {
+        _path_key(Path(asset.path)): asset
+        for asset in assets.values()
+        if Path(asset.path).is_file()
+    }
+
+    active_paths: list[Path] = []
+    working_directories: list[Path] = []
+    seen_paths: set[str] = set()
+    seen_directories: set[str] = set()
+    data_root_key = _path_key(data_root)
+    for asset in active_assets:
+        path = Path(asset.path).resolve(strict=False)
+        path_key = _path_key(path)
+        if path_key not in seen_paths:
+            seen_paths.add(path_key)
+            active_paths.append(path)
+        directory = Path(asset.directory).resolve(strict=False)
+        directory_key = _path_key(directory)
+        if directory_key != data_root_key and directory_key not in seen_directories:
+            seen_directories.add(directory_key)
+            working_directories.append(directory)
+
+    movie_paths: list[Path] = []
+    seen_movie_paths: set[str] = set()
+    for directory in (data_root, *working_directories):
+        for path in _movie_pack_paths(directory):
+            path_key = _path_key(path)
+            if path_key not in seen_movie_paths:
+                seen_movie_paths.add(path_key)
+                movie_paths.append(path)
+
+    specs: list[GameDataSourceSpec] = [
+        GameDataSourceSpec(
+            path=path,
+            asset=asset_by_path.get(_path_key(path)),
+            role="auto_movie",
         )
-        for path in prioritized_paths
-        if path.is_file()
+        for path in movie_paths
+    ]
+    specs.extend(
+        GameDataSourceSpec(
+            path=path,
+            asset=asset_by_path.get(_path_key(path)),
+            role="explicit",
+        )
+        for path in active_paths
+        if _path_key(path) not in seen_movie_paths
     )
+    specs.append(
+        GameDataSourceSpec(
+            path=(data_root / "db.pack").resolve(strict=False),
+            asset=None,
+            role="vanilla",
+        )
+    )
+    return tuple(specs)
+
+
+def _read_game_data_source_snapshot_entry(
+    spec: GameDataSourceSpec,
+) -> GameDataSourceSnapshotEntry:
+    path = spec.path
+    source_name = _game_data_source_name(path, spec.asset, spec.role)
+    try:
+        before = path.stat()
+        if not path.is_file():
+            raise OSError("不是普通文件")
+    except OSError as exc:
+        raise ValueError(f"游戏数据来源 {source_name} 不存在或无法读取：{exc}") from exc
+
+    try:
+        raw_entries = read_pack_entries(path, TABLE_PREFIXES)
+    except ValueError as exc:
+        raise ValueError(f"游戏数据来源 {source_name} 读取失败：{exc}") from exc
+
+    try:
+        after = path.stat()
+    except OSError as exc:
+        raise ValueError(f"游戏数据来源 {source_name} 在读取后不可用：{exc}") from exc
+    if (
+        before.st_size != after.st_size
+        or before.st_mtime_ns != after.st_mtime_ns
+    ):
+        raise ValueError(
+            f"游戏数据来源 {source_name} 在读取期间发生变化，请等待 Steam 更新完成后重试"
+        )
+
+    digest = hashlib.sha256()
+    digest.update(b"wyccc-game-data-source-v1\0")
+    entries: list[GameDataEntry] = []
+    for entry in raw_entries:
+        name = entry.name.replace("/", "\\").encode("utf-8")
+        digest.update(len(name).to_bytes(4, "little"))
+        digest.update(name)
+        digest.update(len(entry.payload).to_bytes(8, "little"))
+        digest.update(entry.payload)
+        entries.append(GameDataEntry(entry.name, entry.payload))
+    return GameDataSourceSnapshotEntry(
+        spec=spec,
+        source=DbSource(source_name, tuple(entries)),
+        size=after.st_size,
+        mtime_ns=after.st_mtime_ns,
+        content_sha256=digest.hexdigest(),
+    )
+
+
+def collect_game_data_source_snapshot(
+    data_path: str | Path,
+    assets: Mapping[str, ModAsset],
+    active_ids: Sequence[str],
+) -> GameDataSourceSnapshot:
+    specs = resolve_game_data_source_specs(data_path, assets, active_ids)
+    return GameDataSourceSnapshot(
+        tuple(_read_game_data_source_snapshot_entry(spec) for spec in specs)
+    )
+
+
+def _collect_game_data_sources(
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+) -> tuple[DbSource, ...]:
+    return collect_game_data_source_snapshot(data_path, assets, active_ids).sources
+
+
+def _game_data_source_name(
+    path: Path,
+    asset: ModAsset | None,
+    role: str = "explicit",
+) -> str:
+    if role == "auto_movie":
+        if asset is None:
+            return f'自动加载 Movie Pack "{path.name}"'
+        return f'自动加载 Movie MOD "{asset.effective_name}" [pack: {path.name}]'
+    if asset is None:
+        if path.name.casefold() == "db.pack":
+            return "原版数据库 db.pack"
+        return f'Pack "{path.name}"'
+
+    source_name = {
+        SOURCE_WORKSHOP: "Workshop",
+        SOURCE_DATA: "Data",
+    }.get(str(asset.source or "").casefold(), str(asset.source or "unknown") or "unknown")
+    mod_name = str(asset.effective_name or "").strip() or path.stem
+    return f'MOD "{mod_name}" [pack: {path.name}, source: {source_name}]'
 
 
 def build_game_data_patch(
@@ -467,6 +740,8 @@ def build_game_data_patch(
     active_ids: list[str],
     settings: dict[str, Any],
     subscribed_workshop_ids: Iterable[str] = (),
+    *,
+    source_snapshot: GameDataSourceSnapshot | None = None,
 ) -> dict[str, Any]:
     effective_settings = _effective_game_data_settings(settings, subscribed_workshop_ids)
     output_path = Path(output_dir) / GAME_DATA_PATCH_NAME
@@ -479,9 +754,16 @@ def build_game_data_patch(
             "game_data": {},
         }
 
-    sources = _collect_game_data_sources(data_path, assets, active_ids)
+    snapshot = source_snapshot or collect_game_data_source_snapshot(
+        data_path,
+        assets,
+        active_ids,
+    )
+    sources = snapshot.sources
+    diagnostics = snapshot.diagnostics()
     game_data = build_game_data_entries(sources, effective_settings)
     entries = [PackEntry(entry.name, entry.payload) for entry in game_data.entries]
+    diagnostics["output_table_names"] = [entry.name for entry in entries]
     if not entries or _changed_game_data_rows(game_data.stats) == 0:
         output_path.unlink(missing_ok=True)
         return {
@@ -489,6 +771,7 @@ def build_game_data_patch(
             "options": _enabled_game_data_options(effective_settings),
             "entry_count": 0,
             "game_data": game_data.stats,
+            "source_diagnostics": diagnostics,
         }
     write_pfh5_pack(output_path, entries)
     return {
@@ -496,6 +779,7 @@ def build_game_data_patch(
         "options": _enabled_game_data_options(effective_settings),
         "entry_count": len(entries),
         "game_data": game_data.stats,
+        "source_diagnostics": diagnostics,
     }
 
 
@@ -509,14 +793,13 @@ def build_runtime_options_pack(
     entries: list[PackEntry] = []
     enabled_options: list[str] = []
     if settings.get("custom_battle_all_units_as_lords"):
-        pack_paths: list[Path] = [Path(data_path) / "db.pack"]
-        pack_paths.extend(
-            Path(assets[mod_id].path)
-            for mod_id in active_ids
-            if mod_id in assets and Path(assets[mod_id].path).is_file()
-        )
+        source_specs = resolve_game_data_source_specs(data_path, assets, active_ids)
         unique_paths = list(
-            dict.fromkeys(path.resolve(strict=False) for path in pack_paths if path.is_file())
+            dict.fromkeys(
+                spec.path.resolve(strict=False)
+                for spec in source_specs
+                if spec.path.is_file()
+            )
         )
         entries.append(PackEntry(PERMISSIONS_ENTRY, _build_permission_table(unique_paths)))
         enabled_options.append("custom_battle_all_units_as_lords")

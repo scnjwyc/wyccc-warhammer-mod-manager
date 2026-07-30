@@ -45,7 +45,7 @@ from .game_data_patch_state import (
     game_data_settings_requested,
     load_manifest_subscription_state,
 )
-from .launcher import is_game_running, launch_game
+from .launcher import is_game_running, launch_game, terminate_game
 from .launch_paths import LaunchPathAliases
 from .load_order import LoadOrderService, current_order_path, file_token
 from .games import GameDefinition
@@ -188,6 +188,7 @@ class API:
             "preview_load_order": self._preview_load_order,
             "save_load_order": self._save_load_order,
             "launch_game": self._launch_game,
+            "terminate_game": self._terminate_game,
             "continue_game": self._continue_game,
             "list_save_games": self._list_save_games,
             "get_save_mods": self._get_save_mods,
@@ -929,12 +930,15 @@ class API:
                 logger.exception("Game data patch status=generation_failed")
                 raise
             logger.info(
-                "Game data patch status=%s fingerprint=%s changed_inputs=%s entries=%s game_data=%s",
+                "Game data patch status=%s fingerprint=%s changed_inputs=%s entries=%s game_data=%s sources=%s auto_movie_packs=%s output_tables=%s",
                 game_data_patch["status"],
                 str(game_data_patch.get("fingerprint") or "")[:12],
                 ",".join(game_data_patch.get("changed_inputs", [])) or "none",
                 game_data_patch.get("entry_count", 0),
                 game_data_patch.get("game_data", {}),
+                game_data_patch.get("source_diagnostics", {}).get("source_pack_names", []),
+                game_data_patch.get("source_diagnostics", {}).get("auto_movie_pack_names", []),
+                game_data_patch.get("source_diagnostics", {}).get("output_table_names", []),
             )
             runtime = build_runtime_options_pack(
                 self.data_dir / "runtime",
@@ -959,6 +963,7 @@ class API:
 
             internal_assets: dict[str, ModAsset] = {}
             internal_ids: list[str] = []
+            game_data_id = ""
             if game_data_path is not None:
                 game_data_id = "runtime:game-data-patch"
                 internal_assets[game_data_id] = ModAsset(
@@ -997,6 +1002,13 @@ class API:
                 self.load_order._atomic_write(Path(runtime_plan.target_path), runtime_plan.content)
                 launch_plan = runtime_plan.to_dict()
                 launch_path = runtime_plan.target_path
+                if game_data_id in runtime_plan.ordered_mod_ids:
+                    logger.info(
+                        "Game data patch launch placement pack=%s position=%s/%s",
+                        GAME_DATA_PATCH_NAME,
+                        runtime_plan.ordered_mod_ids.index(game_data_id) + 1,
+                        len(runtime_plan.ordered_mod_ids),
+                    )
             process = launch_game(
                 path_map.map_path(paths.game_path),
                 launch_path,
@@ -1066,6 +1078,21 @@ class API:
             expected_token,
             str(latest["name"]),
         )
+
+    def _terminate_game(self) -> dict[str, Any]:
+        paths = self.settings_service.resolve_game_paths()
+        terminated = terminate_game(
+            paths.executable_path,
+            process_name=paths.game_definition.process_name,
+        )
+        running = self.detect_game_running()
+        self.set_game_running(running, force=True)
+        if running:
+            raise OSError(f"{Path(paths.executable_path).name} 未能结束")
+        return {
+            **terminated,
+            "runtime": self._runtime_payload(False),
+        }
 
     def _list_save_games(self) -> dict[str, Any]:
         return {

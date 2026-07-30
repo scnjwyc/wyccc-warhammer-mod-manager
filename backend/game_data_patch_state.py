@@ -18,13 +18,15 @@ from .json_store import AtomicJsonStore
 from .models import ModAsset
 from .start_options import (
     GAME_DATA_PATCH_NAME,
+    GameDataSourceSnapshot,
     build_game_data_patch,
+    collect_game_data_source_snapshot,
 )
 
 
 GAME_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_game_data_patch.json"
-FINGERPRINT_SCHEMA_VERSION = 1
-GAME_DATA_BUILDER_VERSION = 11
+FINGERPRINT_SCHEMA_VERSION = 2
+GAME_DATA_BUILDER_VERSION = 12
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -101,23 +103,39 @@ def build_game_data_inputs(
     playset_id: str,
     settings: Mapping[str, Any],
     subscription_state: Mapping[str, bool],
+    source_snapshot: GameDataSourceSnapshot | None = None,
 ) -> dict[str, Any]:
     ordered_ids = [str(mod_id) for mod_id in active_ids]
+    requested = game_data_settings_requested(settings)
+    snapshot = source_snapshot
+    if requested and snapshot is None:
+        snapshot = collect_game_data_source_snapshot(data_path, assets, active_ids)
+
     sources: list[dict[str, Any]] = []
-    for mod_id in ordered_ids:
-        asset = assets.get(mod_id)
-        if asset is None:
-            sources.append({"id": mod_id, "missing_asset": True})
-            continue
-        sources.append(
-            {
-                "id": mod_id,
-                "pack_name": str(asset.pack_name),
-                "source": str(asset.source),
-                "workshop_id": str(asset.workshop_id),
-                "file": _file_signature(Path(asset.path)),
-            }
-        )
+    auto_movie_sources: list[dict[str, Any]] = []
+    db_pack: dict[str, Any]
+    if snapshot is not None:
+        sources = snapshot.input_records("explicit")
+        auto_movie_sources = snapshot.input_records("auto_movie")
+        db_pack = snapshot.first_input_record("vanilla")
+    else:
+        # Disabled settings do not produce an output Pack.  Avoid opening every
+        # active Pack merely to cache a result whose sources cannot affect it.
+        for mod_id in ordered_ids:
+            asset = assets.get(mod_id)
+            if asset is None:
+                sources.append({"id": mod_id, "missing_asset": True})
+                continue
+            sources.append(
+                {
+                    "id": mod_id,
+                    "pack_name": str(asset.pack_name),
+                    "source": str(asset.source),
+                    "workshop_id": str(asset.workshop_id),
+                    "file": _file_signature(Path(asset.path)),
+                }
+            )
+        db_pack = _file_signature(Path(data_path) / "db.pack")
     return {
         "fingerprint_schema_version": FINGERPRINT_SCHEMA_VERSION,
         "builder_version": GAME_DATA_BUILDER_VERSION,
@@ -132,7 +150,8 @@ def build_game_data_inputs(
             )
         },
         "sources": sources,
-        "db_pack": _file_signature(Path(data_path) / "db.pack"),
+        "auto_movie_sources": auto_movie_sources,
+        "db_pack": db_pack,
     }
 
 
@@ -160,6 +179,7 @@ def classify_input_changes(
         ("order", "active_ids"),
         ("subscription", "subscription_state"),
         ("sources", "sources"),
+        ("auto_movies", "auto_movie_sources"),
         ("db_pack", "db_pack"),
     )
     return [label for label, key in groups if previous.get(key) != current.get(key)]
@@ -219,6 +239,7 @@ def _result_from_manifest(
     if manifest.get("build_status") == "generated":
         path = str((Path(output_dir) / GAME_DATA_PATCH_NAME).resolve(strict=False))
     game_data = result.get("game_data")
+    source_diagnostics = result.get("source_diagnostics")
     return {
         "status": status,
         "path": path,
@@ -227,6 +248,11 @@ def _result_from_manifest(
         "entry_count": int(result.get("entry_count", 0)),
         "options": list(result.get("options", [])),
         "game_data": dict(game_data) if isinstance(game_data, Mapping) else {},
+        "source_diagnostics": (
+            dict(source_diagnostics)
+            if isinstance(source_diagnostics, Mapping)
+            else {}
+        ),
     }
 
 
@@ -251,6 +277,12 @@ def ensure_game_data_patch(
     subscription_state: Mapping[str, bool],
 ) -> dict[str, Any]:
     output_dir = Path(output_dir)
+    requested = game_data_settings_requested(settings)
+    source_snapshot = (
+        collect_game_data_source_snapshot(data_path, assets, active_ids)
+        if requested
+        else None
+    )
     inputs = build_game_data_inputs(
         data_path,
         assets,
@@ -258,6 +290,7 @@ def ensure_game_data_patch(
         playset_id,
         settings,
         subscription_state,
+        source_snapshot,
     )
     fingerprint = fingerprint_game_data_inputs(inputs)
     store = _manifest_store(output_dir)
@@ -279,19 +312,53 @@ def ensure_game_data_patch(
             changed_inputs.append("output")
 
     patch_path = output_dir / GAME_DATA_PATCH_NAME
-    if game_data_settings_requested(settings):
-        built = build_game_data_patch(
-            output_dir,
-            str(data_path),
-            dict(assets),
-            list(active_ids),
-            dict(settings),
-            subscribed_workshop_ids=[
-                workshop_id
-                for workshop_id, subscribed in subscription_state.items()
-                if subscribed
-            ],
-        )
+    source_changed_during_generation = False
+    if requested:
+        if source_snapshot is None:
+            raise ValueError("游戏数据来源快照无效")
+        for attempt in range(2):
+            built = build_game_data_patch(
+                output_dir,
+                str(data_path),
+                dict(assets),
+                list(active_ids),
+                dict(settings),
+                subscribed_workshop_ids=[
+                    workshop_id
+                    for workshop_id, subscribed in subscription_state.items()
+                    if subscribed
+                ],
+                source_snapshot=source_snapshot,
+            )
+            verified_snapshot = collect_game_data_source_snapshot(
+                data_path,
+                assets,
+                active_ids,
+            )
+            verified_inputs = build_game_data_inputs(
+                data_path,
+                assets,
+                active_ids,
+                playset_id,
+                settings,
+                subscription_state,
+                verified_snapshot,
+            )
+            verified_fingerprint = fingerprint_game_data_inputs(verified_inputs)
+            if verified_fingerprint == fingerprint:
+                break
+
+            patch_path.unlink(missing_ok=True)
+            if attempt:
+                raise ValueError(
+                    "游戏数据来源在补丁生成期间连续变化，请等待 Steam 更新完成后重试"
+                )
+            source_changed_during_generation = True
+            source_snapshot = verified_snapshot
+            inputs = verified_inputs
+            fingerprint = verified_fingerprint
+        else:  # pragma: no cover - loop either breaks or raises above.
+            raise ValueError("游戏数据补丁生成未完成")
     else:
         patch_path.unlink(missing_ok=True)
         built = {"path": "", "options": [], "entry_count": 0, "game_data": {}}
@@ -314,6 +381,11 @@ def ensure_game_data_patch(
         "entry_count": entry_count if generated else 0,
         "options": list(built.get("options", [])),
         "game_data": dict(game_data) if isinstance(game_data, Mapping) else {},
+        "source_diagnostics": (
+            dict(built.get("source_diagnostics", {}))
+            if isinstance(built.get("source_diagnostics"), Mapping)
+            else {}
+        ),
     }
     manifest = {
         "schema_version": FINGERPRINT_SCHEMA_VERSION,
@@ -326,9 +398,14 @@ def ensure_game_data_patch(
         "result": result_payload,
     }
     store.save(manifest)
-    return _result_from_manifest(
+    result = _result_from_manifest(
         manifest,
         output_dir,
         build_status,
         changed_inputs,
     )
+    if source_changed_during_generation:
+        result["changed_inputs"] = list(
+            dict.fromkeys([*result["changed_inputs"], "source_changed_during_generation"])
+        )
+    return result

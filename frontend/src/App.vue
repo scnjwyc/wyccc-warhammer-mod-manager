@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { localizedModTypeName, localizedPlaysetName, t } from './languages'
 import { executeKeyboardShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
 import { useAppStore } from './store'
+import ConfirmationModal from './components/ConfirmationModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
@@ -36,9 +37,11 @@ const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
+const confirmationDialog = reactive({ open: false, message: '', confirmLabel: '', danger: false })
 const modDragSource = ref(null)
 let runtimeTimer = 0
 let updateTimer = 0
+let confirmationResolver = null
 
 const contextMod = computed(() => store.modMap.get(contextMenu.modId) || null)
 const contextModActive = computed(() => !!contextMod.value && store.activeIds.includes(contextMod.value.id))
@@ -71,6 +74,22 @@ const statusDisplay = computed(() => {
   if (store.runtime.running) return { text: t('status.gameRunning'), kind: 'running', spinning: false }
   return { text: t('status.ready'), kind: 'ready', spinning: false }
 })
+
+const requestConfirmation = ({ message, confirmLabel = '', danger = false }) => new Promise(resolve => {
+  confirmationResolver?.(false)
+  confirmationResolver = resolve
+  confirmationDialog.message = message
+  confirmationDialog.confirmLabel = confirmLabel
+  confirmationDialog.danger = danger
+  confirmationDialog.open = true
+})
+
+const completeConfirmation = confirmed => {
+  const resolve = confirmationResolver
+  confirmationResolver = null
+  confirmationDialog.open = false
+  if (resolve) resolve(confirmed)
+}
 
 watch(supportsWh3Tools, supported => {
   if (supported) return
@@ -192,10 +211,15 @@ const renamePlayset = async () => {
 
 const deletePlayset = async () => {
   if (!store.currentPlayset || store.currentPlayset.is_default) return
-  if (!window.confirm(t('app.confirmDeletePlayset', {
-    name: store.currentPlayset.name,
-    defaultName: t('common.default'),
-  }))) return
+  const confirmed = await requestConfirmation({
+    message: t('app.confirmDeletePlayset', {
+      name: store.currentPlayset.name,
+      defaultName: t('common.default'),
+    }),
+    confirmLabel: t('common.delete'),
+    danger: true,
+  })
+  if (!confirmed) return
   try { await store.deleteCurrentPlayset() } catch { /* shared toast */ }
 }
 
@@ -231,9 +255,9 @@ const importShare = async value => {
       if (unsubscribed.length > visibleItems.length) {
         visibleItems.push(t('app.moreUnsubscribed', { count: unsubscribed.length - visibleItems.length }))
       }
-      const confirmed = window.confirm(
-        t('app.confirmSubscribe', { items: visibleItems.join('\n') }),
-      )
+      const confirmed = await requestConfirmation({
+        message: t('app.confirmSubscribe', { items: visibleItems.join('\n') }),
+      })
       if (!confirmed) return
       await store.subscribeWorkshopItems(unsubscribed.map(item => item.workshop_id))
     }
@@ -315,6 +339,7 @@ const shortcutsBlocked = () => (
   || showDeleteMods.value
   || updateDialog.open
   || contextMenu.open
+  || confirmationDialog.open
   || workshopPublish.open
 )
 
@@ -407,7 +432,12 @@ const handleContextAction = async ({ action, value, mod }) => {
       const subject = targets.length > 1
         ? t('app.selectedModsSubject', { count: targets.length })
         : t('app.singleModSubject', { name: mod.effective_name })
-      if (!window.confirm(t('app.confirmUnsubscribe', { subject }))) return
+      const confirmed = await requestConfirmation({
+        message: t('app.confirmUnsubscribe', { subject }),
+        confirmLabel: t('context.unsubscribe'),
+        danger: true,
+      })
+      if (!confirmed) return
       await store.unsubscribeWorkshopMany(targets)
     } else if (action === 'force-update') {
       for (const modId of actionIds) {
@@ -568,7 +598,9 @@ const enterManualModType = async (modIds, initialMod = null) => {
 }
 
 const syncWorkshopToData = async () => {
-  const confirmed = window.confirm(t('app.confirmSyncData'))
+  const confirmed = await requestConfirmation({
+    message: t('app.confirmSyncData'),
+  })
   if (!confirmed) return
   try { await store.syncWorkshopToData() } catch { /* shared toast */ }
 }
@@ -620,6 +652,24 @@ const launchSave = async saveName => {
   } catch { /* shared toast */ }
 }
 
+const launchOrTerminateGame = async () => {
+  try {
+    if (store.runtime.running) {
+      const confirmed = await requestConfirmation({
+        message: t('app.confirmTerminateGame'),
+        confirmLabel: t('app.terminateGame'),
+        danger: true,
+      })
+      if (!confirmed) return
+      await store.terminateGame()
+      return
+    }
+    await store.launch()
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
 const createSavePlayset = async saveName => {
   try {
     await store.createPlaysetFromSave(saveName)
@@ -663,6 +713,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  completeConfirmation(false)
   window.clearInterval(runtimeTimer)
   window.clearTimeout(updateTimer)
   window.removeEventListener('keydown', handleGlobalShortcut)
@@ -883,11 +934,11 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="launch-button"
-          :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
-          @click="store.launch"
+          :disabled="!!store.busy || !store.pathHealth.game_ready"
+          @click="launchOrTerminateGame"
         >
-          <span class="play-mark">▶</span>
-          {{ store.runtime.running ? t('app.gameRunningShort') : t('app.launchGame') }}
+          <span class="play-mark">{{ store.runtime.running ? '■' : '▶' }}</span>
+          {{ store.runtime.running ? t('app.terminateGame') : t('app.launchGame') }}
         </button>
       </div>
     </footer>
@@ -1023,6 +1074,15 @@ onBeforeUnmount(() => {
       :busy="store.busy"
       @close="showDeleteMods = false"
       @confirm="confirmDeleteMods"
+    />
+
+    <ConfirmationModal
+      :open="confirmationDialog.open"
+      :message="confirmationDialog.message"
+      :confirm-label="confirmationDialog.confirmLabel"
+      :danger="confirmationDialog.danger"
+      @close="completeConfirmation(false)"
+      @confirm="completeConfirmation(true)"
     />
 
     <transition name="toast">

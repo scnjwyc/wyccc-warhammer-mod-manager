@@ -83,6 +83,21 @@ describe('live MOD detection', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status')
   })
 
+  it('ends the game process and immediately clears the running state', async () => {
+    invokeMock.mockResolvedValue({
+      process_ids: [42],
+      runtime: { running: false, mod_revision: 4 },
+    })
+    const store = useAppStore()
+    store.runtime = { running: true, mod_revision: 4 }
+
+    await store.terminateGame()
+
+    expect(invokeMock).toHaveBeenCalledWith('terminate_game')
+    expect(store.runtime).toEqual({ running: false, mod_revision: 4 })
+    expect(store.busy).toBe('')
+  })
+
   it('refreshes Workshop metadata without taking the global busy lock', async () => {
     let finish
     invokeMock.mockImplementation(method => {

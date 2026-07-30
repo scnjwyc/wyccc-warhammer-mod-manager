@@ -16,7 +16,7 @@ from backend.game_data_patch_state import (
     load_manifest_subscription_state,
 )
 from backend.models import ModAsset
-from backend.start_options import GAME_DATA_PATCH_NAME
+from backend.start_options import GAME_DATA_PATCH_NAME, PackEntry, write_pfh5_pack
 
 
 UNIT_SIZE_WORKSHOP_ID = "3765783838"
@@ -24,7 +24,7 @@ UNIT_SIZE_WORKSHOP_ID = "3765783838"
 
 class GameDataPatchStateTests(unittest.TestCase):
     def test_builder_version_invalidates_compatibility_placeholder_patches(self) -> None:
-        self.assertEqual(GAME_DATA_BUILDER_VERSION, 11)
+        self.assertEqual(GAME_DATA_BUILDER_VERSION, 12)
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -161,6 +161,82 @@ class GameDataPatchStateTests(unittest.TestCase):
         self.assertEqual(second["status"], "reused")
         self.assertEqual(second["fingerprint"], first["fingerprint"])
         builder.assert_not_called()
+
+    def test_target_db_content_hash_invalidates_same_size_same_mtime_source(self) -> None:
+        write_pfh5_pack(
+            self.first_pack,
+            [PackEntry("db\\main_units_tables\\source", b"first")],
+        )
+        original_mtime = self.first_pack.stat().st_mtime_ns
+        before = self._inputs()
+
+        write_pfh5_pack(
+            self.first_pack,
+            [PackEntry("db\\main_units_tables\\source", b"other")],
+        )
+        os.utime(self.first_pack, ns=(original_mtime, original_mtime))
+        after = self._inputs()
+
+        self.assertEqual(
+            before["sources"][0]["file"]["size"],
+            after["sources"][0]["file"]["size"],
+        )
+        self.assertEqual(
+            before["sources"][0]["file"]["mtime_ns"],
+            after["sources"][0]["file"]["mtime_ns"],
+        )
+        self.assertNotEqual(
+            fingerprint_game_data_inputs(before),
+            fingerprint_game_data_inputs(after),
+        )
+
+    def test_auto_movie_pack_is_part_of_the_content_fingerprint(self) -> None:
+        movie = self.data_path / "auto_movie.pack"
+        write_pfh5_pack(
+            movie,
+            [PackEntry("db\\main_units_tables\\movie", b"first")],
+            pack_header_mask=4,
+        )
+        original_mtime = movie.stat().st_mtime_ns
+        before = self._inputs()
+
+        write_pfh5_pack(
+            movie,
+            [PackEntry("db\\main_units_tables\\movie", b"other")],
+            pack_header_mask=4,
+        )
+        os.utime(movie, ns=(original_mtime, original_mtime))
+        after = self._inputs()
+
+        self.assertEqual(
+            [item["pack_name"] for item in before["auto_movie_sources"]],
+            ["auto_movie.pack"],
+        )
+        self.assertNotEqual(
+            fingerprint_game_data_inputs(before),
+            fingerprint_game_data_inputs(after),
+        )
+
+    def test_rebuilds_once_when_a_source_changes_during_generation(self) -> None:
+        calls = 0
+
+        def builder(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            result = self._successful_builder(*args, **kwargs)
+            if calls == 1:
+                self.first_pack.write_bytes(b"source changed while generating")
+            return result
+
+        with patch(
+            "backend.game_data_patch_state.build_game_data_patch",
+            side_effect=builder,
+        ):
+            result = self._ensure()
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(result["status"], "generated")
+        self.assertIn("source_changed_during_generation", result["changed_inputs"])
 
     def test_modified_output_rebuilds_even_when_inputs_match(self) -> None:
         with patch(

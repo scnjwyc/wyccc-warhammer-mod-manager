@@ -426,6 +426,30 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_terminate_game_rpc_uses_the_selected_game_executable_and_updates_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, _scan = self._prepare_launch_api(root)
+            executable = api.settings_service.resolve_game_paths().executable_path
+            with (
+                patch(
+                    "backend.api.terminate_game",
+                    return_value={"process_ids": [456]},
+                ) as terminate,
+                patch.object(api, "detect_game_running", return_value=False),
+                patch.object(api, "set_game_running") as set_running,
+            ):
+                result = api.call("terminate_game")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["process_ids"], [456])
+        self.assertFalse(result["data"]["runtime"]["running"])
+        terminate.assert_called_once_with(
+            executable,
+            process_name="Warhammer3.exe",
+        )
+        set_running.assert_called_once_with(False, force=True)
+
     def test_saving_search_highlight_mode_keeps_scanned_assets_available_to_ai(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
