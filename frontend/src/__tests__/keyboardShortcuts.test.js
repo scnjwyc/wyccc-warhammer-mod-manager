@@ -6,6 +6,7 @@ import {
   KEYBOARD_SHORTCUTS,
   executeKeyboardShortcut,
   formatShortcut,
+  isUndoShortcut,
   normalizeShortcut,
   resolveKeyboardShortcut,
 } from '../keyboardShortcuts'
@@ -42,6 +43,16 @@ describe('keyboard shortcuts', () => {
     const input = document.createElement('input')
     expect(resolveKeyboardShortcut({ key: 'w', shiftKey: true, target: input })).toBe('')
     expect(resolveKeyboardShortcut({ key: 'w', shiftKey: true }, { blocked: true })).toBe('')
+  })
+
+  it('recognizes Ctrl+Z only outside editable controls', () => {
+    expect(isUndoShortcut({ key: 'z', ctrlKey: true })).toBe(true)
+    expect(isUndoShortcut({ key: 'Z', metaKey: true })).toBe(true)
+    expect(isUndoShortcut({ key: 'z', ctrlKey: true, shiftKey: true })).toBe(false)
+    expect(isUndoShortcut({ key: 'z', ctrlKey: true, repeat: true })).toBe(false)
+
+    const input = document.createElement('input')
+    expect(isUndoShortcut({ key: 'z', ctrlKey: true, target: input })).toBe(false)
   })
 
   it('uses the current selection for Workshop, RPFM and enable-state shortcuts', async () => {

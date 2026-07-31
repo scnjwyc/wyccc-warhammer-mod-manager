@@ -107,16 +107,18 @@ describe('deliberately small product scope', () => {
     expect(settingsSource).not.toContain('data-testid="show-hidden-mods"')
   })
 
-  it('uses fixed Data and Workshop scanning without RPFM path configuration', () => {
+  it('uses fixed Data and Workshop scanning independently from the RPFM path setting', () => {
     const settingsSource = read(resolve(frontendRoot, 'src/components/SettingsModal.vue'))
     const backendSettings = read(resolve(repositoryRoot, 'backend/app_settings.py'))
     const scannerSource = read(resolve(repositoryRoot, 'backend/scanner.py'))
 
-    for (const removed of ['rpfm_path', 'scan_modding', 'scan_merged']) {
+    for (const removed of ['scan_modding', 'scan_merged']) {
       expect(settingsSource).not.toContain(removed)
       expect(backendSettings).not.toContain(`"${removed}"`)
       expect(scannerSource).not.toContain(`settings.get("${removed}")`)
     }
+    expect(settingsSource).toContain('rpfm_path')
+    expect(backendSettings).toContain('"rpfm_path"')
     expect(settingsSource).not.toContain('scan_modding')
     expect(settingsSource).toContain("t('settings.scanScope')")
   })

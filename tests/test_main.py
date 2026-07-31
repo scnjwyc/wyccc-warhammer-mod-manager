@@ -69,6 +69,22 @@ class PackagedRuntimeTests(unittest.TestCase):
         api.bind_low_consumption_exit.assert_called_once()
         self.assertTrue(callable(api.bind_low_consumption_exit.call_args.args[0]))
 
+    def test_game_running_keeps_the_full_page_when_low_consumption_is_disabled(self) -> None:
+        fake_window = Mock()
+        fake_webview = SimpleNamespace(create_window=Mock(return_value=fake_window), start=Mock())
+        api = Mock()
+        api.low_consumption_enabled.return_value = False
+        with patch("main.ensure_webview2_runtime", return_value=True), patch.dict(sys.modules, {"webview": fake_webview}):
+            result = run_desktop(
+                api,
+                "file:///index.html",
+                idle_url="file:///idle.html",
+                initial_game_running=True,
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(fake_webview.create_window.call_args.args[1], "file:///index.html")
+
     def test_second_launch_signals_the_existing_window_without_showing_an_error(self) -> None:
         with (
             patch("main.os.name", "nt"),
@@ -153,14 +169,14 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.9.7")
+        self.assertEqual(APP_VERSION, "0.9.8")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.9.7'", frontend_store)
+        self.assertIn("appVersion: '0.9.8'", frontend_store)
         self.assertIn("filevers=(0, 9, 7, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.9.7')", version_info)
-        self.assertIn("`0.9.7`", readme)
-        self.assertIn("`0.9.7`", readme_en)
+        self.assertIn("StringStruct('ProductVersion', '0.9.8')", version_info)
+        self.assertIn("`0.9.8`", readme)
+        self.assertIn("`0.9.8`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertEqual(update_manifest["version"], APP_VERSION)
@@ -181,9 +197,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:10]],
-            ["0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7", "0.8.6"],
+            ["0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7"],
         )
-        self.assertEqual(changelog[1]["version"], "0.9.6")
+        self.assertEqual(changelog[1]["version"], "0.9.7")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
@@ -203,9 +219,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         for releases in localized.values():
             self.assertEqual(
                 [release["version"] for release in releases[:10]],
-                ["0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7", "0.8.6"],
+                ["0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 3)
+            self.assertEqual(len(releases[0]["entries"]), 1)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")
             release_070 = next(release for release in releases if release["version"] == "0.7.0")
             release_065 = next(release for release in releases if release["version"] == "0.6.5")

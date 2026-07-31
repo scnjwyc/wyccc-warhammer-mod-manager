@@ -71,7 +71,7 @@ describe('live MOD detection', () => {
     expect(store.mods[0].author).toBe('Steam author')
   })
 
-  it('does not scan while the game is running', async () => {
+  it('does not scan while the game is running in low-consumption mode', async () => {
     invokeMock.mockResolvedValue({ running: true, mod_revision: 4 })
     const store = useAppStore()
     store.settings = { live_mod_detection: true }
@@ -81,6 +81,24 @@ describe('live MOD detection', () => {
 
     expect(invokeMock).toHaveBeenCalledTimes(1)
     expect(invokeMock).toHaveBeenCalledWith('get_runtime_status')
+  })
+
+  it('continues live scanning while the game is running when low-consumption mode is disabled', async () => {
+    invokeMock.mockImplementation(async method => {
+      if (method === 'get_runtime_status') return { running: true, mod_revision: 4 }
+      if (method === 'scan_mods') return emptyScan(4)
+      throw new Error(`Unexpected RPC: ${method}`)
+    })
+    const store = useAppStore()
+    store.settings = { live_mod_detection: true, auto_low_consumption_mode: false }
+    store.modRevision = 3
+
+    await store.refreshRuntime()
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['get_runtime_status'],
+      ['scan_mods', false],
+    ])
   })
 
   it('ends the game process and immediately clears the running state', async () => {

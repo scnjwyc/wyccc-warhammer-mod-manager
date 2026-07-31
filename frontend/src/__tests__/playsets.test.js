@@ -79,6 +79,74 @@ describe('playset state', () => {
     expect(store.dirty).toBe(false)
   })
 
+  it('undoes enabled-list changes in order and saves the restored playset', async () => {
+    let saveCount = 0
+    invokeMock.mockImplementation(async (method, playsetId, modIds) => {
+      if (method === 'save_load_order') {
+        saveCount += 1
+        return { order_token: `token-${saveCount}`, backup: null }
+      }
+      expect(method).toBe('update_playset')
+      return {
+        playset: { ...defaultPlayset, mod_ids: [...modIds] },
+        playsets: [{ ...defaultPlayset, mod_ids: [...modIds] }],
+        current_playset: { ...defaultPlayset, mod_ids: [...modIds] },
+      }
+    })
+    const store = useAppStore()
+    store.playsets = [defaultPlayset]
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['a', 'b']
+    store.mods = ['a', 'b', 'c'].map(id => ({ id, pack_name: `${id}.pack` }))
+
+    store.enable('c')
+    store.reorder('c', 'a')
+    expect(store.activeIds).toEqual(['c', 'a', 'b'])
+    expect(store.canUndoListChange).toBe(true)
+
+    await store.undoListChange()
+    expect(store.activeIds).toEqual(['a', 'b', 'c'])
+    await store.undoListChange()
+    expect(store.activeIds).toEqual(['a', 'b'])
+    expect(store.canUndoListChange).toBe(false)
+    await store.flushPlaysetUpdates()
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['update_playset', 'default', ['a', 'b', 'c']],
+      ['save_load_order', ['a', 'b', 'c'], 'missing'],
+      ['update_playset', 'default', ['c', 'a', 'b']],
+      ['save_load_order', ['c', 'a', 'b'], 'token-1'],
+      ['update_playset', 'default', ['a', 'b', 'c']],
+      ['save_load_order', ['a', 'b', 'c'], 'token-2'],
+      ['update_playset', 'default', ['a', 'b']],
+      ['save_load_order', ['a', 'b'], 'token-3'],
+    ])
+  })
+
+  it('keeps list undo history independent for each playset and restores inactive ordering locally', async () => {
+    const other = { id: 'other', name: 'Other', mod_ids: ['b'] }
+    const store = useAppStore()
+    store.settings = { selected_game: 'warhammer3' }
+    store.mods = ['a', 'b', 'c'].map(id => ({ id, pack_name: `${id}.pack` }))
+    store.playsets = [defaultPlayset, other]
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['a']
+    store.inactiveOrderIds = ['a', 'b', 'c']
+
+    store.reorderInactiveMany(['c'], 'b', 'c', ['b', 'c'], 'before')
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['c', 'b'])
+    expect(store.canUndoListChange).toBe(true)
+
+    store.currentPlaysetId = 'other'
+    store.activeIds = ['b']
+    expect(store.canUndoListChange).toBe(false)
+
+    store.currentPlaysetId = 'default'
+    store.activeIds = ['a']
+    await store.undoListChange()
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['b', 'c'])
+  })
+
   it('flushes current changes before switching and loads the selected playset', async () => {
     const other = {
       id: 'other',

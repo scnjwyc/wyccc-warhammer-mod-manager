@@ -166,9 +166,15 @@ def run_desktop(
     language = language_getter() if callable(language_getter) else ""
     if not isinstance(language, str):
         language = ""
+    low_consumption_getter = getattr(api, "low_consumption_enabled", None)
+    low_consumption_enabled = (
+        bool(low_consumption_getter())
+        if callable(low_consumption_getter)
+        else True
+    )
     initial_url = (
         localized_idle_url(low_consumption_url, language)
-        if initial_game_running
+        if initial_game_running and low_consumption_enabled
         else ui_url
     )
     try:
@@ -199,6 +205,11 @@ def run_desktop(
         ui_url,
         low_consumption_url,
         initial_running=initial_game_running,
+        low_consumption_enabled=(
+            low_consumption_getter
+            if callable(low_consumption_getter)
+            else lambda: True
+        ),
         detector=(
             api.detect_game_running
             if callable(getattr(api, "detect_game_running", None))

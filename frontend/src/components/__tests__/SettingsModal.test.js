@@ -48,6 +48,8 @@ describe('language settings', () => {
           ai_model: '',
           ai_temperature: 0.3,
           live_mod_detection: true,
+          auto_low_consumption_mode: true,
+          rpfm_path: 'D:/Tools/RPFM/rpfm_ui.exe',
           check_outdated_mods: false,
           custom_battle_all_units_as_lords: false,
           enable_script_logging: false,
@@ -62,6 +64,8 @@ describe('language settings', () => {
     await wrapper.get('[data-testid="ai-model"]').setValue('example-model')
     await wrapper.get('[data-testid="check-outdated-mods"]').setValue(true)
     await wrapper.get('[data-testid="live-mod-detection"]').setValue(false)
+    await wrapper.get('[data-testid="auto-low-consumption-mode"]').setValue(false)
+    await wrapper.get('[data-testid="rpfm-path-input"]').setValue('E:/RPFM/rpfm_ui.exe')
     await wrapper.get('[data-testid="all-units-as-lords"]').setValue(true)
     await wrapper.get('[data-testid="script-logging"]').setValue(true)
     await wrapper.get('[data-testid="skip-intro-movies"]').setValue(true)
@@ -72,6 +76,8 @@ describe('language settings', () => {
       ai_model: 'example-model',
       check_outdated_mods: true,
       live_mod_detection: false,
+      auto_low_consumption_mode: false,
+      rpfm_path: 'E:/RPFM/rpfm_ui.exe',
       custom_battle_all_units_as_lords: true,
       enable_script_logging: true,
       skip_intro_movies: true,
@@ -82,7 +88,7 @@ describe('language settings', () => {
     expect(wrapper.text()).toContain('不联网搜索、不查询原版 LOC')
     expect(wrapper.text()).toContain('过期MOD仅代表该MOD在游戏本体更新后未更新，不代表这个MOD无法使用')
     expect(wrapper.text()).toContain('MOD 扫描覆盖游戏 Data 与 STEAM 创意工坊')
-    expect(wrapper.text()).not.toContain('RPFM 可执行文件')
+    expect(wrapper.text()).toContain('RPFM 可执行文件')
     expect(wrapper.text()).not.toContain('Modding 目录')
     expect(wrapper.text()).not.toContain('Merged 目录')
   })

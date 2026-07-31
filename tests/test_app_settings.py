@@ -29,7 +29,7 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-        self.assertEqual(migrated["schema_version"], 16)
+        self.assertEqual(migrated["schema_version"], 18)
         self.assertEqual(migrated["selected_game"], "warhammer3")
         self.assertTrue(
             migrated["game_installations"]["warhammer3"]["game_path"].endswith(
@@ -106,15 +106,15 @@ class SettingsMigrationTests(unittest.TestCase):
     def test_new_installs_enable_background_workshop_refresh(self) -> None:
         self.assertTrue(default_settings()["fetch_workshop_metadata"])
         self.assertTrue(default_settings()["live_mod_detection"])
+        self.assertTrue(default_settings()["auto_low_consumption_mode"])
         self.assertTrue(default_settings()["keyboard_shortcuts_enabled"])
-        self.assertEqual(default_settings()["schema_version"], 16)
+        self.assertEqual(default_settings()["schema_version"], 18)
         self.assertEqual(
             default_settings()["workshop_page_open_counts"],
             {"browser": 0, "client": 0},
         )
         self.assertEqual(default_settings()["language"], "en-US")
         for removed_key in (
-            "rpfm_path",
             "scan_data",
             "scan_modding",
             "scan_workshop",
@@ -141,7 +141,7 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertTrue(default_settings()["check_updates_automatically"])
         self.assertNotIn("update_manifest_url", default_settings())
         self.assertEqual(default_settings()["last_update_check_at"], 0)
-        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.7")
+        self.assertEqual(default_settings()["last_seen_app_version"], "0.9.8")
 
     def test_workshop_page_open_preference_counts_are_normalized(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -205,7 +205,7 @@ class SettingsMigrationTests(unittest.TestCase):
             service = SettingsService(data_dir)
 
             migrated = service.get()
-            self.assertEqual(migrated["schema_version"], 16)
+            self.assertEqual(migrated["schema_version"], 18)
             self.assertTrue(migrated["fetch_workshop_metadata"])
 
             service.save({"fetch_workshop_metadata": False})
@@ -227,7 +227,7 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-            self.assertEqual(migrated["schema_version"], 16)
+            self.assertEqual(migrated["schema_version"], 18)
             self.assertEqual(migrated["language"], "zh-CN")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertNotIn("scan_merged", migrated)
@@ -286,7 +286,7 @@ class SettingsMigrationTests(unittest.TestCase):
                     settings = SettingsService(Path(temporary)).get()
                 self.assertEqual(settings["language"], "en-US")
 
-    def test_removed_rpfm_and_scan_settings_are_not_persisted(self) -> None:
+    def test_rpfm_path_is_persisted_while_removed_scan_settings_are_not(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             service = SettingsService(Path(temporary) / "state")
             executable = Path(temporary) / "tools" / "rpfm.exe"
@@ -299,7 +299,7 @@ class SettingsMigrationTests(unittest.TestCase):
                 }
             )
 
-            self.assertNotIn("rpfm_path", saved)
+            self.assertEqual(saved["rpfm_path"], str(executable.resolve(strict=False)))
             self.assertNotIn("scan_modding", saved)
             self.assertNotIn("scan_merged", saved)
 
@@ -341,11 +341,11 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-            self.assertEqual(migrated["schema_version"], 16)
+            self.assertEqual(migrated["schema_version"], 18)
             self.assertEqual(migrated["language"], "ja-JP")
             self.assertFalse(migrated["fetch_workshop_metadata"])
             self.assertTrue(migrated["check_updates_automatically"])
-        self.assertEqual(migrated["last_seen_app_version"], "0.9.7")
+        self.assertEqual(migrated["last_seen_app_version"], "0.9.8")
 
     def test_schema_eight_settings_enable_live_mod_detection_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -363,7 +363,7 @@ class SettingsMigrationTests(unittest.TestCase):
 
             migrated = SettingsService(data_dir).get()
 
-            self.assertEqual(migrated["schema_version"], 16)
+            self.assertEqual(migrated["schema_version"], 18)
             self.assertFalse(migrated["live_mod_detection"])
 
             fresh_legacy = data_dir / "fresh-legacy"
@@ -388,6 +388,16 @@ class SettingsMigrationTests(unittest.TestCase):
             self.assertTrue(
                 service.save({"keyboard_shortcuts_enabled": 1})[
                     "keyboard_shortcuts_enabled"
+                ]
+            )
+
+    def test_low_consumption_preference_is_enabled_by_default_and_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = SettingsService(Path(temporary))
+            self.assertTrue(service.get()["auto_low_consumption_mode"])
+            self.assertFalse(
+                service.save({"auto_low_consumption_mode": ""})[
+                    "auto_low_consumption_mode"
                 ]
             )
 

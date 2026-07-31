@@ -74,6 +74,33 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         )
         trim.assert_called_once_with()
 
+    def test_disabled_low_consumption_keeps_the_full_page_and_skips_memory_trim(self) -> None:
+        window = Mock()
+        api = Mock()
+        trim = Mock(return_value=3)
+        coordinator = RuntimeCoordinator(
+            window,
+            api,
+            "file:///index.html",
+            "file:///idle.html",
+            low_consumption_enabled=lambda: False,
+            trim_callback=trim,
+            trim_delay=0,
+        )
+
+        coordinator._transition(True)
+        coordinator._transition(False)
+
+        window.load_url.assert_not_called()
+        self.assertEqual(
+            api.set_game_running.call_args_list,
+            [
+                unittest.mock.call(True, force=True),
+                unittest.mock.call(False, force=True),
+            ],
+        )
+        trim.assert_not_called()
+
     def test_manual_exit_marks_the_session_without_navigating_during_the_rpc(self) -> None:
         window = Mock()
         api = Mock()
@@ -129,6 +156,21 @@ class RuntimeCoordinatorTests(unittest.TestCase):
 
         start.assert_called_once_with(paths.data_path, paths.workshop_path)
         stop.assert_called_once_with()
+
+    def test_disabled_low_consumption_keeps_live_directory_monitoring_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary))
+            api.settings_service.save({"auto_low_consumption_mode": False})
+            paths = GamePaths(data_path=str(Path(temporary) / "data"), workshop_path=str(Path(temporary) / "workshop"))
+            with (
+                patch.object(api.settings_service, "resolve_game_paths", return_value=paths),
+                patch.object(api.mod_monitor, "start", return_value=True) as start,
+                patch.object(api.mod_monitor, "stop") as stop,
+            ):
+                api.set_game_running(True, force=True)
+
+        start.assert_called_once_with(paths.data_path, paths.workshop_path)
+        stop.assert_not_called()
 
     def test_api_detection_validates_against_the_cached_configured_executable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

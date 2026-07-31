@@ -110,6 +110,17 @@ const isEditableTarget = target => {
     && Boolean(target.closest('[contenteditable="true"], [role="textbox"]'))
 }
 
+export const isUndoShortcut = event => (
+  Boolean(event?.ctrlKey || event?.metaKey)
+  && !event?.altKey
+  && !event?.shiftKey
+  && !event?.defaultPrevented
+  && !event?.isComposing
+  && !event?.repeat
+  && String(event?.key || '').toLocaleLowerCase() === 'z'
+  && !isEditableTarget(event?.target)
+)
+
 const selectedShortcutIds = ({ selectedMod, selectedIds, getMod }) => {
   const selectedId = String(selectedMod?.id || '')
   if (!selectedId) return []

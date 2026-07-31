@@ -172,6 +172,7 @@ class API:
             "get_changelog": self._get_changelog,
             "acknowledge_changelog": self._acknowledge_changelog,
             "select_directory": self._select_directory,
+            "select_rpfm_executable": self._select_rpfm_executable,
             "select_mod_profile": self._select_mod_profile,
             "scan_mods": self._scan_mods,
             "save_mod_user_data": self._save_mod_user_data,
@@ -243,6 +244,9 @@ class API:
 
     def interface_language(self) -> str:
         return str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+
+    def low_consumption_enabled(self) -> bool:
+        return bool(self.settings_service.get().get("auto_low_consumption_mode", True))
 
     def _active_game(self) -> GameDefinition:
         return self.settings_service.selected_game_definition()
@@ -596,6 +600,27 @@ class API:
             return {"path": str(selected or "")}
         except Exception as exc:
             raise ValueError(f"无法打开目录选择器：{exc}") from exc
+
+    def _select_rpfm_executable(self) -> dict[str, str]:
+        try:
+            import tkinter
+            from tkinter import filedialog
+
+            root = tkinter.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            selected = filedialog.askopenfilename(
+                title="选择 RPFM 可执行文件",
+                filetypes=(
+                    ("RPFM", "rpfm_ui.exe rpfm_cli.exe"),
+                    ("可执行文件", "*.exe"),
+                    ("所有文件", "*.*"),
+                ),
+            )
+            root.destroy()
+            return {"path": str(selected or "")}
+        except Exception as exc:
+            raise ValueError(f"无法打开 RPFM 文件选择器：{exc}") from exc
 
     def _select_mod_profile(self) -> dict[str, str]:
         self._require_game_capability(
@@ -1129,10 +1154,10 @@ class API:
                     running,
                     self.game_executable_path(),
                 )
-            if running:
+            settings = self.settings_service.get()
+            if running and self.low_consumption_enabled():
                 self.mod_monitor.stop()
                 return
-            settings = self.settings_service.get()
             if not settings.get("live_mod_detection", True):
                 self.mod_monitor.stop()
                 return
@@ -1969,6 +1994,27 @@ class API:
         pack_path = Path(asset.path)
         if not pack_path.is_file():
             raise ValueError(f"Pack 文件不存在：{pack_path}")
+        configured_path = str(self.settings_service.get().get("rpfm_path") or "").strip()
+        if configured_path:
+            rpfm_path = Path(configured_path)
+            if not rpfm_path.is_file():
+                raise ValueError(
+                    f"设置的 RPFM 可执行文件不存在：{rpfm_path}。请在设置中重新选择 rpfm_ui.exe。"
+                )
+            try:
+                subprocess.Popen(
+                    [
+                        str(rpfm_path.resolve(strict=False)),
+                        str(pack_path.resolve(strict=False)),
+                    ]
+                )
+            except OSError as exc:
+                raise ValueError(f"无法启动 RPFM：{exc}") from exc
+            return {
+                "opened": True,
+                "path": str(pack_path.resolve(strict=False)),
+                "rpfm_path": str(rpfm_path.resolve(strict=False)),
+            }
         self._open_path(pack_path)
         return {"opened": True, "path": str(pack_path.resolve(strict=False))}
 

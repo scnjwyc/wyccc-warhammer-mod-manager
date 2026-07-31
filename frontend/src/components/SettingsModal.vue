@@ -129,6 +129,7 @@ watch(
     delete draft.workshop_path
     delete draft.show_hidden_mods
     if (!draft.language) draft.language = DEFAULT_LANGUAGE
+    if (typeof draft.auto_low_consumption_mode !== 'boolean') draft.auto_low_consumption_mode = true
     if (typeof draft.keyboard_shortcuts_enabled !== 'boolean') draft.keyboard_shortcuts_enabled = true
     draft.keyboard_shortcuts = normalizeShortcutMap(props.settings?.keyboard_shortcuts)
     shortcutCaptureId.value = ''
@@ -151,6 +152,11 @@ const browse = async kind => {
   if (!result.path) return
   if (kind === 'game') activeInstallation.value.game_path = result.path
   else activeInstallation.value.workshop_path = result.path
+}
+
+const browseRpfmExecutable = async () => {
+  const result = await store.selectRpfmExecutable()
+  if (result.path) draft.rpfm_path = result.path
 }
 
 const detectSelectedGame = () => emit('detect', draft.selected_game)
@@ -316,6 +322,20 @@ const closeSettings = () => {
               </div>
             </label>
 
+            <label class="field-label">
+              <span>{{ t('settings.rpfmExecutable') }}</span>
+              <div class="path-input-row">
+                <input
+                  v-model="draft.rpfm_path"
+                  type="text"
+                  placeholder="...\\rpfm_ui.exe"
+                  data-testid="rpfm-path-input"
+                />
+                <button type="button" class="secondary-button" @click="browseRpfmExecutable">{{ t('common.browse') }}</button>
+              </div>
+              <small class="field-help">{{ t('settings.rpfmExecutableHelp') }}</small>
+            </label>
+
             <div class="settings-section">
               <h3>{{ t('settings.workshopChecks') }}</h3>
               <p class="settings-scan-note">{{ t('settings.scanScope') }}</p>
@@ -330,6 +350,14 @@ const closeSettings = () => {
               <label class="switch-row">
                 <input v-model="draft.check_outdated_mods" type="checkbox" data-testid="check-outdated-mods" />
                 <span><strong>{{ t('settings.checkOutdated') }}</strong><small>{{ t('settings.checkOutdatedHelp') }}</small></span>
+              </label>
+            </div>
+
+            <div class="settings-section">
+              <h3>{{ t('settings.runtime') }}</h3>
+              <label class="switch-row">
+                <input v-model="draft.auto_low_consumption_mode" type="checkbox" data-testid="auto-low-consumption-mode" />
+                <span><strong>{{ t('settings.autoLowConsumption') }}</strong><small>{{ t('settings.autoLowConsumptionHelp') }}</small></span>
               </label>
             </div>
           </section>

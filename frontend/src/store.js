@@ -17,6 +17,7 @@ import {
 let playsetWriteQueue = Promise.resolve()
 let collectionImportPollTimer = 0
 const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
+const LIST_UNDO_HISTORY_LIMIT = 30
 
 const defaultGameDataFeatures = () => ({
   unit_size: {
@@ -60,10 +61,16 @@ const sameIds = (left, right) => (
   left.length === right.length && left.every((value, index) => value === right[index])
 )
 
+const sameListState = (left, right) => (
+  sameIds(left.activeIds, right.activeIds)
+  && sameIds(left.inactiveOrderIds, right.inactiveOrderIds)
+  && left.inactiveOrderCustomized === right.inactiveOrderCustomized
+)
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.7',
+    appVersion: '0.9.8',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -114,6 +121,7 @@ export const useAppStore = defineStore('app', {
     gameDataFeatureWarning: '',
     workshopUpdateEligibility: new Set(),
     workshopEligibilityRequestId: 0,
+    listUndoHistory: {},
   }),
   getters: {
     modMap: (state) => new Map(state.mods.map(mod => [mod.id, mod])),
@@ -167,6 +175,11 @@ export const useAppStore = defineStore('app', {
     },
     currentPlayset() {
       return this.playsets.find(item => item.id === this.currentPlaysetId) || null
+    },
+    canUndoListChange(state) {
+      const gameId = String(state.settings?.selected_game || 'warhammer3')
+      const key = `${gameId}:${state.currentPlaysetId}`
+      return Boolean(state.listUndoHistory[key]?.length)
     },
     selectedMod() {
       return this.modMap.get(this.selectedId) || null
@@ -232,6 +245,58 @@ export const useAppStore = defineStore('app', {
     },
   },
   actions: {
+    listUndoHistoryKey(playsetId = this.currentPlaysetId) {
+      const gameId = String(this.settings?.selected_game || 'warhammer3')
+      return playsetId ? `${gameId}:${playsetId}` : ''
+    },
+    listStateSnapshot() {
+      return {
+        activeIds: [...this.activeIds],
+        inactiveOrderIds: [...this.inactiveOrderIds],
+        inactiveOrderCustomized: Boolean(this.inactiveOrderCustomized),
+      }
+    },
+    rememberListStateForUndo(snapshot = this.listStateSnapshot()) {
+      const key = this.listUndoHistoryKey()
+      if (!key) return
+      const history = [...(this.listUndoHistory[key] || [])]
+      if (history.length && sameListState(history.at(-1), snapshot)) return
+      history.push(snapshot)
+      this.listUndoHistory = {
+        ...this.listUndoHistory,
+        [key]: history.slice(-LIST_UNDO_HISTORY_LIMIT),
+      }
+    },
+    restoreListState(snapshot) {
+      const installedIds = this.mods.map(mod => mod.id)
+      const installed = new Set(installedIds)
+      this.replaceActiveIds(snapshot.activeIds.filter(id => installed.has(id)))
+      const inactiveOrderIds = snapshot.inactiveOrderIds.filter(id => installed.has(id))
+      this.inactiveOrderIds = [
+        ...new Set(inactiveOrderIds),
+        ...installedIds.filter(id => !inactiveOrderIds.includes(id)),
+      ]
+      this.inactiveOrderCustomized = Boolean(snapshot.inactiveOrderCustomized)
+    },
+    async undoListChange() {
+      const key = this.listUndoHistoryKey()
+      const history = key ? [...(this.listUndoHistory[key] || [])] : []
+      const snapshot = history.pop()
+      if (!snapshot) return false
+
+      const current = this.listStateSnapshot()
+      this.listUndoHistory = {
+        ...this.listUndoHistory,
+        [key]: history,
+      }
+      this.restoreListState(snapshot)
+
+      if (!sameIds(current.activeIds, this.activeIds)) {
+        this.dirty = true
+        await this.recordCurrentPlaysetChange()
+      }
+      return true
+    },
     replaceActiveIds(modIds) {
       this.activeIds = [...new Set((modIds || []).map(id => String(id)).filter(Boolean))]
       this.refreshMissingDependencyWarnings()
@@ -602,6 +667,7 @@ export const useAppStore = defineStore('app', {
         }
       }
       if (next.length !== this.activeIds.length) {
+        this.rememberListStateForUndo()
         this.replaceActiveIds(next)
         this.dirty = true
         this.recordCurrentPlaysetChange()
@@ -635,6 +701,7 @@ export const useAppStore = defineStore('app', {
         ? targetIndex + (placement === 'after' ? 1 : 0)
         : next.length
       next.splice(insertionIndex, 0, ...moving)
+      this.rememberListStateForUndo()
       this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
@@ -646,6 +713,7 @@ export const useAppStore = defineStore('app', {
       const selected = new Set(modIds || [])
       const next = this.activeIds.filter(id => !selected.has(id))
       if (next.length !== this.activeIds.length) {
+        this.rememberListStateForUndo()
         this.replaceActiveIds(next)
         this.dirty = true
         this.recordCurrentPlaysetChange()
@@ -655,6 +723,7 @@ export const useAppStore = defineStore('app', {
       const selected = new Set(modIds || [])
       const moving = this.activeIds.filter(id => selected.has(id))
       if (!moving.length) return
+      this.rememberListStateForUndo()
       this.replaceActiveIds(this.activeIds.filter(id => !selected.has(id)))
       const base = this.alignInactiveOrderToVisible(targetOrder)
       const remaining = base.filter(id => !selected.has(id))
@@ -694,6 +763,7 @@ export const useAppStore = defineStore('app', {
         ...remaining.slice(insertionIndex),
       ]
       if (next.every((id, index) => id === this.activeIds[index])) return
+      this.rememberListStateForUndo()
       this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
@@ -723,6 +793,7 @@ export const useAppStore = defineStore('app', {
         ...remaining.slice(insertionIndex),
       ]
       if (next.every((id, index) => id === this.inactiveOrderIds[index])) return
+      this.rememberListStateForUndo()
       this.inactiveOrderIds = next
       this.inactiveOrderCustomized = true
     },
@@ -747,6 +818,7 @@ export const useAppStore = defineStore('app', {
       if (index < 0 || target < 0 || target >= this.activeIds.length) return
       const next = [...this.activeIds]
       ;[next[index], next[target]] = [next[target], next[index]]
+      this.rememberListStateForUndo()
       this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
@@ -761,6 +833,7 @@ export const useAppStore = defineStore('app', {
       const next = [...this.activeIds]
       next.splice(sourceIndex, 1)
       next.splice(targetIndex, 0, modId)
+      this.rememberListStateForUndo()
       this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
@@ -773,11 +846,14 @@ export const useAppStore = defineStore('app', {
       const numeric = Number(oneBasedPosition)
       if (!Number.isInteger(numeric)) return
       const targetIndex = Math.max(0, Math.min(numeric - 1, remaining.length))
-      this.replaceActiveIds([
+      const next = [
         ...remaining.slice(0, targetIndex),
         ...moving,
         ...remaining.slice(targetIndex),
-      ])
+      ]
+      if (sameIds(next, this.activeIds)) return
+      this.rememberListStateForUndo()
+      this.replaceActiveIds(next)
       this.dirty = true
       this.recordCurrentPlaysetChange()
     },
@@ -1056,6 +1132,9 @@ export const useAppStore = defineStore('app', {
     },
     async selectDirectory(kind) {
       return invoke('select_directory', kind)
+    },
+    async selectRpfmExecutable() {
+      return invoke('select_rpfm_executable')
     },
     async saveModUserData(modId, alias, notes) {
       const updated = await invoke('save_mod_user_data', modId, alias, notes)
@@ -1497,7 +1576,12 @@ export const useAppStore = defineStore('app', {
       void this.loadThumbnails()
     },
     async refreshModsInBackground() {
-      if (this.liveModRefreshing || this.workshopRefreshing || this.runtime.running || this.busy) return null
+      if (
+        this.liveModRefreshing
+        || this.workshopRefreshing
+        || (this.runtime.running && this.settings.auto_low_consumption_mode !== false)
+        || this.busy
+      ) return null
       this.liveModRefreshing = true
       try {
         await this.flushPlaysetUpdates()
@@ -1718,7 +1802,7 @@ export const useAppStore = defineStore('app', {
         const nextRevision = Number(runtime.mod_revision || 0)
         if (
           this.settings.live_mod_detection
-          && !runtime.running
+          && (!runtime.running || this.settings.auto_low_consumption_mode === false)
           && nextRevision > previousRevision
         ) {
           const refreshed = await this.refreshModsInBackground()

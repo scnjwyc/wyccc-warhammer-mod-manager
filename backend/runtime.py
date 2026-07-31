@@ -149,6 +149,7 @@ class RuntimeCoordinator:
         initial_running: bool = False,
         detector: Callable[[], bool] = is_game_running,
         trim_callback: Callable[[], int] = trim_process_tree_working_sets,
+        low_consumption_enabled: Callable[[], bool] = lambda: True,
         active_interval: float = 1.0,
         idle_interval: float = 5.0,
         trim_delay: float = 1.5,
@@ -159,6 +160,7 @@ class RuntimeCoordinator:
         self.idle_url = idle_url
         self.detector = detector
         self.trim_callback = trim_callback
+        self.low_consumption_enabled = low_consumption_enabled
         self.active_interval = max(0.1, active_interval)
         self.idle_interval = max(0.5, idle_interval)
         self.trim_delay = max(0.0, trim_delay)
@@ -197,13 +199,17 @@ class RuntimeCoordinator:
         return True
 
     def _run(self) -> None:
-        if self._running:
+        if self._running and self._low_consumption_enabled():
             self._trim_after_idle_load()
         while True:
             with self._state_lock:
                 interval = (
                     self.idle_interval
-                    if self._running and not self._manual_exit_for_current_session
+                    if (
+                        self._running
+                        and not self._manual_exit_for_current_session
+                        and self._low_consumption_enabled()
+                    )
                     else self.active_interval
                 )
             if self._stop.wait(interval):
@@ -226,13 +232,11 @@ class RuntimeCoordinator:
             if not self._running:
                 self._manual_exit_for_current_session = False
         self.api.set_game_running(self._running, force=True)
+        if not self._low_consumption_enabled():
+            return
         if not self._running and manually_restored:
             return
-        target = (
-            localized_idle_url(self.idle_url, self._interface_language())
-            if self._running
-            else self.app_url
-        )
+        target = localized_idle_url(self.idle_url, self._interface_language()) if self._running else self.app_url
         try:
             self.window.load_url(target)
         except Exception:
@@ -240,6 +244,13 @@ class RuntimeCoordinator:
             return
         if self._running:
             self._trim_after_idle_load()
+
+    def _low_consumption_enabled(self) -> bool:
+        try:
+            return bool(self.low_consumption_enabled())
+        except Exception:
+            logger.exception("Unable to read the low-consumption setting")
+            return True
 
     def _trim_after_idle_load(self) -> None:
         if self._stop.wait(self.trim_delay):

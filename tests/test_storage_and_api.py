@@ -2115,11 +2115,16 @@ class ApiContractTests(unittest.TestCase):
             )
             reveal_file.assert_called_once_with(source_pack.resolve(strict=False))
 
-            with patch.object(api, "_open_path") as open_path:
+            rpfm = root / "tools" / "rpfm_ui.exe"
+            rpfm.parent.mkdir()
+            rpfm.write_bytes(b"")
+            api.settings_service.save({"rpfm_path": str(rpfm)})
+            with patch("backend.api.subprocess.Popen") as launch_rpfm:
                 opened = api.call("open_mod_in_rpfm", [merged["id"]])
             self.assertTrue(opened["ok"])
             self.assertEqual(opened["data"]["path"], merged["path"])
-            open_path.assert_called_once_with(Path(merged["path"]))
+            self.assertEqual(opened["data"]["rpfm_path"], str(rpfm.resolve()))
+            launch_rpfm.assert_called_once_with([str(rpfm.resolve()), str(Path(merged["path"]).resolve())])
 
             with patch(
                 "backend.api.perform_workshop_operation",

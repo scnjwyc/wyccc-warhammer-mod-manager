@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { localizedModTypeName, localizedPlaysetName, t } from './languages'
-import { executeKeyboardShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
+import { executeKeyboardShortcut, isUndoShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
 import { useAppStore } from './store'
 import ConfirmationModal from './components/ConfirmationModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
@@ -353,6 +353,14 @@ const notifyShortcutOutcome = outcome => {
 }
 
 const handleGlobalShortcut = event => {
+  if (isUndoShortcut(event)) {
+    if (shortcutsBlocked() || store.busy || !store.canUndoListChange) return
+    event.preventDefault()
+    void store.undoListChange().catch(() => {
+      // Store actions surface failures through the shared toast.
+    })
+    return
+  }
   const action = resolveKeyboardShortcut(event, {
     enabled: Boolean(store.settings.keyboard_shortcuts_enabled),
     blocked: shortcutsBlocked(),

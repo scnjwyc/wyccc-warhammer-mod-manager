@@ -33,7 +33,7 @@ SYSTEM_LANGUAGE_MAP = {
     "ja": "ja-JP",
     "es": "es-ES",
 }
-SETTINGS_SCHEMA_VERSION = 16
+SETTINGS_SCHEMA_VERSION = 18
 
 DEFAULT_KEYBOARD_SHORTCUTS = {
     "open-workshop": "Shift+W",
@@ -197,6 +197,8 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "game_installations": _default_game_installations(),
         "fetch_workshop_metadata": True,
         "live_mod_detection": True,
+        "auto_low_consumption_mode": True,
+        "rpfm_path": "",
         "keyboard_shortcuts_enabled": True,
         "keyboard_shortcuts": dict(DEFAULT_KEYBOARD_SHORTCUTS),
         "check_outdated_mods": False,
@@ -445,12 +447,17 @@ class SettingsService:
         result["selected_game"] = selected_game
         result["game_installations"] = normalized_installations
         result["keyboard_shortcuts"] = _normalize_keyboard_shortcuts(result.get("keyboard_shortcuts"))
+        rpfm_path = str(result.get("rpfm_path") or "").strip().strip('"')
+        result["rpfm_path"] = (
+            str(Path(rpfm_path).expanduser().resolve(strict=False)) if rpfm_path else ""
+        )
         result["workshop_page_open_counts"] = _normalize_workshop_page_open_counts(
             result.get("workshop_page_open_counts")
         )
         for key in (
             "fetch_workshop_metadata",
             "live_mod_detection",
+            "auto_low_consumption_mode",
             "keyboard_shortcuts_enabled",
             "check_outdated_mods",
             "search_highlight_mode",

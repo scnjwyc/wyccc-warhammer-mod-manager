@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.8",
+        "date": "2026-07-31",
+        "entries": (
+            (
+                "v098_adjusted_title",
+                (
+                    ("improvement", "v098_rpfm_path_prompt"),
+                    ("improvement", "v098_disable_low_consumption"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.9.7",
         "date": "2026-07-30",
         "entries": (
@@ -429,6 +442,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v098_adjusted_title": "调整",
+        "v098_rpfm_path_prompt": "当找不到 RPFM 时，提示玩家前往设置配置 RPFM 路径。",
+        "v098_disable_low_consumption": "选项中新增一个取消低消耗模式的开关。",
         "v097_added_title": "新增",
         "v097_end_game_process_button": "启动游戏后，原“启动游戏”按钮会变为“结束游戏进程”按钮，便于快速结束游戏。",
         "v097_adjusted_title": "调整",
@@ -598,6 +614,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v098_adjusted_title": "Adjusted",
+        "v098_rpfm_path_prompt": "When RPFM cannot be found, the manager prompts the player to configure its path in Settings.",
+        "v098_disable_low_consumption": "Added an option to disable low-consumption mode.",
         "v097_added_title": "Added",
         "v097_end_game_process_button": "After launching the game, the Launch game button becomes End game process for quick termination.",
         "v097_adjusted_title": "Adjusted",
@@ -767,6 +786,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v098_adjusted_title": "조정",
+        "v098_rpfm_path_prompt": "RPFM을 찾을 수 없으면 설정에서 RPFM 경로를 지정하라는 안내가 표시됩니다.",
+        "v098_disable_low_consumption": "저소비 모드를 끄는 옵션을 설정에 추가했습니다.",
         "v097_added_title": "추가",
         "v097_end_game_process_button": "게임을 시작하면 게임 시작 버튼이 빠른 종료를 위한 게임 프로세스 종료 버튼으로 바뀝니다.",
         "v097_adjusted_title": "조정",
@@ -936,6 +958,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v098_adjusted_title": "Изменено",
+        "v098_rpfm_path_prompt": "Если RPFM не найден, менеджер предложит указать его путь в настройках.",
+        "v098_disable_low_consumption": "В настройки добавлена возможность отключить режим низкого потребления.",
         "v097_added_title": "Добавлено",
         "v097_end_game_process_button": "После запуска игры кнопка запуска превращается в кнопку завершения процесса игры для быстрого выхода.",
         "v097_adjusted_title": "Изменено",
@@ -1105,6 +1130,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v098_adjusted_title": "調整",
+        "v098_rpfm_path_prompt": "RPFM が見つからない場合、設定で RPFM のパスを指定するよう案内します。",
+        "v098_disable_low_consumption": "低消費モードを無効にする設定を追加しました。",
         "v097_added_title": "追加",
         "v097_end_game_process_button": "ゲーム起動後、「ゲームを起動」ボタンが素早く終了できる「ゲームプロセスを終了」ボタンに変わります。",
         "v097_adjusted_title": "調整",
@@ -1274,6 +1302,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v098_adjusted_title": "Ajustado",
+        "v098_rpfm_path_prompt": "Si no se encuentra RPFM, el gestor pide configurar su ruta en Ajustes.",
+        "v098_disable_low_consumption": "Se añadió una opción para desactivar el modo de bajo consumo.",
         "v097_added_title": "Añadido",
         "v097_end_game_process_button": "Después de iniciar el juego, el botón Iniciar juego se convierte en Terminar proceso del juego para cerrarlo rápidamente.",
         "v097_adjusted_title": "Ajustado",
