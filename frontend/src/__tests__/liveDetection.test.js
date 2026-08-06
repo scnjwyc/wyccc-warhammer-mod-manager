@@ -154,4 +154,15 @@ describe('live MOD detection', () => {
 
     expect([...store.workshopUpdateEligibility]).toEqual(['second'])
   })
+
+  it('reuses a successful Workshop ownership response for repeated menu openings', async () => {
+    invokeMock.mockResolvedValue({ eligible_mod_ids: ['owned'] })
+    const store = useAppStore()
+
+    await store.refreshWorkshopUpdateEligibility(['owned'])
+    await store.refreshWorkshopUpdateEligibility(['owned'])
+
+    expect(invokeMock).toHaveBeenCalledTimes(1)
+    expect([...store.workshopUpdateEligibility]).toEqual(['owned'])
+  })
 })

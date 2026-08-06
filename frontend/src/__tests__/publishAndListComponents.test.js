@@ -99,6 +99,32 @@ describe('Workshop publish dialog', () => {
     expect(wrapper.find('textarea[rows="3"]').classes()).toContain('publish-textarea')
   })
 
+  it('keeps update submission available while Workshop copy refresh is pending', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useAppStore()
+    store.settings = { language: 'zh-CN' }
+    store.loadWorkshopPublishCopy = vi.fn(() => new Promise(() => {}))
+    const wrapper = mount(WorkshopPublishModal, {
+      global: { plugins: [pinia] },
+      props: {
+        open: true,
+        mode: 'update',
+        mod: { ...localMod, workshop_id: '123' },
+        busy: '',
+      },
+    })
+
+    const submit = wrapper.get('.primary-button')
+    expect(submit.attributes('disabled')).toBeUndefined()
+    await submit.trigger('click')
+    expect(wrapper.emitted('submit')[0][0]).toMatchObject({
+      mode: 'update',
+      title: 'My Own Mod',
+      language: 'zh-CN',
+    })
+  })
+
   it('uses the sibling cover automatically and emits without a confirmation checkbox', async () => {
     const wrapper = mount(WorkshopPublishModal, {
       global: { plugins: [createPinia()] },

@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "0.9.9",
+        "date": "2026-08-06",
+        "entries": (
+            (
+                "v099_fixed_title",
+                (
+                    ("fix", "v099_unit_scale_sfo_compatibility"),
+                    ("fix", "v099_workshop_upload_stability"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "0.9.8",
         "date": "2026-07-31",
         "entries": (
@@ -442,6 +455,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v099_fixed_title": "修复",
+        "v099_unit_scale_sfo_compatibility": "提高单位规模修改功能对SFO等MOD的兼容性。",
+        "v099_workshop_upload_stability": "提高MOD上传与更新功能的稳定性。",
         "v098_adjusted_title": "调整",
         "v098_rpfm_path_prompt": "当找不到 RPFM 时，提示玩家前往设置配置 RPFM 路径。",
         "v098_disable_low_consumption": "选项中新增一个取消低消耗模式的开关。",
@@ -614,6 +630,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v099_fixed_title": "Fixed",
+        "v099_unit_scale_sfo_compatibility": "Improved compatibility between unit-scale modification and SFO and other MODs.",
+        "v099_workshop_upload_stability": "Improved the stability of MOD uploads and Workshop updates.",
         "v098_adjusted_title": "Adjusted",
         "v098_rpfm_path_prompt": "When RPFM cannot be found, the manager prompts the player to configure its path in Settings.",
         "v098_disable_low_consumption": "Added an option to disable low-consumption mode.",
@@ -786,6 +805,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v099_fixed_title": "수정",
+        "v099_unit_scale_sfo_compatibility": "SFO 등 MOD와의 유닛 규모 조정 호환성을 개선했습니다.",
+        "v099_workshop_upload_stability": "MOD 업로드 및 Workshop 업데이트 기능의 안정성을 개선했습니다.",
         "v098_adjusted_title": "조정",
         "v098_rpfm_path_prompt": "RPFM을 찾을 수 없으면 설정에서 RPFM 경로를 지정하라는 안내가 표시됩니다.",
         "v098_disable_low_consumption": "저소비 모드를 끄는 옵션을 설정에 추가했습니다.",
@@ -958,6 +980,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v099_fixed_title": "Исправлено",
+        "v099_unit_scale_sfo_compatibility": "Улучшена совместимость изменения масштаба отрядов с SFO и другими модами.",
+        "v099_workshop_upload_stability": "Повышена стабильность загрузки MOD и обновления в Мастерской Steam.",
         "v098_adjusted_title": "Изменено",
         "v098_rpfm_path_prompt": "Если RPFM не найден, менеджер предложит указать его путь в настройках.",
         "v098_disable_low_consumption": "В настройки добавлена возможность отключить режим низкого потребления.",
@@ -1130,6 +1155,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v099_fixed_title": "修正",
+        "v099_unit_scale_sfo_compatibility": "SFO などの MOD に対するユニット規模変更の互換性を改善しました。",
+        "v099_workshop_upload_stability": "MOD のアップロードと Workshop 更新機能の安定性を改善しました。",
         "v098_adjusted_title": "調整",
         "v098_rpfm_path_prompt": "RPFM が見つからない場合、設定で RPFM のパスを指定するよう案内します。",
         "v098_disable_low_consumption": "低消費モードを無効にする設定を追加しました。",
@@ -1302,6 +1330,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v099_fixed_title": "Corregido",
+        "v099_unit_scale_sfo_compatibility": "Se mejoró la compatibilidad de la modificación de la escala de unidades con SFO y otros MODs.",
+        "v099_workshop_upload_stability": "Se mejoró la estabilidad de las funciones de carga y actualización de MODs en Workshop.",
         "v098_adjusted_title": "Ajustado",
         "v098_rpfm_path_prompt": "Si no se encuentra RPFM, el gestor pide configurar su ruta en Ajustes.",
         "v098_disable_low_consumption": "Se añadió una opción para desactivar el modo de bajo consumo.",

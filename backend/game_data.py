@@ -628,7 +628,12 @@ def _is_single_entity_unit(
         if (
             not mount
             and not _is_engine_backed(land_values)
-            and rank_depth == 1
+            # Some overhaul packs (notably SFO) change rank_depth for a
+            # single monster without adding any additional visible models.
+            # For this topology, num_men is the reliable model-count signal;
+            # rank_depth is formation layout metadata and must not demote the
+            # unit to the normal scaling rule.
+            and int(main_values.get("num_men") or 0) == 1
             and any(marker in spacing for marker in ("monster", "monstrous", "colossal", "dread_maw"))
         ):
             return True

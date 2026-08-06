@@ -1134,7 +1134,9 @@ class GameDataPatchTests(unittest.TestCase):
                                 "bonus_hit_points": 400,
                                 "num_mounts": 0,
                                 "num_engines": 0,
-                                "rank_depth": 1,
+                                # SFO changes rank_depth for this one-model
+                                # monster, but it remains a single entity.
+                                "rank_depth": 2,
                                 "spacing": "wh_main_monster",
                             },
                             {
@@ -1214,7 +1216,7 @@ class GameDataPatchTests(unittest.TestCase):
 
         land_rows = {row["key"]: row for row in _rows_for(result, "land_units_tables")}
         self.assertEqual(land_rows["land_infantry"]["rank_depth"], 15)
-        self.assertEqual(land_rows["land_star_dragon"]["rank_depth"], 1)
+        self.assertEqual(land_rows["land_star_dragon"]["rank_depth"], 2)
         self.assertEqual(land_rows["land_lone_monster"]["rank_depth"], 1)
         self.assertEqual(land_rows["land_monster_engine"]["rank_depth"], 1)
         self.assertEqual(land_rows["land_mounted_monster"]["rank_depth"], 1)

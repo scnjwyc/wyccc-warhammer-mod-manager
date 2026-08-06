@@ -70,7 +70,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.8',
+    appVersion: '0.9.9',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -120,6 +120,7 @@ export const useAppStore = defineStore('app', {
     gameDataFeatures: defaultGameDataFeatures(),
     gameDataFeatureWarning: '',
     workshopUpdateEligibility: new Set(),
+    workshopEligibilityKnownIds: new Set(),
     workshopEligibilityRequestId: 0,
     listUndoHistory: {},
   }),
@@ -401,6 +402,12 @@ export const useAppStore = defineStore('app', {
         this.selectedIds = this.selectedIds.filter(id => installed.has(id))
         if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
         if (!installed.has(this.selectionAnchorId)) this.selectionAnchorId = this.selectedId
+        this.workshopEligibilityRequestId += 1
+        this.workshopEligibilityKnownIds = new Set()
+        this.workshopUpdateEligibility = new Set()
+        void this.refreshWorkshopUpdateEligibility(
+          this.mods.filter(mod => mod?.workshop_id).map(mod => mod.id),
+        )
         await this.loadPreview(this.selectedId)
         void this.loadThumbnails()
         this.notify(t('toast.scanComplete', { count: this.mods.length }))
@@ -435,6 +442,12 @@ export const useAppStore = defineStore('app', {
         this.selectedIds = this.selectedIds.filter(id => installed.has(id))
         if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
         if (!installed.has(this.selectionAnchorId)) this.selectionAnchorId = this.selectedId
+        this.workshopEligibilityRequestId += 1
+        this.workshopEligibilityKnownIds = new Set()
+        this.workshopUpdateEligibility = new Set()
+        void this.refreshWorkshopUpdateEligibility(
+          this.mods.filter(mod => mod?.workshop_id).map(mod => mod.id),
+        )
         await this.loadPreview(this.selectedId)
         void this.loadThumbnails(true)
         this.notify(t('toast.workshopComplete'))
@@ -1017,6 +1030,7 @@ export const useAppStore = defineStore('app', {
         this.selectionAnchorId = ''
         this.workshopEligibilityRequestId += 1
         this.workshopUpdateEligibility = new Set()
+        this.workshopEligibilityKnownIds = new Set()
         this.dirty = false
         const changelog = await invoke('get_changelog')
         this.changelog = changelog.items || []
@@ -1124,6 +1138,7 @@ export const useAppStore = defineStore('app', {
         this.pathHealth = data.path_health || {}
         this.workshopEligibilityRequestId += 1
         this.workshopUpdateEligibility = new Set()
+        this.workshopEligibilityKnownIds = new Set()
         if (data.found) this.notify(t('toast.pathsDetected', {
           game: localizedSelectedGameName(this.settings),
         }))
@@ -1681,24 +1696,32 @@ export const useAppStore = defineStore('app', {
       })
     },
     async refreshWorkshopUpdateEligibility(modIds) {
-      const requestId = ++this.workshopEligibilityRequestId
-      this.workshopUpdateEligibility = new Set()
       const requestedIds = [...new Set(
         (Array.isArray(modIds) ? modIds : [])
           .map(id => String(id || '').trim())
           .filter(Boolean),
       )]
       if (!requestedIds.length) return []
+      const pendingIds = requestedIds.filter(id => !this.workshopEligibilityKnownIds.has(id))
+      if (!pendingIds.length) {
+        return requestedIds.filter(id => this.workshopUpdateEligibility.has(id))
+      }
+      const requestId = ++this.workshopEligibilityRequestId
       try {
-        const data = await invoke('get_workshop_update_eligibility', requestedIds)
+        const data = await invoke('get_workshop_update_eligibility', pendingIds)
         if (requestId !== this.workshopEligibilityRequestId) return []
         const eligible = Array.isArray(data?.eligible_mod_ids) ? data.eligible_mod_ids : []
-        this.workshopUpdateEligibility = new Set(eligible.map(id => String(id)))
+        const eligibleIds = new Set(eligible.map(id => String(id)))
+        const nextEligibility = new Set(this.workshopUpdateEligibility)
+        pendingIds.forEach(id => nextEligibility.delete(id))
+        eligibleIds.forEach(id => nextEligibility.add(id))
+        this.workshopEligibilityKnownIds = new Set([
+          ...this.workshopEligibilityKnownIds,
+          ...pendingIds,
+        ])
+        this.workshopUpdateEligibility = nextEligibility
         return eligible
       } catch {
-        if (requestId === this.workshopEligibilityRequestId) {
-          this.workshopUpdateEligibility = new Set()
-        }
         return []
       }
     },

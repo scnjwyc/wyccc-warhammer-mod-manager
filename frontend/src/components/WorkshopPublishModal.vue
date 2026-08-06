@@ -195,7 +195,7 @@ const submit = () => {
         <button
           type="button"
           class="primary-button"
-          :disabled="!!busy || languageLoading || !draft.title.trim()"
+          :disabled="!!busy || !draft.title.trim()"
           @click="submit"
         >
           {{ busy || (mode === 'upload' ? t('publish.createUpload') : t('publish.submitUpdate')) }}

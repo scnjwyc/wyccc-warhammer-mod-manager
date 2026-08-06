@@ -169,17 +169,17 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "0.9.8")
+        self.assertEqual(APP_VERSION, "0.9.9")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '0.9.8'", frontend_store)
-        self.assertIn("filevers=(0, 9, 7, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '0.9.8')", version_info)
-        self.assertIn("`0.9.8`", readme)
-        self.assertIn("`0.9.8`", readme_en)
+        self.assertIn("appVersion: '0.9.9'", frontend_store)
+        self.assertIn("filevers=(0, 9, 9, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '0.9.9')", version_info)
+        self.assertIn("`0.9.9`", readme)
+        self.assertIn("`0.9.9`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], APP_VERSION)
+        self.assertEqual(update_manifest["version"], "0.9.9")
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
@@ -197,9 +197,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:10]],
-            ["0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7"],
+            ["0.9.9", "0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8"],
         )
-        self.assertEqual(changelog[1]["version"], "0.9.7")
+        self.assertEqual(changelog[1]["version"], "0.9.8")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
@@ -219,7 +219,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         for releases in localized.values():
             self.assertEqual(
                 [release["version"] for release in releases[:10]],
-                ["0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8", "0.8.7"],
+                ["0.9.9", "0.9.8", "0.9.7", "0.9.6", "0.9.5", "0.9.4", "0.9.3", "0.9.2", "0.9.0", "0.8.8"],
             )
             self.assertEqual(len(releases[0]["entries"]), 1)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")
