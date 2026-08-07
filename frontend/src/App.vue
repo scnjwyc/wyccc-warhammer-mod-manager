@@ -5,7 +5,9 @@ import { executeKeyboardShortcut, isUndoShortcut, resolveKeyboardShortcut } from
 import { useAppStore } from './store'
 import ConfirmationModal from './components/ConfirmationModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
+import CompatibilityPatchModal from './components/CompatibilityPatchModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
+import UnitDataModificationModal from './components/UnitDataModificationModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModList from './components/ModList.vue'
@@ -22,6 +24,8 @@ import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 
 const store = useAppStore()
 const showGameDataModification = ref(false)
+const showUnitDataModification = ref(false)
+const showCompatibilityPatch = ref(false)
 const showSettings = ref(false)
 const showShare = ref(false)
 const showTypeManager = ref(false)
@@ -35,6 +39,7 @@ const showDeleteMods = ref(false)
 const deleteModsPreview = ref(null)
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
+const unitDataSearch = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
 const confirmationDialog = reactive({ open: false, message: '', confirmLabel: '', danger: false })
@@ -50,6 +55,50 @@ const supportsWh3Tools = computed(() => activeGame.value === 'warhammer3')
 const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
 const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
 const unitCapFeature = computed(() => store.gameDataFeatures.unit_cap)
+const unitDataModIds = computed(() => (
+  store.unitDataFeatureSubscribed ? store.unitDataModIds : []
+))
+const REQUIRED_NANU_ROR_PACKS = [
+  {
+    pack: '!!_nanu_dynamic_rors.pack',
+    name: "Nanu's Dynamic Regiments of Renown",
+    requirement: 'enabled',
+  },
+  {
+    pack: 'wyccc_nanu_ror_patch.pack',
+    name: "Nanu's Dynamic RORs Ultimate Patch",
+    requirement: 'installed',
+  },
+]
+const nanuRorPackRequirement = computed(() => {
+  const installedByPack = new Map()
+  for (const mod of store.mods) {
+    const pack = String(mod?.pack_name || '')
+    if (pack && !installedByPack.has(pack.toLocaleLowerCase())) {
+      installedByPack.set(pack.toLocaleLowerCase(), mod)
+    }
+  }
+  const activePacks = new Set()
+  for (const id of store.activeIds) {
+    const mod = store.modMap.get(id)
+    const pack = String(mod?.pack_name || '')
+    if (pack) {
+      activePacks.add(pack.toLocaleLowerCase())
+    }
+  }
+  const missing = REQUIRED_NANU_ROR_PACKS
+    .filter(required => {
+      const key = required.pack.toLocaleLowerCase()
+      const installed = installedByPack.has(key)
+      if (required.requirement === 'installed') return !installed
+      return !installed || !activePacks.has(key)
+    })
+    .map(required => {
+      const mod = installedByPack.get(required.pack.toLocaleLowerCase())
+      return mod?.effective_name || mod?.display_name || required.name
+    })
+  return { allEnabled: missing.length === 0, missing }
+})
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
 const inactiveSearchFocusId = computed(() => (
   store.inactiveSearchHighlightActive
@@ -94,6 +143,8 @@ const completeConfirmation = confirmed => {
 watch(supportsWh3Tools, supported => {
   if (supported) return
   showGameDataModification.value = false
+  showUnitDataModification.value = false
+  showCompatibilityPatch.value = false
   showOfficialProfileImport.value = false
   officialProfilePreview.value = null
 })
@@ -136,6 +187,43 @@ const openGameDataModification = () => {
   if (!supportsWh3Tools.value) return
   showGameDataModification.value = true
   void store.refreshGameDataFeatures().catch(() => {})
+}
+
+const openUnitDataModification = async (mod = null) => {
+  if (!supportsWh3Tools.value) return
+  try {
+    await store.refreshUnitDataFeature()
+  } catch (error) {
+    store.notify(error?.message || String(error), 'error')
+    return
+  }
+  if (!store.unitDataFeatureSubscribed) {
+    await requestConfirmation({
+      message: t('gameData.requiredModNotSubscribed', {
+        mod: store.unitDataFeature?.title || 'Dynamic Units Modify',
+      }),
+    })
+    return
+  }
+  unitDataSearch.value = mod
+    ? (mod.effective_name || mod.display_name || mod.pack_name || '')
+    : ''
+  showUnitDataModification.value = true
+}
+
+const saveUnitData = async edits => {
+  await store.saveUnitData(edits)
+  showUnitDataModification.value = false
+}
+
+const openCompatibilityPatch = () => {
+  if (!supportsWh3Tools.value) return
+  showCompatibilityPatch.value = true
+}
+
+const saveCompatibilityPatch = async changes => {
+  await store.saveCompatibilityPatchSettings(changes)
+  showCompatibilityPatch.value = false
 }
 
 const detectPaths = async gameId => {
@@ -329,6 +417,7 @@ const toggleSearchHighlight = async listName => {
 
 const shortcutsBlocked = () => (
   showGameDataModification.value
+  || showUnitDataModification.value
   || showSettings.value
   || showShare.value
   || showTypeManager.value
@@ -829,6 +918,7 @@ onBeforeUnmount(() => {
         :search-match-ids="store.inactiveSearchMatchIds"
         :search-focus-id="inactiveSearchFocusId"
         :drag-source="modDragSource"
+        :unit-data-mod-ids="unitDataModIds"
         @select="store.selectMod"
         @enable="enableSelected"
         @toggle-active="toggleSingleMod"
@@ -836,6 +926,7 @@ onBeforeUnmount(() => {
         @drag-start="startModDrag"
         @drag-end="endModDrag"
         @context-menu="openModContextMenu"
+        @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
         @update:search-tokens="store.setInactiveSearchTokens"
         @update:search-logic="store.setInactiveSearchLogic"
@@ -868,6 +959,7 @@ onBeforeUnmount(() => {
         :search-focus-id="activeSearchFocusId"
         :warning-count="store.warningCount"
         :drag-source="modDragSource"
+        :unit-data-mod-ids="unitDataModIds"
         @select="store.selectMod"
         @disable="disableSelected"
         @toggle-active="toggleSingleMod"
@@ -876,6 +968,7 @@ onBeforeUnmount(() => {
         @drag-end="endModDrag"
         @move="store.move"
         @context-menu="openModContextMenu"
+        @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
         @show-warnings="showWarnings = true"
         @update:search-tokens="store.setActiveSearchTokens"
@@ -906,6 +999,26 @@ onBeforeUnmount(() => {
           @click="openGameDataModification"
         >
           {{ t('app.gameDataModification') }}
+        </button>
+        <button
+          v-if="supportsWh3Tools"
+          type="button"
+          class="secondary-button sync-data-button"
+          :disabled="!!store.busy || store.runtime.running"
+          data-testid="unit-data-modification-button"
+          @click="openUnitDataModification"
+        >
+          {{ t('app.unitDataModification') }}
+        </button>
+        <button
+          v-if="supportsWh3Tools"
+          type="button"
+          class="secondary-button sync-data-button"
+          :disabled="!!store.busy || store.runtime.running"
+          data-testid="compatibility-patch-button"
+          @click="openCompatibilityPatch"
+        >
+          {{ t('app.compatibilityPatch') }}
         </button>
         <button
           type="button"
@@ -976,6 +1089,26 @@ onBeforeUnmount(() => {
       :unit-capacity-mod-name="unitCapFeature.title"
       @close="showGameDataModification = false"
       @save="saveGameDataSettings"
+    />
+
+    <UnitDataModificationModal
+      v-if="supportsWh3Tools"
+      :open="showUnitDataModification"
+      :busy="store.busy"
+      :initial-search="unitDataSearch"
+      @close="showUnitDataModification = false"
+      @save="saveUnitData"
+    />
+
+    <CompatibilityPatchModal
+      v-if="supportsWh3Tools"
+      :open="showCompatibilityPatch"
+      :settings="store.settings"
+      :busy="store.busy"
+      :required-packs-enabled="nanuRorPackRequirement.allEnabled"
+      :missing-packs="nanuRorPackRequirement.missing"
+      @close="showCompatibilityPatch = false"
+      @save="saveCompatibilityPatch"
     />
 
     <UpdateModal

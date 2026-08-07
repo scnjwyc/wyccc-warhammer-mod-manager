@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "0.9.9"
+APP_VERSION = "1.0.0"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
@@ -50,6 +50,8 @@ GAME_DATA_FEATURE_WORKSHOP_ITEMS = {
         "pack_name": "wyccc_dynamic_unit_cap.pack",
     },
 }
+UNIT_DATA_FEATURE_PACK_NAME = "wyccc_dynamic_units_modify.pack"
+UNIT_DATA_FEATURE_TITLE = "Dynamic Units Modify"
 UNIT_MODEL_MULTIPLIER_MIN = 1
 UNIT_MODEL_MULTIPLIER_MAX = 5
 UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN = 1
@@ -60,13 +62,15 @@ INTERNAL_FEATURE_WORKSHOP_IDS = frozenset(
 )
 INTERNAL_RUNTIME_PACK_NAMES = frozenset(
     {
+        "!!!!wyccc_dynamic_ror_compatibility.pack",
         "!!!!wyccc_game_data_patch.pack",
         "!!!!wyccc_runtime_options.pack",
+        "!!!!wyccc_unit_data_patch.pack",
     }
 )
 INTERNAL_FEATURE_PACK_NAMES = frozenset(
     item["pack_name"].casefold() for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
-) | INTERNAL_RUNTIME_PACK_NAMES
+) | INTERNAL_RUNTIME_PACK_NAMES | {UNIT_DATA_FEATURE_PACK_NAME.casefold()}
 
 CORE_VANILLA_PACKS = {
     "data.pack",

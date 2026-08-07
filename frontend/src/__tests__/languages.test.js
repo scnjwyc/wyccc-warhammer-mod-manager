@@ -192,6 +192,27 @@ describe('built-in interface languages', () => {
     }
   })
 
+  it('translates the Dynamic RoRs compatibility patch option in every language', () => {
+    const expected = {
+      'zh-CN': ['当前已启用的 MOD', '自动校验并生成'],
+      'en-US': ['currently enabled MODs', 'validated and generated'],
+      'ko-KR': ['현재 활성화된 MOD', '자동 검증하고 생성'],
+      'ru-RU': ['включённых MOD', 'проверяется и создаётся'],
+      'ja-JP': ['現在有効な MOD', '自動検証・生成'],
+      'es-ES': ['MOD habilitados actualmente', 'valida y genera'],
+    }
+    for (const [language, terms] of Object.entries(expected)) {
+      applyInterfaceLanguage(language)
+      const copy = t('compatibilityPatch.runtimeNote')
+      expect(t('app.compatibilityPatch'), language).not.toBe('app.compatibilityPatch')
+      expect(t('compatibilityPatch.title'), language).not.toBe('compatibilityPatch.title')
+      expect(t('compatibilityPatch.dynamicRorDescription'), language).toContain(terms[0])
+      expect(t('compatibilityPatch.dynamicRorTitle'), language).toContain('Nanu\u0027s Dynamic RoRs')
+      expect(copy, language).toContain(terms[1])
+    }
+    applyInterfaceLanguage('zh-CN')
+  })
+
   it('switches visible text instead of only changing the document language', () => {
     const labels = new Map()
     for (const language of ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP', 'es-ES']) {
@@ -243,6 +264,26 @@ describe('built-in interface languages', () => {
     expect(message).toContain('The backend operation failed:')
     expect(message).toContain('MOD "WYD" [pack: wyd.pack, source: Workshop]')
     expect(message).toContain('db\\\\battle_entities_tables\\\\wyd_date')
+  })
+
+  it('shows the details of recurring scan notices in English', () => {
+    applyInterfaceLanguage('en-US')
+    expect(localizeBackendMessage(
+      '未找到 data/manifest.txt，原版 Pack 排除使用最小内置清单',
+      'warnings.genericScan',
+    )).toBe(
+      'data/manifest.txt was not found; the built-in minimal vanilla Pack list is being used for exclusion.',
+    )
+    expect(localizeBackendMessage(
+      '无法扫描目录 C:\\Games\\Warhammer 3\\data：Access is denied',
+      'warnings.genericScan',
+    )).toBe('Unable to scan directory C:\\Games\\Warhammer 3\\data: Access is denied')
+  })
+
+  it('does not hide an unrecognized scan notice behind the generic message', () => {
+    applyInterfaceLanguage('en-US')
+    const message = localizeBackendMessage('扫描器自定义提示：example detail', 'warnings.genericScan')
+    expect(message).toBe('A notice occurred while scanning: 扫描器自定义提示：example detail')
   })
 
   it('keeps each static interface catalog free of unrelated writing systems', () => {

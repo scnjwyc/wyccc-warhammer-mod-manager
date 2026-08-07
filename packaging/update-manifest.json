@@ -1,29 +1,38 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "0.9.9",
-  "published_at": "2026-08-06",
+  "version": "1.0.0",
+  "published_at": "2026-08-07",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.9/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.0/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/0.9.9/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/0.9.9/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.0/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.0/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "267edd8c55aae9866da1d1d81cd92f5d029d6ed7e6c12308e70a927b1742404c",
-    "size": 62480826
+    "sha256": "97b78d8b58f9d9106f5fa135580dff68c1cece075e7fd8ad936caa8731e3fbc0",
+    "size": 62557954
   },
   "changelog": [
     {
-      "title": "修复",
+      "title": "新增",
       "changes": [
         {
-          "type": "fix",
-          "text": "提高单位规模修改功能对SFO等MOD的兼容性。"
+          "type": "feature",
+          "text": "单位数据修改功能，可以修改原版及所有MOD单位的各种属性，基于当前已启用的所有MOD计算后的最终数值，所以兼容所有MOD，也兼容游戏数据修改功能。"
         },
         {
-          "type": "fix",
-          "text": "提高MOD上传与更新功能的稳定性。"
+          "type": "feature",
+          "text": "兼容补丁功能，目前已有的补丁：Nanu's Dynamic RORs；开启后会自动为已启用的所有MOD生成Nanu's Dynamic RORs兼容补丁。"
+        }
+      ]
+    },
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "优化非中文错误提示文本。"
         }
       ]
     }

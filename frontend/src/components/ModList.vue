@@ -28,6 +28,7 @@ const props = defineProps({
   searchMatchIds: { type: Array, default: () => [] },
   searchFocusId: { type: String, default: '' },
   dragSource: { type: Object, default: null },
+  unitDataModIds: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits([
@@ -47,6 +48,7 @@ const emit = defineEmits([
   'toggle-search-highlight',
   'update:sort-mode',
   'update:sort-descending',
+  'open-unit-data',
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
@@ -71,6 +73,7 @@ const setRowElement = (modId, element) => {
 const warningsOf = mod => (mod.warnings || []).filter(
   warning => props.active || warning?.code !== 'missing_dependency',
 )
+const canOpenUnitData = mod => props.unitDataModIds.includes(mod.id)
 const targetList = () => (props.active ? 'active' : 'inactive')
 const currentDragSource = () => (
   props.dragSource || (draggingIds.value.length
@@ -368,6 +371,15 @@ watch(
 
         <span v-if="active" class="row-actions">
           <button
+            v-if="canOpenUnitData(mod)"
+            type="button"
+            class="icon-button unit-data-action"
+            :title="t('list.openUnitData')"
+            :aria-label="t('list.openUnitData')"
+            :data-testid="`open-unit-data-${mod.id}`"
+            @click.stop="emit('open-unit-data', mod)"
+          >⚙</button>
+          <button
             type="button"
             class="icon-button"
             :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveUp')"
@@ -388,13 +400,23 @@ watch(
             @click.stop="emit('disable', mod.id)"
           >−</button>
         </span>
-        <button
-          v-else
-          type="button"
-          class="enable-button"
-          :title="t('list.enable')"
-          @click.stop="emit('enable', mod.id)"
-        >＋</button>
+        <span v-else class="row-actions">
+          <button
+            v-if="canOpenUnitData(mod)"
+            type="button"
+            class="icon-button unit-data-action"
+            :title="t('list.openUnitData')"
+            :aria-label="t('list.openUnitData')"
+            :data-testid="`open-unit-data-${mod.id}`"
+            @click.stop="emit('open-unit-data', mod)"
+          >⚙</button>
+          <button
+            type="button"
+            class="enable-button"
+            :title="t('list.enable')"
+            @click.stop="emit('enable', mod.id)"
+          >＋</button>
+        </span>
       </div>
 
       <div

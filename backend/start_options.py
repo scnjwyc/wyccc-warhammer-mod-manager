@@ -6,6 +6,7 @@ import os
 import struct
 import tempfile
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -22,6 +23,7 @@ from .game_data import (
     GameDataEntry,
     build_game_data_entries,
 )
+from .dynamic_ror_compatibility import build_dynamic_ror_compatibility_entries
 from .game_data_settings import (
     normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
@@ -30,10 +32,13 @@ from .game_data_settings import (
 )
 from .models import ModAsset
 from .scanner import read_pack_type
+from .unit_data import build_unit_data_entries
 
 
 RUNTIME_PACK_NAME = "!!!!wyccc_runtime_options.pack"
 GAME_DATA_PATCH_NAME = "!!!!wyccc_game_data_patch.pack"
+UNIT_DATA_PATCH_NAME = "!!!!wyccc_unit_data_patch.pack"
+DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME = "!!!!wyccc_dynamic_ror_compatibility.pack"
 PERMISSIONS_PREFIX = "db\\units_custom_battle_permissions_tables\\"
 PERMISSIONS_ENTRY = f"{PERMISSIONS_PREFIX}!!!!wyccc_runtime"
 PERMISSIONS_VERSION = 11
@@ -571,6 +576,7 @@ def resolve_game_data_source_specs(
     data_path: str | Path,
     assets: Mapping[str, ModAsset],
     active_ids: Sequence[str],
+    unit_data_patch_path: str | Path | None = None,
 ) -> tuple[GameDataSourceSpec, ...]:
     """Resolve every Pack that can affect a game-data patch for this launch.
 
@@ -617,14 +623,25 @@ def resolve_game_data_source_specs(
                 seen_movie_paths.add(path_key)
                 movie_paths.append(path)
 
-    specs: list[GameDataSourceSpec] = [
+    specs: list[GameDataSourceSpec] = []
+    if unit_data_patch_path:
+        resolved_patch = Path(unit_data_patch_path).resolve(strict=False)
+        if resolved_patch.is_file():
+            specs.append(
+                GameDataSourceSpec(
+                    path=resolved_patch,
+                    asset=None,
+                    role="unit_data_patch",
+                )
+            )
+    specs.extend(
         GameDataSourceSpec(
             path=path,
             asset=asset_by_path.get(_path_key(path)),
             role="auto_movie",
         )
         for path in movie_paths
-    ]
+    )
     specs.extend(
         GameDataSourceSpec(
             path=path,
@@ -696,8 +713,19 @@ def collect_game_data_source_snapshot(
     data_path: str | Path,
     assets: Mapping[str, ModAsset],
     active_ids: Sequence[str],
+    unit_data_patch_path: str | Path | None = None,
 ) -> GameDataSourceSnapshot:
-    specs = resolve_game_data_source_specs(data_path, assets, active_ids)
+    specs = resolve_game_data_source_specs(
+        data_path,
+        assets,
+        active_ids,
+        unit_data_patch_path=unit_data_patch_path,
+    )
+    workers = min(8, max(1, len(specs)))
+    if workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            entries = list(pool.map(_read_game_data_source_snapshot_entry, specs))
+        return GameDataSourceSnapshot(tuple(entries))
     return GameDataSourceSnapshot(
         tuple(_read_game_data_source_snapshot_entry(spec) for spec in specs)
     )
@@ -716,6 +744,8 @@ def _game_data_source_name(
     asset: ModAsset | None,
     role: str = "explicit",
 ) -> str:
+    if role == "unit_data_patch":
+        return "单位数据修改补丁"
     if role == "auto_movie":
         if asset is None:
             return f'自动加载 Movie Pack "{path.name}"'
@@ -742,6 +772,7 @@ def build_game_data_patch(
     subscribed_workshop_ids: Iterable[str] = (),
     *,
     source_snapshot: GameDataSourceSnapshot | None = None,
+    unit_data_patch_path: str | Path | None = None,
 ) -> dict[str, Any]:
     effective_settings = _effective_game_data_settings(settings, subscribed_workshop_ids)
     output_path = Path(output_dir) / GAME_DATA_PATCH_NAME
@@ -758,6 +789,7 @@ def build_game_data_patch(
         data_path,
         assets,
         active_ids,
+        unit_data_patch_path=unit_data_patch_path,
     )
     sources = snapshot.sources
     diagnostics = snapshot.diagnostics()
@@ -779,6 +811,95 @@ def build_game_data_patch(
         "options": _enabled_game_data_options(effective_settings),
         "entry_count": len(entries),
         "game_data": game_data.stats,
+        "source_diagnostics": diagnostics,
+    }
+
+
+def build_unit_data_patch(
+    output_dir: Path,
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+    settings: dict[str, Any],
+    edits: dict[str, dict[str, Any]],
+    *,
+    source_snapshot: GameDataSourceSnapshot | None = None,
+) -> dict[str, Any]:
+    """Write the hidden unit-data patch pack when per-unit edits exist."""
+    output_path = Path(output_dir) / UNIT_DATA_PATCH_NAME
+    if not edits:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": {"edited_unit_count": 0, "disabled_unit_count": 0, "entry_count": 0},
+        }
+    snapshot = source_snapshot or collect_game_data_source_snapshot(
+        data_path,
+        assets,
+        active_ids,
+    )
+    built = build_unit_data_entries(snapshot.sources, settings, edits)
+    entries = [PackEntry(entry.name, entry.payload) for entry in built.entries]
+    if not entries:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": dict(built.stats),
+        }
+    write_pfh5_pack(output_path, entries)
+    return {
+        "path": str(output_path.resolve(strict=False)),
+        "entry_count": len(entries),
+        "stats": dict(built.stats),
+    }
+
+
+def build_dynamic_ror_compatibility_patch(
+    output_dir: Path,
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+    enabled: bool,
+    *,
+    source_snapshot: GameDataSourceSnapshot | None = None,
+) -> dict[str, Any]:
+    """Write the launch-time compatibility Pack for Nanu's Dynamic RoRs."""
+    output_path = Path(output_dir) / DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME
+    if not enabled:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": {
+                "dynamic_ror_detected": 0,
+                "eligible_mod_unit_count": 0,
+                "patched_unit_count": 0,
+            },
+        }
+    snapshot = source_snapshot or collect_game_data_source_snapshot(
+        data_path,
+        assets,
+        active_ids,
+    )
+    built = build_dynamic_ror_compatibility_entries(snapshot.sources)
+    entries = [PackEntry(entry.name, entry.payload) for entry in built.entries]
+    if not entries or int(built.stats.get("patched_unit_count", 0)) == 0:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": dict(built.stats),
+            "source_diagnostics": snapshot.diagnostics(),
+        }
+    write_pfh5_pack(output_path, entries)
+    diagnostics = snapshot.diagnostics()
+    diagnostics["output_entry_names"] = [entry.name for entry in entries]
+    return {
+        "path": str(output_path.resolve(strict=False)),
+        "entry_count": len(entries),
+        "stats": dict(built.stats),
         "source_diagnostics": diagnostics,
     }
 

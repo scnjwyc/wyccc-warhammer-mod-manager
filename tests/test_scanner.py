@@ -11,7 +11,12 @@ from backend.constants import (
     PACK_TYPE_MOVIE,
 )
 from backend.models import GamePaths
-from backend.scanner import ModScanner, read_pack_dependencies, read_pack_type
+from backend.scanner import (
+    ModScanner,
+    read_pack_dependencies,
+    read_pack_type,
+    read_unit_data_tables,
+)
 from backend.start_options import GAME_DATA_PATCH_NAME, RUNTIME_PACK_NAME
 from tests.helpers import write_pack
 
@@ -213,6 +218,22 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(read_pack_type(normal), PACK_TYPE_MOD)
             self.assertEqual(read_pack_type(movie), PACK_TYPE_MOVIE)
             self.assertEqual(read_pack_type(invalid), "unknown")
+
+    def test_reads_unit_data_table_families_from_pack_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = write_pack(
+                Path(temporary) / "units.pack",
+                entries=[
+                    ("db\\main_units_tables\\data__", b"main"),
+                    ("db/land_units_tables/data__", b"land"),
+                    ("db\\other_tables\\data__", b"other"),
+                ],
+            )
+
+            self.assertEqual(
+                read_unit_data_tables(pack),
+                ["land_units_tables", "main_units_tables"],
+            )
 
     def test_scans_sources_excludes_manifest_and_keeps_all_workshop_packs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

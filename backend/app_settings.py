@@ -33,7 +33,7 @@ SYSTEM_LANGUAGE_MAP = {
     "ja": "ja-JP",
     "es": "es-ES",
 }
-SETTINGS_SCHEMA_VERSION = 18
+SETTINGS_SCHEMA_VERSION = 19
 
 DEFAULT_KEYBOARD_SHORTCUTS = {
     "open-workshop": "Shift+W",
@@ -222,6 +222,7 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "scale_lord_hero_health": False,
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
+        "dynamic_ror_compatibility_patch_enabled": False,
         "check_updates_automatically": True,
         "workshop_page_open_counts": {"browser": 0, "client": 0},
         "last_update_check_at": 0,
@@ -471,6 +472,7 @@ class SettingsService:
             "scale_lord_hero_health",
             "disable_unit_friendly_fire",
             "disable_spell_friendly_fire",
+            "dynamic_ror_compatibility_patch_enabled",
             "check_updates_automatically",
         ):
             result[key] = bool(result.get(key, default_settings()[key]))

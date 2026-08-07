@@ -134,6 +134,23 @@ describe('ModList previews and source collisions', () => {
     expect(wrapper.emitted('toggle-active')).toHaveLength(1)
   })
 
+  it('shows a unit-data gear only for eligible MODs and emits the MOD on click', async () => {
+    const second = { ...duplicateMod, id: 'second', pack_name: 'second.pack' }
+    const wrapper = mount(ModList, {
+      props: {
+        title: 'Mods',
+        mods: [duplicateMod, second],
+        unitDataModIds: [duplicateMod.id],
+      },
+    })
+
+    const gear = wrapper.get(`[data-testid="open-unit-data-${duplicateMod.id}"]`)
+    await gear.trigger('click')
+
+    expect(wrapper.emitted('open-unit-data')).toEqual([[duplicateMod]])
+    expect(wrapper.find(`[data-testid="open-unit-data-${second.id}"]`).exists()).toBe(false)
+  })
+
   it('emits only the current visible list for Ctrl+A and leaves editable controls alone', async () => {
     const second = { ...duplicateMod, id: 'second', pack_name: 'second.pack' }
     const wrapper = mount(ModList, {

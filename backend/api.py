@@ -31,9 +31,13 @@ from .constants import (
     APP_NAME,
     APP_VERSION,
     GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    INTERNAL_FEATURE_PACK_NAMES,
     INTERNAL_FEATURE_WORKSHOP_IDS,
+    INTERNAL_RUNTIME_PACK_NAMES,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
+    UNIT_DATA_FEATURE_PACK_NAME,
+    UNIT_DATA_FEATURE_TITLE,
 )
 from .file_operations import (
     build_delete_preview,
@@ -64,9 +68,23 @@ from .share import (
 from .workshop_collections import fetch_workshop_collection
 from .storage import StateRepository
 from .start_options import (
+    DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
     GAME_DATA_PATCH_NAME,
     RUNTIME_PACK_NAME,
+    UNIT_DATA_PATCH_NAME,
     build_runtime_options_pack,
+    collect_game_data_source_snapshot,
+)
+from .dynamic_ror_patch_state import ensure_dynamic_ror_compatibility_patch
+from .unit_data import (
+    _display_source_name,
+    build_unit_table_snapshot,
+    collect_unit_name_map,
+)
+from .unit_data_state import (
+    ensure_unit_data_patch,
+    load_unit_data_edits,
+    save_unit_data_edits,
 )
 from .steamworks_bridge import (
     SteamworksBridgeError,
@@ -164,7 +182,11 @@ class API:
             "save_settings": self._save_settings,
             "set_search_highlight_mode": self._set_search_highlight_mode,
             "save_game_data_settings": self._save_game_data_settings,
+            "save_compatibility_patch_settings": self._save_compatibility_patch_settings,
             "get_game_data_feature_status": self._get_game_data_feature_status,
+            "get_unit_data_feature_status": self._get_unit_data_feature_status,
+            "get_unit_data_list": self._get_unit_data_list,
+            "save_unit_data_edits": self._save_unit_data_edits,
             "check_for_updates": self._check_for_updates,
             "download_update": self._download_update,
             "install_update": self._install_update,
@@ -347,7 +369,39 @@ class API:
             "show_changelog": private_settings.get("last_seen_app_version") != APP_VERSION,
             "auto_update_due": self.update_service.should_check_automatically(private_settings),
             "update_install_error": self.update_service.consume_install_error(),
+            "unit_data_feature": self._unit_data_feature_status(paths),
         }
+
+    @staticmethod
+    def _unit_data_feature_status(paths: GamePaths) -> dict[str, Any]:
+        workshop_path = Path(paths.workshop_path) if paths.workshop_path else None
+        subscribed = False
+        if workshop_path and workshop_path.is_dir():
+            try:
+                for item_dir in workshop_path.iterdir():
+                    if not item_dir.is_dir() or not item_dir.name.isdigit():
+                        continue
+                    if any(
+                        item.is_file()
+                        and item.name.casefold() == UNIT_DATA_FEATURE_PACK_NAME.casefold()
+                        for item in item_dir.iterdir()
+                    ):
+                        subscribed = True
+                        break
+            except OSError:
+                subscribed = False
+        return {
+            "pack_name": UNIT_DATA_FEATURE_PACK_NAME,
+            "title": UNIT_DATA_FEATURE_TITLE,
+            "subscribed": subscribed,
+        }
+
+    def _get_unit_data_feature_status(self) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_game_data_modification",
+            "Unit data modification",
+        )
+        return self._unit_data_feature_status(self.settings_service.resolve_game_paths())
 
     def _get_game_data_feature_status(self) -> dict[str, Any]:
         self._require_game_capability("supports_game_data_modification", "Game data modification")
@@ -530,6 +584,119 @@ class API:
         filtered = self._game_data_setting_changes(changes)
         self.settings_service.save(filtered)
         return {"settings": self.settings_service.get_public()}
+
+    def _save_compatibility_patch_settings(
+        self,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_game_data_modification",
+            "Compatibility patch",
+        )
+        if not isinstance(changes, dict):
+            raise ValueError("兼容补丁设置必须是对象")
+        value = changes.get("dynamic_ror_compatibility_patch_enabled", False)
+        if isinstance(value, str):
+            enabled = value.strip().casefold() in {"1", "true", "yes", "on"}
+        else:
+            enabled = bool(value)
+        self.settings_service.save(
+            {"dynamic_ror_compatibility_patch_enabled": enabled}
+        )
+        return {"settings": self.settings_service.get_public()}
+
+    def _current_enabled_mod_ids(self) -> list[str]:
+        game_id = self._active_game().id
+        current_playset = self.state_repository.get_current_playset(game_id)
+        raw_ids = list(current_playset.get("mod_ids") or [])
+        return self._canonicalize_mod_ids(raw_ids)
+
+    def _unit_data_source_ids(self) -> list[str]:
+        """Enabled mods excluding Wyccc's internal runtime/feature Packs so the
+        unit table and its stats never include the game-data patch itself."""
+        excluded = {
+            str(name).casefold()
+            for name in INTERNAL_FEATURE_PACK_NAMES
+        } | {
+            str(name).casefold()
+            for name in INTERNAL_RUNTIME_PACK_NAMES
+        }
+        excluded.add(UNIT_DATA_PATCH_NAME.casefold())
+        result: list[str] = []
+        for mod_id in self._current_enabled_mod_ids():
+            asset = self._assets.get(mod_id)
+            if asset is None:
+                continue
+            if Path(asset.path).name.casefold() in excluded:
+                continue
+            result.append(mod_id)
+        return result
+
+    def _get_unit_data_list(self) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_game_data_modification",
+            "Unit data modification",
+        )
+        paths = self.settings_service.resolve_game_paths()
+        if not paths.data_path:
+            raise ValueError("尚未设置游戏数据目录")
+        active_ids = self._unit_data_source_ids()
+        settings = self.settings_service.get()
+        snapshot = collect_game_data_source_snapshot(
+            paths.data_path,
+            self._assets,
+            active_ids,
+        )
+        edits = load_unit_data_edits(self.data_dir / "runtime")
+        mod_loc_files = [
+            Path(self._assets[mod_id].path)
+            for mod_id in active_ids
+            if mod_id in self._assets
+            and Path(self._assets[mod_id].path).is_file()
+        ]
+        name_map, culture_map = collect_unit_name_map(
+            paths.data_path,
+            mod_loc_files,
+            self.interface_language(),
+        )
+        result = build_unit_table_snapshot(
+            snapshot.sources,
+            settings,
+            edits,
+            name_map=name_map,
+            culture_map=culture_map,
+            source_names=[
+                _display_source_name(source) for source in snapshot.sources
+            ],
+        )
+        result["source_count"] = len(snapshot.entries)
+        result["source_pack_names"] = [
+            entry.spec.path.name for entry in snapshot.entries
+        ]
+        return result
+
+    def _save_unit_data_edits(self, edits: dict[str, Any]) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_game_data_modification",
+            "Unit data modification",
+        )
+        if not isinstance(edits, dict):
+            raise ValueError("单位数据修改必须是对象")
+        paths = self.settings_service.resolve_game_paths()
+        active_ids = self._unit_data_source_ids()
+        settings = self.settings_service.get()
+        saved = save_unit_data_edits(self.data_dir / "runtime", edits)
+        patch = ensure_unit_data_patch(
+            output_dir=self.data_dir / "runtime",
+            data_path=paths.data_path,
+            assets=self._assets,
+            active_ids=active_ids,
+            playset_id=self.state_repository.get_current_playset_id(
+                self._active_game().id
+            ),
+            settings=settings,
+        )
+        return {**saved, "patch": patch}
 
     @staticmethod
     def _game_data_setting_changes(changes: dict[str, Any]) -> dict[str, Any]:
@@ -740,6 +907,7 @@ class API:
                     # A filesystem event arriving during this scan must remain
                     # visible to the frontend so it schedules one follow-up scan.
                     "mod_revision": scan_revision,
+                    "unit_data_feature": self._unit_data_feature_status(paths),
                 }
             )
             return payload
@@ -942,6 +1110,31 @@ class API:
                 )
             subscription_state = self._resolve_game_data_subscription_state(settings)
             try:
+                unit_data_patch = ensure_unit_data_patch(
+                    output_dir=self.data_dir / "runtime",
+                    data_path=paths.data_path,
+                    assets=self._assets,
+                    active_ids=saved["plan"]["ordered_mod_ids"],
+                    playset_id=self.state_repository.get_current_playset_id(paths.game_id),
+                    settings=settings,
+                )
+            except Exception:
+                logger.exception("Unit data patch status=generation_failed")
+                raise
+            logger.info(
+                "Unit data patch status=%s fingerprint=%s entries=%s stats=%s",
+                unit_data_patch["status"],
+                str(unit_data_patch.get("fingerprint") or "")[:12],
+                unit_data_patch.get("entry_count", 0),
+                unit_data_patch.get("stats", {}),
+            )
+            data_root = Path(paths.data_path).resolve(strict=False)
+            unit_data_path = self._stage_runtime_pack_in_data(
+                str(unit_data_patch.get("path") or ""),
+                data_root,
+                UNIT_DATA_PATCH_NAME,
+            )
+            try:
                 game_data_patch = ensure_game_data_patch(
                     output_dir=self.data_dir / "runtime",
                     data_path=paths.data_path,
@@ -950,6 +1143,7 @@ class API:
                     playset_id=self.state_repository.get_current_playset_id(paths.game_id),
                     settings=settings,
                     subscription_state=subscription_state,
+                    unit_data_patch_path=unit_data_path,
                 )
             except Exception:
                 logger.exception("Game data patch status=generation_failed")
@@ -965,6 +1159,30 @@ class API:
                 game_data_patch.get("source_diagnostics", {}).get("auto_movie_pack_names", []),
                 game_data_patch.get("source_diagnostics", {}).get("output_table_names", []),
             )
+            try:
+                dynamic_ror_patch = ensure_dynamic_ror_compatibility_patch(
+                    output_dir=self.data_dir / "runtime",
+                    data_path=paths.data_path,
+                    assets=self._assets,
+                    active_ids=saved["plan"]["ordered_mod_ids"],
+                    playset_id=self.state_repository.get_current_playset_id(paths.game_id),
+                    settings=settings,
+                )
+            except Exception:
+                logger.exception(
+                    "Dynamic RoR compatibility patch status=generation_failed"
+                )
+                raise
+            logger.info(
+                "Dynamic RoR compatibility patch status=%s fingerprint=%s entries=%s stats=%s sources=%s",
+                dynamic_ror_patch["status"],
+                str(dynamic_ror_patch.get("fingerprint") or "")[:12],
+                dynamic_ror_patch.get("entry_count", 0),
+                dynamic_ror_patch.get("stats", {}),
+                dynamic_ror_patch.get("source_diagnostics", {}).get(
+                    "source_pack_names", []
+                ),
+            )
             runtime = build_runtime_options_pack(
                 self.data_dir / "runtime",
                 paths.data_path,
@@ -972,11 +1190,15 @@ class API:
                 saved["plan"]["ordered_mod_ids"],
                 settings,
             )
-            data_root = Path(paths.data_path).resolve(strict=False)
             game_data_path = self._stage_runtime_pack_in_data(
                 str(game_data_patch.get("path") or ""),
                 data_root,
                 GAME_DATA_PATCH_NAME,
+            )
+            dynamic_ror_path = self._stage_runtime_pack_in_data(
+                str(dynamic_ror_patch.get("path") or ""),
+                data_root,
+                DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
             )
             runtime_path = self._stage_runtime_pack_in_data(
                 str(runtime.get("path") or ""),
@@ -988,6 +1210,19 @@ class API:
 
             internal_assets: dict[str, ModAsset] = {}
             internal_ids: list[str] = []
+            unit_data_id = ""
+            if unit_data_path is not None:
+                unit_data_id = "runtime:unit-data-patch"
+                internal_assets[unit_data_id] = ModAsset(
+                    id=unit_data_id,
+                    pack_name=UNIT_DATA_PATCH_NAME,
+                    display_name="Wyccc 单位数据补丁",
+                    path=str(unit_data_path),
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
+                )
+                internal_ids.append(unit_data_id)
             game_data_id = ""
             if game_data_path is not None:
                 game_data_id = "runtime:game-data-patch"
@@ -1001,6 +1236,19 @@ class API:
                     sources=[SOURCE_DATA],
                 )
                 internal_ids.append(game_data_id)
+            dynamic_ror_id = ""
+            if dynamic_ror_path is not None:
+                dynamic_ror_id = "runtime:dynamic-ror-compatibility"
+                internal_assets[dynamic_ror_id] = ModAsset(
+                    id=dynamic_ror_id,
+                    pack_name=DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
+                    display_name="Wyccc Dynamic RoR 兼容补丁",
+                    path=str(dynamic_ror_path),
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
+                )
+                internal_ids.append(dynamic_ror_id)
             if runtime_path is not None:
                 runtime_id = "runtime:start-options"
                 internal_assets[runtime_id] = ModAsset(
@@ -1027,11 +1275,25 @@ class API:
                 self.load_order._atomic_write(Path(runtime_plan.target_path), runtime_plan.content)
                 launch_plan = runtime_plan.to_dict()
                 launch_path = runtime_plan.target_path
+                if unit_data_id in runtime_plan.ordered_mod_ids:
+                    logger.info(
+                        "Unit data patch launch placement pack=%s position=%s/%s",
+                        UNIT_DATA_PATCH_NAME,
+                        runtime_plan.ordered_mod_ids.index(unit_data_id) + 1,
+                        len(runtime_plan.ordered_mod_ids),
+                    )
                 if game_data_id in runtime_plan.ordered_mod_ids:
                     logger.info(
                         "Game data patch launch placement pack=%s position=%s/%s",
                         GAME_DATA_PATCH_NAME,
                         runtime_plan.ordered_mod_ids.index(game_data_id) + 1,
+                        len(runtime_plan.ordered_mod_ids),
+                    )
+                if dynamic_ror_id in runtime_plan.ordered_mod_ids:
+                    logger.info(
+                        "Dynamic RoR compatibility patch launch placement pack=%s position=%s/%s",
+                        DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
+                        runtime_plan.ordered_mod_ids.index(dynamic_ror_id) + 1,
                         len(runtime_plan.ordered_mod_ids),
                     )
             process = launch_game(
@@ -1045,7 +1307,9 @@ class API:
             return {
                 **saved,
                 "process": process,
+                "unit_data_patch": unit_data_patch,
                 "game_data_patch": game_data_patch,
+                "dynamic_ror_compatibility_patch": dynamic_ror_patch,
                 "runtime_options": runtime,
                 "launch_plan": launch_plan,
                 "save": selected_save,
@@ -1073,6 +1337,13 @@ class API:
         return {
             **saved,
             "process": process,
+            "unit_data_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "entry_count": 0,
+                "stats": {},
+            },
             "game_data_patch": {
                 "status": "unsupported",
                 "path": "",
@@ -1081,6 +1352,13 @@ class API:
                 "entry_count": 0,
                 "options": [],
                 "game_data": {},
+            },
+            "dynamic_ror_compatibility_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "entry_count": 0,
+                "stats": {},
             },
             "runtime_options": {
                 "path": "",

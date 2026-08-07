@@ -9,6 +9,23 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.0",
+        "date": "2026-08-07",
+        "entries": (
+            (
+                "v100_added_title",
+                (
+                    ("feature", "v100_unit_data_modification"),
+                    ("feature", "v100_compatibility_patch"),
+                ),
+            ),
+            (
+                "v100_adjusted_title",
+                (("improvement", "v100_non_chinese_error_messages"),),
+            ),
+        ),
+    },
+    {
         "version": "0.9.9",
         "date": "2026-08-06",
         "entries": (
@@ -455,6 +472,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v100_added_title": "新增",
+        "v100_unit_data_modification": "单位数据修改功能，可以修改原版及所有MOD单位的各种属性，基于当前已启用的所有MOD计算后的最终数值，所以兼容所有MOD，也兼容游戏数据修改功能。",
+        "v100_compatibility_patch": "兼容补丁功能，目前已有的补丁：Nanu's Dynamic RORs；开启后会自动为已启用的所有MOD生成Nanu's Dynamic RORs兼容补丁。",
+        "v100_adjusted_title": "调整",
+        "v100_non_chinese_error_messages": "优化非中文错误提示文本。",
         "v099_fixed_title": "修复",
         "v099_unit_scale_sfo_compatibility": "提高单位规模修改功能对SFO等MOD的兼容性。",
         "v099_workshop_upload_stability": "提高MOD上传与更新功能的稳定性。",
@@ -630,6 +652,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v100_added_title": "Added",
+        "v100_unit_data_modification": "Added Unit Data Modification, which can edit various attributes of vanilla and MOD units using the final values calculated from all currently enabled MODs, so it is compatible with all MODs and with Game Data Modification.",
+        "v100_compatibility_patch": "Added Compatibility Patch. The available patch is Nanu's Dynamic RORs; when enabled, it automatically generates a Nanu's Dynamic RORs compatibility patch for all currently enabled MODs.",
+        "v100_adjusted_title": "Adjusted",
+        "v100_non_chinese_error_messages": "Improved non-Chinese error message text.",
         "v099_fixed_title": "Fixed",
         "v099_unit_scale_sfo_compatibility": "Improved compatibility between unit-scale modification and SFO and other MODs.",
         "v099_workshop_upload_stability": "Improved the stability of MOD uploads and Workshop updates.",
@@ -805,6 +832,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v100_added_title": "추가",
+        "v100_unit_data_modification": "유닛 데이터 수정 기능을 추가했습니다. 현재 활성화된 모든 MOD를 계산한 최종 수치를 기준으로 기본 유닛과 모든 MOD 유닛의 다양한 속성을 수정할 수 있어 모든 MOD 및 게임 데이터 수정 기능과 호환됩니다.",
+        "v100_compatibility_patch": "호환 패치 기능을 추가했습니다. 현재 제공되는 패치는 Nanu's Dynamic RORs이며, 활성화하면 현재 활성화된 모든 MOD에 대한 Nanu's Dynamic RORs 호환 패치를 자동으로 생성합니다.",
+        "v100_adjusted_title": "조정",
+        "v100_non_chinese_error_messages": "중국어가 아닌 오류 메시지 텍스트를 개선했습니다.",
         "v099_fixed_title": "수정",
         "v099_unit_scale_sfo_compatibility": "SFO 등 MOD와의 유닛 규모 조정 호환성을 개선했습니다.",
         "v099_workshop_upload_stability": "MOD 업로드 및 Workshop 업데이트 기능의 안정성을 개선했습니다.",
@@ -980,6 +1012,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v100_added_title": "Добавлено",
+        "v100_unit_data_modification": "Добавлено изменение данных отрядов: можно менять различные свойства исходных и MOD-отрядов на основе итоговых значений, рассчитанных по всем включённым MOD, поэтому функция совместима со всеми MOD и с изменением игровых данных.",
+        "v100_compatibility_patch": "Добавлены патчи совместимости. Сейчас доступен патч для Nanu's Dynamic RORs; после включения он автоматически создаёт патч совместимости для всех включённых MOD.",
+        "v100_adjusted_title": "Изменено",
+        "v100_non_chinese_error_messages": "Улучшен текст сообщений об ошибках не на китайском языке.",
         "v099_fixed_title": "Исправлено",
         "v099_unit_scale_sfo_compatibility": "Улучшена совместимость изменения масштаба отрядов с SFO и другими модами.",
         "v099_workshop_upload_stability": "Повышена стабильность загрузки MOD и обновления в Мастерской Steam.",
@@ -1155,6 +1192,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v100_added_title": "追加",
+        "v100_unit_data_modification": "ユニットデータ変更機能を追加しました。有効なすべてのMODを計算した最終値を基に、元のユニットとすべてのMODユニットの各種属性を変更できるため、すべてのMODおよびゲームデータ変更機能に対応します。",
+        "v100_compatibility_patch": "互換パッチ機能を追加しました。現在利用できるパッチは Nanu's Dynamic RORs です。有効にすると、有効なすべてのMOD向けに Nanu's Dynamic RORs 互換パッチを自動生成します。",
+        "v100_adjusted_title": "調整",
+        "v100_non_chinese_error_messages": "中国語以外のエラーメッセージを改善しました。",
         "v099_fixed_title": "修正",
         "v099_unit_scale_sfo_compatibility": "SFO などの MOD に対するユニット規模変更の互換性を改善しました。",
         "v099_workshop_upload_stability": "MOD のアップロードと Workshop 更新機能の安定性を改善しました。",
@@ -1330,6 +1372,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v100_added_title": "Añadido",
+        "v100_unit_data_modification": "Se añadió la modificación de datos de unidades: permite cambiar varios atributos de las unidades originales y de todos los MOD usando los valores finales calculados con todos los MOD habilitados, por lo que es compatible con todos los MOD y con la modificación de datos del juego.",
+        "v100_compatibility_patch": "Se añadió la función de parches de compatibilidad. El parche disponible actualmente es Nanu's Dynamic RORs; al activarlo, genera automáticamente un parche compatible con Nanu's Dynamic RORs para todos los MOD habilitados.",
+        "v100_adjusted_title": "Ajustado",
+        "v100_non_chinese_error_messages": "Se mejoró el texto de los mensajes de error que no están en chino.",
         "v099_fixed_title": "Corregido",
         "v099_unit_scale_sfo_compatibility": "Se mejoró la compatibilidad de la modificación de la escala de unidades con SFO y otros MODs.",
         "v099_workshop_upload_stability": "Se mejoró la estabilidad de las funciones de carga y actualización de MODs en Workshop.",

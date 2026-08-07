@@ -65,6 +65,7 @@ class ModAsset:
     missing_dependencies: list[dict[str, str]] = field(default_factory=list)
     warnings: list[dict[str, Any]] = field(default_factory=list)
     ignored_warning_codes: list[str] = field(default_factory=list)
+    unit_data_tables: list[str] = field(default_factory=list)
 
     @property
     def effective_name(self) -> str:

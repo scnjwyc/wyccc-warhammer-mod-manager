@@ -38,12 +38,221 @@ def _load_schemas() -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
 # This is a focused subset of the locally verified WH3 schema.  Every known
 # version of the six required tables is retained so older enabled mods can be
 # resolved without replacing their rows with vanilla data.
-TABLE_SCHEMAS = _load_schemas()
+# The unit-data editor reads a few additional tables.  They have stable, small
+# current schemas, while the historical schemas for the original game-data
+# transformations remain in ``wh3_db_schema.json``.
+EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
+    "melee_weapons_tables": {
+        25: (
+            ("bonus_v_large", "I32"), ("bonus_v_infantry", "I32"), ("key", "StringU8"),
+            ("damage", "I32"), ("ap_damage", "I32"), ("weapon_length", "F32"),
+            ("melee_weapon_type", "StringU8"), ("audio_type", "OptionalStringU8"),
+            ("splash_attack_target_size", "OptionalStringU8"), ("splash_attack_max_attacks", "I32"),
+            ("splash_attack_power_multiplier", "F32"), ("building_damage_multiplier", "F32"),
+            ("ignition_amount", "F32"), ("is_magical", "Boolean"), ("contact_phase", "OptionalStringU8"),
+            ("collision_attack_max_targets", "I32"), ("collision_attack_max_targets_cooldown", "I32"),
+            ("melee_attack_interval", "F32"), ("scaling_damage", "OptionalStringU8"), ("is_spell", "Boolean"),
+        ),
+    },
+    "missile_weapons_tables": {
+        11: (
+            ("key", "StringU8"), ("precursor", "Boolean"), ("default_projectile", "StringU8"),
+            ("audio_type", "OptionalStringU8"), ("use_secondary_ammo_pool", "Boolean"),
+        ),
+    },
+    "effect_bonus_value_missile_weapon_junctions_tables": {
+        0: (
+            ("bonus_value_id", "StringU8"),
+            ("effect", "StringU8"),
+            ("missile_weapon_junction", "I32"),
+        ),
+    },
+    "unit_missile_weapon_junctions_tables": {
+        0: (
+            ("missile_weapon", "StringU8"),
+            ("unit", "StringU8"),
+            ("id", "I64"),
+        ),
+        1: (
+            ("missile_weapon", "StringU8"),
+            ("unit", "StringU8"),
+            ("id", "I64"),
+            ("battle_entity_stats_override", "OptionalStringU8"),
+        ),
+    },
+    "unit_purchasable_effect_sets_tables": {
+        0: (
+            ("unit", "StringU8"),
+            ("purchasable_effect", "StringU8"),
+            ("is_exclusive", "Boolean"),
+        ),
+        1: (
+            ("unit", "StringU8"),
+            ("purchasable_effect", "StringU8"),
+            ("is_exclusive", "Boolean"),
+        ),
+    },
+    "unit_armour_types_tables": {
+        6: (("armour_value", "I32"), ("key", "StringU8"), ("audio_type", "OptionalStringU8")),
+    },
+    "unit_set_to_unit_junctions_tables": {
+        1: (
+            ("exclude", "Boolean"), ("unit_caste", "OptionalStringU8"),
+            ("unit_category", "OptionalStringU8"), ("unit_class", "OptionalStringU8"),
+            ("unit_record", "OptionalStringU8"), ("unit_set", "StringU8"),
+        ),
+    },
+    # Recruitment gating used by the unit-data editor when a unit is disabled.
+    # Vanilla ships both tables versionless (GUID header only); mods created by
+    # RPFM keep that layout, so version 1 is the versionless fallback schema.
+    "units_to_groupings_military_permissions_tables": {
+        1: (("unit", "StringU8"), ("military_group", "StringU8")),
+    },
+    "units_to_exclusive_faction_permissions_tables": {
+        1: (
+            ("unit", "StringU8"),
+            ("faction", "StringU8"),
+            ("exclusive", "Boolean"),
+        ),
+    },
+    # Race/culture resolution for the unit-data editor: unit -> exclusive
+    # faction -> subculture -> culture.  Versions follow the current vanilla
+    # db.pack layouts (factions v6, cultures_subcultures v6) plus the older
+    # variants mods may still ship.
+    "factions_tables": {
+        5: (
+            ("key", "StringU8"), ("index", "I64"), ("subculture", "StringU8"),
+            ("category", "StringU8"), ("name_group", "StringU8"),
+            ("skin", "StringU8"), ("ui_skin", "OptionalStringU8"),
+            ("is_rebel", "Boolean"), ("flags_path", "StringU8"),
+            ("primary_colour_r", "F32"), ("primary_colour_g", "F32"),
+            ("primary_colour_b", "F32"), ("alt_primary_colour_r", "F32"),
+            ("alt_primary_colour_g", "F32"), ("alt_primary_colour_b", "F32"),
+            ("secondary_colour_r", "F32"), ("secondary_colour_g", "F32"),
+            ("secondary_colour_b", "F32"), ("alt_secondary_colour_r", "F32"),
+            ("alt_secondary_colour_g", "F32"), ("alt_secondary_colour_b", "F32"),
+            ("uniform_colour_r", "F32"), ("uniform_colour_g", "F32"),
+            ("uniform_colour_b", "F32"), ("alt_uniform_colour_r", "F32"),
+            ("alt_uniform_colour_g", "F32"), ("alt_uniform_colour_b", "F32"),
+            ("rebel_colour_r", "F32"), ("rebel_colour_g", "F32"),
+            ("rebel_colour_b", "F32"), ("military_group", "StringU8"),
+            ("movie_death_event", "OptionalStringU8"),
+            ("unit_regiment_name_group", "StringU8"),
+            ("ship_name_group", "StringU8"),
+            ("pre_battle_speech_parameter", "StringU8"),
+            ("card_colour_r", "F32"), ("card_colour_g", "F32"),
+            ("card_colour_b", "F32"), ("audio_voiceover_culture", "StringU8"),
+            ("mp_force_gen_template", "StringU8"),
+            ("faction_swapping_id", "StringU8"),
+            ("win_movie", "OptionalStringU8"),
+            ("waaagh_faction", "OptionalStringU8"),
+            ("waaagh_general_unit", "OptionalStringU8"),
+            ("is_quest_faction", "Boolean"),
+            ("cdir_military_generator_config", "StringU8"),
+            ("feature_forest", "StringU8"),
+            ("default_audio_actor_vo_group", "StringU8"),
+            ("text_replacement_key", "OptionalStringU8"),
+            ("neutral_reinforcement_factions", "StringU8"),
+            ("can_accept_gifts_when_dead", "Boolean"),
+            ("uniform_colour_primary", "ColourRGB"),
+            ("uniform_colour_secondary", "ColourRGB"),
+            ("uniform_colour_tertiary", "ColourRGB"),
+            ("banner_colour_primary", "ColourRGB"),
+            ("banner_colour_secondary", "ColourRGB"),
+            ("banner_colour_tertiary", "ColourRGB"),
+            ("primary_colour", "ColourRGB"),
+            ("override_target_unit_vo_culture", "Boolean"),
+            ("music_feedback_group", "StringU8"),
+        ),
+        6: (
+            ("key", "StringU8"), ("index", "I64"), ("subculture", "StringU8"),
+            ("category", "StringU8"), ("name_group", "StringU8"),
+            ("skin", "StringU8"), ("ui_skin", "OptionalStringU8"),
+            ("is_rebel", "Boolean"), ("flags_path", "StringU8"),
+            ("primary_colour_r", "F32"), ("primary_colour_g", "F32"),
+            ("primary_colour_b", "F32"), ("alt_primary_colour_r", "F32"),
+            ("alt_primary_colour_g", "F32"), ("alt_primary_colour_b", "F32"),
+            ("secondary_colour_r", "F32"), ("secondary_colour_g", "F32"),
+            ("secondary_colour_b", "F32"), ("alt_secondary_colour_r", "F32"),
+            ("alt_secondary_colour_g", "F32"), ("alt_secondary_colour_b", "F32"),
+            ("uniform_colour_r", "F32"), ("uniform_colour_g", "F32"),
+            ("uniform_colour_b", "F32"), ("alt_uniform_colour_r", "F32"),
+            ("alt_uniform_colour_g", "F32"), ("alt_uniform_colour_b", "F32"),
+            ("rebel_colour_r", "F32"), ("rebel_colour_g", "F32"),
+            ("rebel_colour_b", "F32"), ("military_group", "StringU8"),
+            ("movie_death_event", "OptionalStringU8"),
+            ("unit_regiment_name_group", "StringU8"),
+            ("ship_name_group", "StringU8"),
+            ("pre_battle_speech_parameter", "StringU8"),
+            ("card_colour_r", "F32"), ("card_colour_g", "F32"),
+            ("card_colour_b", "F32"), ("audio_voiceover_culture", "StringU8"),
+            ("mp_force_gen_template", "StringU8"),
+            ("faction_swapping_id", "StringU8"),
+            ("win_movie", "OptionalStringU8"),
+            ("waaagh_faction", "OptionalStringU8"),
+            ("waaagh_general_unit", "OptionalStringU8"),
+            ("is_quest_faction", "Boolean"),
+            ("cdir_military_generator_config", "StringU8"),
+            ("feature_forest", "StringU8"),
+            ("default_audio_actor_vo_group", "StringU8"),
+            ("text_replacement_key", "OptionalStringU8"),
+            ("neutral_reinforcement_factions", "StringU8"),
+            ("can_accept_gifts_when_dead", "Boolean"),
+            ("uniform_colour_primary", "ColourRGB"),
+            ("uniform_colour_secondary", "ColourRGB"),
+            ("uniform_colour_tertiary", "ColourRGB"),
+            ("banner_colour_primary", "ColourRGB"),
+            ("banner_colour_secondary", "ColourRGB"),
+            ("banner_colour_tertiary", "ColourRGB"),
+            ("primary_colour", "ColourRGB"),
+            ("override_target_unit_vo_culture", "Boolean"),
+            ("music_feedback_group", "StringU8"),
+            ("ui_main_theme_skin", "StringU8"),
+        ),
+    },
+    "cultures_subcultures_tables": {
+        1: (
+            ("subculture", "StringU8"), ("culture", "StringU8"),
+            ("index", "I32"), ("confederation_screen_name", "OptionalStringU8"),
+        ),
+        2: (
+            ("subculture", "StringU8"), ("culture", "StringU8"),
+            ("index", "I32"), ("audio_state_override", "OptionalStringU8"),
+            ("audio_rtpc_override", "OptionalStringU8"),
+        ),
+        3: (
+            ("subculture", "StringU8"), ("culture", "StringU8"),
+            ("index", "I32"), ("audio_state_override", "OptionalStringU8"),
+            ("audio_rtpc_override", "OptionalStringU8"),
+            ("audio_corruption_state_override", "OptionalStringU8"),
+        ),
+        6: (
+            ("subculture", "StringU8"), ("culture", "StringU8"),
+            ("index", "I32"), ("audio_state_override", "OptionalStringU8"),
+            ("audio_corruption_state_override", "OptionalStringU8"),
+            ("audio_rtpc_override", "OptionalStringU8"),
+            ("region_owner_audio_switch", "OptionalStringU8"),
+        ),
+    },
+}
+
+TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS}
 TABLE_ORDER = (
     "_kv_rules_tables",
     "main_units_tables",
     "land_units_tables",
     "battle_entities_tables",
+    "melee_weapons_tables",
+    "missile_weapons_tables",
+    "effect_bonus_value_missile_weapon_junctions_tables",
+    "unit_missile_weapon_junctions_tables",
+    "unit_purchasable_effect_sets_tables",
+    "unit_armour_types_tables",
+    "unit_set_to_unit_junctions_tables",
+    "units_to_groupings_military_permissions_tables",
+    "units_to_exclusive_faction_permissions_tables",
+    "factions_tables",
+    "cultures_subcultures_tables",
     "projectiles_tables",
     "projectiles_explosions_tables",
     "battle_vortexs_tables",
@@ -54,6 +263,17 @@ CURRENT_TABLE_VERSIONS = {
     "main_units_tables": 7,
     "land_units_tables": 54,
     "battle_entities_tables": 39,
+    "melee_weapons_tables": 25,
+    "missile_weapons_tables": 11,
+    "effect_bonus_value_missile_weapon_junctions_tables": 0,
+    "unit_missile_weapon_junctions_tables": 1,
+    "unit_purchasable_effect_sets_tables": 1,
+    "unit_armour_types_tables": 6,
+    "unit_set_to_unit_junctions_tables": 1,
+    "units_to_groupings_military_permissions_tables": 1,
+    "units_to_exclusive_faction_permissions_tables": 1,
+    "factions_tables": 6,
+    "cultures_subcultures_tables": 6,
     "projectiles_tables": 53,
     "projectiles_explosions_tables": 19,
     "battle_vortexs_tables": 19,
@@ -63,6 +283,17 @@ TABLE_KEY_FIELDS = {
     "main_units_tables": "unit",
     "land_units_tables": "key",
     "battle_entities_tables": "key",
+    "melee_weapons_tables": "key",
+    "missile_weapons_tables": "key",
+    "effect_bonus_value_missile_weapon_junctions_tables": "missile_weapon_junction",
+    "unit_missile_weapon_junctions_tables": "id",
+    "unit_purchasable_effect_sets_tables": "unit",
+    "unit_armour_types_tables": "key",
+    "unit_set_to_unit_junctions_tables": "unit_set",
+    "units_to_groupings_military_permissions_tables": "unit",
+    "units_to_exclusive_faction_permissions_tables": "unit",
+    "factions_tables": "key",
+    "cultures_subcultures_tables": "subculture",
     "projectiles_tables": "key",
     "projectiles_explosions_tables": "key",
     "battle_vortexs_tables": "vortex_key",
@@ -277,6 +508,65 @@ def _patch_bool(row: ParsedDbRow, field_name: str, value: bool) -> ParsedDbRow:
     return ParsedDbRow(bytes(raw), fields)
 
 
+def patch_db_row_value(row: ParsedDbRow, field_name: str, value: Any) -> ParsedDbRow:
+    """Return a row with one DB value replaced, including variable-size strings."""
+    field = row.fields.get(field_name)
+    if field is None:
+        return row
+    values = row.values
+    values[field_name] = value
+    encoded_fields: dict[str, FieldSpan] = {}
+    chunks: list[bytes] = []
+    cursor = 0
+    for name, original in row.fields.items():
+        current = values[name]
+        if original.field_type == "Boolean":
+            encoded = bytes([1 if bool(current) else 0])
+            current = bool(current)
+        elif original.field_type in {"I32", "ColourRGB"}:
+            encoded = struct.pack("<i", int(current or 0))
+            current = int(current or 0)
+        elif original.field_type == "I16":
+            encoded = struct.pack("<h", int(current or 0))
+            current = int(current or 0)
+        elif original.field_type == "I64":
+            encoded = struct.pack("<q", int(current or 0))
+            current = int(current or 0)
+        elif original.field_type == "F32":
+            numeric = float(current or 0.0)
+            if not math.isfinite(numeric):
+                raise ValueError(f"DB 字段 {name} 必须是有限数值")
+            encoded = struct.pack("<f", numeric)
+            current = numeric
+        elif original.field_type == "F64":
+            numeric = float(current or 0.0)
+            if not math.isfinite(numeric):
+                raise ValueError(f"DB 字段 {name} 必须是有限数值")
+            encoded = struct.pack("<d", numeric)
+            current = numeric
+        elif original.field_type == "StringU8":
+            raw = str(current or "").encode("ascii")
+            encoded = struct.pack("<H", len(raw)) + raw
+            current = raw.decode("ascii")
+        elif original.field_type == "OptionalStringU8":
+            if current is None or current == "":
+                encoded = b"\0"
+                current = None
+            else:
+                raw = str(current).encode("ascii")
+                encoded = b"\1" + struct.pack("<H", len(raw)) + raw
+                current = raw.decode("ascii")
+        elif original.field_type == "StringU16":
+            current = str(current or "")
+            encoded = struct.pack("<H", len(current)) + current.encode("utf-16le")
+        else:
+            raise ValueError(f"不支持写入的 DB 字段类型：{original.field_type}")
+        chunks.append(encoded)
+        encoded_fields[name] = FieldSpan(original.field_type, cursor, cursor + len(encoded), current)
+        cursor += len(encoded)
+    return ParsedDbRow(b"".join(chunks), encoded_fields)
+
+
 def _compare_internal_names(first: str, second: str) -> int:
     """Match the internal DB-file priority comparison used by WH3 Mod Manager."""
     first = first.casefold()
@@ -353,8 +643,12 @@ def _collect_effective_rows(
     needed_tables: set[str],
     *,
     skip_main_unit_compatibility_placeholders: bool = False,
+    all_candidates: dict[str, dict[str, list[_Candidate]]] | None = None,
 ) -> dict[str, dict[str, _Candidate]]:
     effective = {table_name: {} for table_name in needed_tables}
+    if all_candidates is not None:
+        for table_name in needed_tables:
+            all_candidates.setdefault(table_name, {})
     for source_rank, source in enumerate(sources):
         for entry_rank, entry in enumerate(source.entries):
             resolved = _entry_table_name(entry.name)
@@ -365,7 +659,6 @@ def _collect_effective_rows(
                 parsed = parse_db_table(table_name, entry.payload)
             except ValueError as exc:
                 raise ValueError(f"读取 {source.name} 中的 {entry.name} 失败：{exc}") from exc
-            key_field = TABLE_KEY_FIELDS[table_name]
             for row_rank, row in enumerate(parsed.rows):
                 if (
                     skip_main_unit_compatibility_placeholders
@@ -373,7 +666,7 @@ def _collect_effective_rows(
                     and _is_main_unit_compatibility_placeholder(internal_name, row)
                 ):
                     continue
-                key = str(row.values.get(key_field) or "")
+                key = _table_row_key(table_name, row)
                 if not key:
                     raise ValueError(f"{source.name} 中的 {entry.name} 存在空主键")
                 candidate = _Candidate(
@@ -384,6 +677,8 @@ def _collect_effective_rows(
                     entry_rank,
                     row_rank,
                 )
+                if all_candidates is not None:
+                    all_candidates[table_name].setdefault(key, []).append(candidate)
                 existing = effective[table_name].get(key)
                 if existing is None or _has_higher_priority(candidate, existing):
                     effective[table_name][key] = candidate
@@ -424,6 +719,7 @@ def _leading_priority_markers(internal_name: str) -> int:
 def _generated_internal_name(
     candidates: Mapping[str, _Candidate],
     version: int,
+    label: str = "wyccc_game_data",
 ) -> str:
     priority_markers = (
         max(
@@ -435,9 +731,7 @@ def _generated_internal_name(
         )
         + 1
     )
-    internal_name = (
-        f"{'!' * priority_markers}wyccc_game_data_v{version:04d}"
-    )
+    internal_name = f"{'!' * priority_markers}{label}_v{version:04d}"
     blockers = sorted(
         {
             candidate.internal_name
@@ -452,6 +746,35 @@ def _generated_internal_name(
             + ", ".join(blockers[:3])
         )
     return internal_name
+
+
+def _table_row_key(table_name: str, row: ParsedDbRow) -> str:
+    """Return the primary key used to merge one supported DB row."""
+    if table_name == "effect_bonus_value_missile_weapon_junctions_tables":
+        values = row.values
+        return "\x1f".join(
+            str(values.get(field) or "")
+            for field in ("effect", "bonus_value_id", "missile_weapon_junction")
+        )
+    if table_name == "unit_purchasable_effect_sets_tables":
+        values = row.values
+        return "\x1f".join(
+            str(values.get(field) or "")
+            for field in ("unit", "purchasable_effect")
+        )
+    if table_name == "unit_set_to_unit_junctions_tables":
+        values = row.values
+        return "\x1f".join(
+            "" if values.get(field) is None else str(values.get(field) or "")
+            for field in (
+                "unit_set",
+                "unit_record",
+                "unit_caste",
+                "unit_category",
+                "unit_class",
+            )
+        )
+    return str(row.values.get(TABLE_KEY_FIELDS[table_name]) or "")
 
 
 def _serialize_effective_table(

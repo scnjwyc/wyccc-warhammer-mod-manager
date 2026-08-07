@@ -195,6 +195,52 @@ def read_pack_dependencies(path: Path) -> list[str]:
     return dependencies
 
 
+def read_pack_entry_names(path: Path) -> list[str]:
+    """Read PFH5 entry names without loading or decompressing entry payloads."""
+    try:
+        with path.open("rb") as stream:
+            header = stream.read(28)
+            if len(header) < 28 or header[:4] != WH3_PACK_MAGIC:
+                return []
+            _, _, dependency_size, file_count, index_size, _ = struct.unpack_from(
+                "<6i", header, 4
+            )
+            if dependency_size < 0 or file_count < 0 or index_size < 0:
+                return []
+            stream.seek(28 + dependency_size)
+            index = stream.read(index_size)
+            if len(index) != index_size:
+                return []
+    except OSError:
+        return []
+
+    names: list[str] = []
+    cursor = 0
+    for _ in range(file_count):
+        if cursor + 5 > len(index):
+            return []
+        cursor += 5
+        terminator = index.find(b"\0", cursor)
+        if terminator < 0:
+            return []
+        names.append(index[cursor:terminator].decode("utf-8", errors="replace"))
+        cursor = terminator + 1
+    return names
+
+
+def read_unit_data_tables(path: Path) -> list[str]:
+    """Return unit DB table families present in a Pack."""
+    tables = {
+        table_name
+        for entry_name in read_pack_entry_names(path)
+        for table_name in ("main_units_tables", "land_units_tables")
+        if entry_name.replace("/", "\\").casefold().startswith(
+            f"db\\{table_name}\\"
+        )
+    }
+    return sorted(tables)
+
+
 def _path_fingerprint(path: Path) -> str:
     canonical = str(path.resolve(strict=False)).replace("\\", "/").casefold()
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:18]
@@ -673,6 +719,7 @@ class ModScanner:
                 else ""
             ),
             pack_type=read_pack_type(pack_path),
+            unit_data_tables=read_unit_data_tables(pack_path),
             updated_at=updated_at,
             created_at=created_at,
             is_symlink=is_symlink,

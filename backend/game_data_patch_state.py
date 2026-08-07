@@ -115,7 +115,10 @@ def build_game_data_inputs(
     auto_movie_sources: list[dict[str, Any]] = []
     db_pack: dict[str, Any]
     if snapshot is not None:
-        sources = snapshot.input_records("explicit")
+        sources = [
+            *snapshot.input_records("unit_data_patch"),
+            *snapshot.input_records("explicit"),
+        ]
         auto_movie_sources = snapshot.input_records("auto_movie")
         db_pack = snapshot.first_input_record("vanilla")
     else:
@@ -275,11 +278,17 @@ def ensure_game_data_patch(
     playset_id: str,
     settings: Mapping[str, Any],
     subscription_state: Mapping[str, bool],
+    unit_data_patch_path: str | Path | None = None,
 ) -> dict[str, Any]:
     output_dir = Path(output_dir)
     requested = game_data_settings_requested(settings)
     source_snapshot = (
-        collect_game_data_source_snapshot(data_path, assets, active_ids)
+        collect_game_data_source_snapshot(
+            data_path,
+            assets,
+            active_ids,
+            unit_data_patch_path=unit_data_patch_path,
+        )
         if requested
         else None
     )
@@ -329,11 +338,13 @@ def ensure_game_data_patch(
                     if subscribed
                 ],
                 source_snapshot=source_snapshot,
+                unit_data_patch_path=unit_data_patch_path,
             )
             verified_snapshot = collect_game_data_source_snapshot(
                 data_path,
                 assets,
                 active_ids,
+                unit_data_patch_path=unit_data_patch_path,
             )
             verified_inputs = build_game_data_inputs(
                 data_path,

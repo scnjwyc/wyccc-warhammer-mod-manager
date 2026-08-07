@@ -10,21 +10,33 @@ def write_pack(
     path: Path,
     byte_mask: int = 0,
     dependencies: list[str] | None = None,
+    entries: list[tuple[str, bytes]] | None = None,
 ) -> Path:
-    """Create the smallest header fixture needed by the PFH5 reader."""
+    """Create a small PFH5 fixture with optional uncompressed entries."""
     path.parent.mkdir(parents=True, exist_ok=True)
     dependency_block = b"".join(
         value.encode("utf-8") + b"\0" for value in (dependencies or [])
     )
+    entry_values = list(entries or [])
+    index = b"".join(
+        struct.pack("<i", len(payload))
+        + b"\0"
+        + name.encode("utf-8")
+        + b"\0"
+        for name, payload in entry_values
+    )
+    payloads = b"".join(payload for _, payload in entry_values)
     path.write_bytes(
         b"PFH5"
         + struct.pack("<I", byte_mask)
         + struct.pack("<I", 0)
         + struct.pack("<I", len(dependency_block))
-        + struct.pack("<I", 0)
-        + struct.pack("<I", 0)
+        + struct.pack("<I", len(entry_values))
+        + struct.pack("<I", len(index))
         + struct.pack("<I", 0)
         + dependency_block
+        + index
+        + payloads
     )
     return path
 

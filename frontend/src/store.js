@@ -18,6 +18,11 @@ let playsetWriteQueue = Promise.resolve()
 let collectionImportPollTimer = 0
 const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
 const LIST_UNDO_HISTORY_LIMIT = 30
+const HIDDEN_PATCH_PACK_NAMES = new Set(['wyccc_nanu_ror_patch.pack'])
+
+const isHiddenPatch = mod => HIDDEN_PATCH_PACK_NAMES.has(
+  String(mod?.pack_name || '').toLowerCase(),
+)
 
 const defaultGameDataFeatures = () => ({
   unit_size: {
@@ -38,6 +43,12 @@ const defaultGameDataFeatures = () => ({
     pack_name: 'wyccc_dynamic_unit_cap.pack',
     subscribed: false,
   },
+})
+
+const defaultUnitDataFeature = () => ({
+  pack_name: 'wyccc_dynamic_units_modify.pack',
+  title: 'Dynamic Units Modify',
+  subscribed: false,
 })
 
 const localizedSelectedGameName = settings => t(
@@ -70,7 +81,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '0.9.9',
+    appVersion: '1.0.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -118,6 +129,7 @@ export const useAppStore = defineStore('app', {
     autoUpdateDue: false,
     toast: null,
     gameDataFeatures: defaultGameDataFeatures(),
+    unitDataFeature: defaultUnitDataFeature(),
     gameDataFeatureWarning: '',
     workshopUpdateEligibility: new Set(),
     workshopEligibilityKnownIds: new Set(),
@@ -129,6 +141,10 @@ export const useAppStore = defineStore('app', {
     gameDataFeatureSubscribed: (state) => featureKey => (
       Boolean(state.gameDataFeatures?.[featureKey]?.subscribed)
     ),
+    unitDataFeatureSubscribed: state => Boolean(state.unitDataFeature?.subscribed),
+    unitDataModIds: state => state.mods
+      .filter(mod => Array.isArray(mod.unit_data_tables) && mod.unit_data_tables.length > 0)
+      .map(mod => mod.id),
     modTypeMap: (state) => Object.fromEntries(state.modTypes.map(item => [item.id, localizedModTypeName(item)])),
     modTypeRanks: (state) => Object.fromEntries(state.modTypes.map((item, index) => [item.id, index])),
     hiddenCount: (state) => state.mods.filter(mod => mod.hidden).length,
@@ -199,6 +215,7 @@ export const useAppStore = defineStore('app', {
       const mods = this.activeIds
         .map(id => this.modMap.get(id))
         .filter(Boolean)
+        .filter(mod => !isHiddenPatch(mod))
         .filter(mod => this.showHidden || !mod.hidden)
       return sortDisplayedMods(mods, this.activeSortMode, this.activeSortDescending, this.modTypeRanks)
     },
@@ -206,6 +223,7 @@ export const useAppStore = defineStore('app', {
       const active = new Set(this.activeIds)
       const mods = this.mods
         .filter(mod => !active.has(mod.id))
+        .filter(mod => !isHiddenPatch(mod))
         .filter(mod => this.showHidden || !mod.hidden)
       const sorted = sortDisplayedMods(
         mods,
@@ -353,6 +371,11 @@ export const useAppStore = defineStore('app', {
       this.modRevision = Number(data.runtime?.mod_revision || 0)
       this.changelog = data.changelog || []
       this.autoUpdateDue = Boolean(data.auto_update_due)
+      this.unitDataFeature = {
+        ...defaultUnitDataFeature(),
+        ...(data.unit_data_feature || {}),
+        subscribed: Boolean(data.unit_data_feature?.subscribed),
+      }
       if (this.pathHealth.game_ready) {
         await this.scan(false)
         if (this.settings.fetch_workshop_metadata) {
@@ -376,6 +399,11 @@ export const useAppStore = defineStore('app', {
         const preserveDirty = this.dirty
         const data = await invoke('scan_mods', refreshWorkshop)
         this.mods = data.mods
+        this.unitDataFeature = {
+          ...defaultUnitDataFeature(),
+          ...(data.unit_data_feature || {}),
+          subscribed: Boolean(data.unit_data_feature?.subscribed),
+        }
         const currentThumbnails = this.thumbnails
         this.thumbnails = Object.fromEntries(
           data.mods
@@ -1046,6 +1074,21 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
+    async saveUnitData(edits) {
+      return this.withBusy(t('busy.saveUnitData'), async () => {
+        const data = await invoke('save_unit_data_edits', edits)
+        this.notify(t('toast.unitDataSaved'))
+        return data
+      })
+    },
+    async saveCompatibilityPatchSettings(changes) {
+      return this.withBusy(t('busy.saveCompatibilityPatch'), async () => {
+        const data = await invoke('save_compatibility_patch_settings', changes)
+        this.settings = data.settings
+        this.notify(t('toast.compatibilityPatchSaved'))
+        return data
+      })
+    },
     async checkForUpdates(manual = true) {
       if (this.updateChecking) return this.updateInfo
       this.updateChecking = true
@@ -1118,6 +1161,15 @@ export const useAppStore = defineStore('app', {
       )
       this.gameDataFeatureWarning = String(data?.warning || '')
       return data
+    },
+    async refreshUnitDataFeature() {
+      const data = await invoke('get_unit_data_feature_status')
+      this.unitDataFeature = {
+        ...defaultUnitDataFeature(),
+        ...(data || {}),
+        subscribed: Boolean(data?.subscribed),
+      }
+      return this.unitDataFeature
     },
     async loadChangelog() {
       const data = await invoke('get_changelog')

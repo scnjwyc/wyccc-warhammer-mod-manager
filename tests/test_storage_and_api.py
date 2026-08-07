@@ -9,12 +9,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.api import API
-from backend.constants import GAME_DATA_FEATURE_WORKSHOP_ITEMS, SOURCE_WORKSHOP
+from backend.constants import (
+    GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    SOURCE_WORKSHOP,
+    UNIT_DATA_FEATURE_PACK_NAME,
+)
 from backend.launch_paths import LaunchPathMap
 from backend.models import GamePaths, ModAsset
 from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
-from backend.start_options import GAME_DATA_PATCH_NAME, RUNTIME_PACK_NAME
+from backend.start_options import (
+    GAME_DATA_PATCH_NAME,
+    RUNTIME_PACK_NAME,
+    UNIT_DATA_PATCH_NAME,
+)
 from backend.steamworks_bridge import SteamworksBridgeError
 from backend.storage import StateRepository
 from tests.helpers import make_asset, write_pack
@@ -426,6 +434,44 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_unit_data_source_ids_exclude_internal_runtime_packs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            write_pack(data / "db.pack")
+            normal = make_asset(
+                write_pack(data / "example.pack"),
+                "data:example.pack",
+                "data",
+            )
+            game_patch = make_asset(
+                write_pack(data / GAME_DATA_PATCH_NAME),
+                f"data:{GAME_DATA_PATCH_NAME}",
+                "data",
+            )
+            runtime = make_asset(
+                write_pack(data / RUNTIME_PACK_NAME),
+                f"data:{RUNTIME_PACK_NAME}",
+                "data",
+            )
+            unit_patch = make_asset(
+                write_pack(data / UNIT_DATA_PATCH_NAME),
+                f"data:{UNIT_DATA_PATCH_NAME}",
+                "data",
+            )
+            api = API(Path(temporary) / "state")
+            api._assets = {
+                asset.id: asset
+                for asset in (normal, game_patch, runtime, unit_patch)
+            }
+            api.state_repository.update_current_playset(
+                [game_patch.id, normal.id, runtime.id, unit_patch.id],
+                api._active_game().id,
+            )
+
+            self.assertEqual(api._unit_data_source_ids(), [normal.id])
+
     def test_terminate_game_rpc_uses_the_selected_game_executable_and_updates_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -741,6 +787,26 @@ class ApiContractTests(unittest.TestCase):
             app_id=1_142_710,
         )
 
+    def test_unit_data_feature_status_detects_the_subscribed_pack_in_workshop(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop"
+            write_pack(workshop / "123456" / UNIT_DATA_FEATURE_PACK_NAME)
+            api = API(root / "state")
+            paths = GamePaths(workshop_path=str(workshop))
+
+            with patch.object(api.settings_service, "resolve_game_paths", return_value=paths):
+                result = api.call("get_unit_data_feature_status")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"],
+            {
+                "pack_name": UNIT_DATA_FEATURE_PACK_NAME,
+                "title": "Dynamic Units Modify",
+                "subscribed": True,
+            },
+        )
     def test_three_kingdoms_routes_steam_and_launch_without_wh3_runtime_packs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
