@@ -494,6 +494,65 @@ class UnitDataHelpersTests(unittest.TestCase):
             names_en, _ = collect_unit_name_map(data, [], "en-US")
             self.assertEqual(names_en["land_test"], "English Name")
 
+    def test_mod_loc_names_follow_enabled_mod_order(self) -> None:
+        import tempfile
+
+        from backend.start_options import PackEntry, write_pfh5_pack
+
+        def loc_payload(rows: list[tuple[str, str]]) -> bytes:
+            payload = b"\xff\xfeLOC\x00" + struct.pack("<i", 1) + struct.pack(
+                "<i", len(rows)
+            )
+            for key, text in rows:
+                key_bytes = key.encode("utf-16le")
+                text_bytes = text.encode("utf-16le")
+                payload += (
+                    struct.pack("<H", len(key))
+                    + key_bytes
+                    + struct.pack("<H", len(text))
+                    + text_bytes
+                    + b"\0"
+                )
+            return payload
+
+        with tempfile.TemporaryDirectory(prefix="wmm_mod_loc_order_") as raw:
+            data = Path(raw)
+            common_key = "land_units_onscreen_name_sfo_new_unit"
+            sfo = data / "sfo.pack"
+            translation = data / "sfo_zh.pack"
+            write_pfh5_pack(
+                sfo,
+                [
+                    PackEntry(
+                        "text\\localisation__.loc",
+                        loc_payload([(common_key, "SFO New Unit")]),
+                    )
+                ],
+            )
+            write_pfh5_pack(
+                translation,
+                [
+                    PackEntry(
+                        "text\\localisation__.loc",
+                        loc_payload([(common_key, "SFO 新单位")]),
+                    )
+                ],
+            )
+
+            names, _cultures = collect_unit_name_map(
+                data,
+                [translation, sfo],
+                "zh-CN",
+            )
+            self.assertEqual(names["sfo_new_unit"], "SFO 新单位")
+
+            reversed_names, _ = collect_unit_name_map(
+                data,
+                [sfo, translation],
+                "zh-CN",
+            )
+            self.assertEqual(reversed_names["sfo_new_unit"], "SFO New Unit")
+
     def test_source_chain_shows_original_then_overrides(self) -> None:
         original = _fixture_source()
         override = DbSource(

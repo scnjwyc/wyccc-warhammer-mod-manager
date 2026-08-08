@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.1",
+        "date": "2026-08-08",
+        "entries": (
+            (
+                "v101_fixed_title",
+                (("fix", "v101_unit_data_localization"),),
+            ),
+        ),
+    },
+    {
         "version": "1.0.0",
         "date": "2026-08-07",
         "entries": (
@@ -472,6 +482,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v101_fixed_title": "修复",
+        "v101_unit_data_localization": "修复单位数据修改界面没有正确读取多语言文件的问题。",
         "v100_added_title": "新增",
         "v100_unit_data_modification": "单位数据修改功能，可以修改原版及所有MOD单位的各种属性，基于当前已启用的所有MOD计算后的最终数值，所以兼容所有MOD，也兼容游戏数据修改功能。",
         "v100_compatibility_patch": "兼容补丁功能，目前已有的补丁：Nanu's Dynamic RORs；开启后会自动为已启用的所有MOD生成Nanu's Dynamic RORs兼容补丁。",
@@ -652,6 +664,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v101_fixed_title": "Fixed",
+        "v101_unit_data_localization": "Fixed an issue where the Unit Data Modification interface did not correctly read multilingual localization files.",
         "v100_added_title": "Added",
         "v100_unit_data_modification": "Added Unit Data Modification, which can edit various attributes of vanilla and MOD units using the final values calculated from all currently enabled MODs, so it is compatible with all MODs and with Game Data Modification.",
         "v100_compatibility_patch": "Added Compatibility Patch. The available patch is Nanu's Dynamic RORs; when enabled, it automatically generates a Nanu's Dynamic RORs compatibility patch for all currently enabled MODs.",
@@ -832,6 +846,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v101_fixed_title": "수정",
+        "v101_unit_data_localization": "유닛 데이터 수정 화면에서 다국어 현지화 파일을 올바르게 읽지 못하던 문제를 수정했습니다.",
         "v100_added_title": "추가",
         "v100_unit_data_modification": "유닛 데이터 수정 기능을 추가했습니다. 현재 활성화된 모든 MOD를 계산한 최종 수치를 기준으로 기본 유닛과 모든 MOD 유닛의 다양한 속성을 수정할 수 있어 모든 MOD 및 게임 데이터 수정 기능과 호환됩니다.",
         "v100_compatibility_patch": "호환 패치 기능을 추가했습니다. 현재 제공되는 패치는 Nanu's Dynamic RORs이며, 활성화하면 현재 활성화된 모든 MOD에 대한 Nanu's Dynamic RORs 호환 패치를 자동으로 생성합니다.",
@@ -1012,6 +1028,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v101_fixed_title": "Исправлено",
+        "v101_unit_data_localization": "Исправлена проблема, из-за которой интерфейс изменения данных отрядов неправильно читал многоязычные файлы локализации.",
         "v100_added_title": "Добавлено",
         "v100_unit_data_modification": "Добавлено изменение данных отрядов: можно менять различные свойства исходных и MOD-отрядов на основе итоговых значений, рассчитанных по всем включённым MOD, поэтому функция совместима со всеми MOD и с изменением игровых данных.",
         "v100_compatibility_patch": "Добавлены патчи совместимости. Сейчас доступен патч для Nanu's Dynamic RORs; после включения он автоматически создаёт патч совместимости для всех включённых MOD.",
@@ -1192,6 +1210,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v101_fixed_title": "修正",
+        "v101_unit_data_localization": "ユニットデータ変更画面で多言語ローカライズファイルを正しく読み込めない問題を修正しました。",
         "v100_added_title": "追加",
         "v100_unit_data_modification": "ユニットデータ変更機能を追加しました。有効なすべてのMODを計算した最終値を基に、元のユニットとすべてのMODユニットの各種属性を変更できるため、すべてのMODおよびゲームデータ変更機能に対応します。",
         "v100_compatibility_patch": "互換パッチ機能を追加しました。現在利用できるパッチは Nanu's Dynamic RORs です。有効にすると、有効なすべてのMOD向けに Nanu's Dynamic RORs 互換パッチを自動生成します。",
@@ -1372,6 +1392,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v101_fixed_title": "Corregido",
+        "v101_unit_data_localization": "Se corrigió un problema por el que la interfaz de modificación de datos de unidades no leía correctamente los archivos de localización multilingües.",
         "v100_added_title": "Añadido",
         "v100_unit_data_modification": "Se añadió la modificación de datos de unidades: permite cambiar varios atributos de las unidades originales y de todos los MOD usando los valores finales calculados con todos los MOD habilitados, por lo que es compatible con todos los MOD y con la modificación de datos del juego.",
         "v100_compatibility_patch": "Se añadió la función de parches de compatibilidad. El parche disponible actualmente es Nanu's Dynamic RORs; al activarlo, genera automáticamente un parche compatible con Nanu's Dynamic RORs para todos los MOD habilitados.",

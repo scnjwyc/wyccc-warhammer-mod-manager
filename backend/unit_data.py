@@ -242,7 +242,9 @@ def collect_unit_name_map(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Return ``(unit_names, culture_names)`` using the vanilla loc pack for
     the launcher language (English fallback) plus enabled mod loc files; mod
-    files override vanilla, and later mods in the given order win."""
+    files override vanilla, and earlier mods in the given order win.  The
+    order matches the effective DB source order, where the MOD nearer the
+    front of the enabled list has higher priority."""
     data_root = Path(data_path).resolve(strict=False)
     unit_names: dict[str, str] = {}
     culture_names: dict[str, str] = {}
@@ -251,6 +253,12 @@ def collect_unit_name_map(
         units, cultures = _load_loc_file(str(path), _file_mtime_ns(path))
         unit_names.update(units)
         culture_names.update(cultures)
+    # Keep vanilla language packs as the fallback, then merge MOD loc files
+    # separately.  A MOD must override vanilla, but among MODs the enabled
+    # load order is authoritative: the first MOD providing a key wins.  This
+    # is important for a translation MOD placed before the MOD it translates.
+    mod_unit_names: dict[str, str] = {}
+    mod_culture_names: dict[str, str] = {}
     resolved_mods = [Path(path).resolve(strict=False) for path in mod_loc_files]
     if len(resolved_mods) > 1:
         with ThreadPoolExecutor(max_workers=min(8, len(resolved_mods))) as pool:
@@ -264,13 +272,19 @@ def collect_unit_name_map(
                 )
             )
         for path, (units, cultures) in loaded:
-            unit_names.update(units)
-            culture_names.update(cultures)
+            for key, value in units.items():
+                mod_unit_names.setdefault(key, value)
+            for key, value in cultures.items():
+                mod_culture_names.setdefault(key, value)
     else:
         for path in resolved_mods:
             units, cultures = _load_loc_file(str(path), _file_mtime_ns(path))
-            unit_names.update(units)
-            culture_names.update(cultures)
+            for key, value in units.items():
+                mod_unit_names.setdefault(key, value)
+            for key, value in cultures.items():
+                mod_culture_names.setdefault(key, value)
+    unit_names.update(mod_unit_names)
+    culture_names.update(mod_culture_names)
     return unit_names, culture_names
 
 
