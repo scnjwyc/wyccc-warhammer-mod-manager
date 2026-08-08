@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { gameLabelKey } from './games'
 import { invoke } from './bridge'
 import {
   applyInterfaceLanguage,
@@ -18,7 +19,7 @@ let playsetWriteQueue = Promise.resolve()
 let collectionImportPollTimer = 0
 const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
 const LIST_UNDO_HISTORY_LIMIT = 30
-const HIDDEN_PATCH_PACK_NAMES = new Set(['wyccc_nanu_ror_patch.pack'])
+const HIDDEN_PATCH_PACK_NAMES = new Set(['wyccc_nanu_rors_patch.pack'])
 
 const isHiddenPatch = mod => HIDDEN_PATCH_PACK_NAMES.has(
   String(mod?.pack_name || '').toLowerCase(),
@@ -51,11 +52,7 @@ const defaultUnitDataFeature = () => ({
   subscribed: false,
 })
 
-const localizedSelectedGameName = settings => t(
-  settings?.selected_game === 'three_kingdoms'
-    ? 'settings.gameThreeKingdoms'
-    : 'settings.gameWarhammer3',
-)
+const localizedSelectedGameName = settings => t(gameLabelKey(settings?.selected_game))
 
 const enqueuePlaysetWrite = task => {
   const pending = playsetWriteQueue.catch(() => {}).then(task)
@@ -81,7 +78,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.0.1',
+    appVersion: '1.0.5',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -902,7 +899,9 @@ export const useAppStore = defineStore('app', {
       this.orderToken = data.order_token
       this.dirty = false
       this.orderSaveError = ''
-      this.runtime = { running: true }
+      this.runtime = data.external_mod_manager
+        ? (data.runtime || { running: false })
+        : { running: true }
       if (data.backup) this.backups.unshift(data.backup)
       return data
     },
@@ -911,10 +910,10 @@ export const useAppStore = defineStore('app', {
       return this.withBusy(t('busy.launchGame'), async () => {
         const data = await invoke('launch_game', this.activeIds, this.orderToken)
         this.applyLaunchResult(data)
-        this.notify(t('toast.gameLaunched', {
-          game: localizedSelectedGameName(this.settings),
-          pid: data.process.pid,
-        }))
+        const game = localizedSelectedGameName(this.settings)
+        this.notify(data.external_mod_manager
+          ? t('toast.externalModManagerOpened', { game })
+          : t('toast.gameLaunched', { game, pid: data.process.pid }))
         return data
       })
     },

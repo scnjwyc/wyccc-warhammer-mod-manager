@@ -398,6 +398,27 @@ class StartOptionsPackTests(unittest.TestCase):
                 ["data_movie.pack", "sibling_movie.pack"],
             )
 
+    def test_three_kingdoms_uses_database_pack_as_vanilla_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary) / "data"
+            data.mkdir()
+            write_pfh5_pack(
+                data / "database.pack",
+                [PackEntry("db\\main_units_tables\\data__", b"three-kingdoms")],
+            )
+
+            snapshot = collect_game_data_source_snapshot(
+                data,
+                {},
+                [],
+                game_id="three_kingdoms",
+            )
+
+            self.assertEqual(len(snapshot.entries), 1)
+            self.assertEqual(snapshot.entries[0].spec.role, "vanilla")
+            self.assertEqual(snapshot.entries[0].spec.path.name, "database.pack")
+            self.assertEqual(snapshot.entries[0].source.entries[0].payload, b"three-kingdoms")
+
     def test_game_data_snapshot_rejects_a_pack_changed_while_reading(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -20,6 +20,7 @@ const sampleUnits = [
     upkeep_cost: 100,
     model_count: 90,
     model_count_locked: false,
+    morale: 55,
     armour_value: 10,
     armour_options: [10, 20, 100],
     hit_points: 8,
@@ -27,17 +28,26 @@ const sampleUnits = [
     charge_bonus: 15,
     melee_attack: 28,
     melee_defence: 32,
+    missile_block_chance: 0,
+    movement_speed: 0,
+    melee_attack_speed: 0,
     ammo: 0,
+    missile_resistance: 0,
     fire_resistance: 0,
     magic_resistance: 0,
     physical_resistance: 0,
     ward_save: 0,
     melee_damage: 25,
     melee_ap_damage: 8,
+    melee_bonus_v_cavalry: 0,
+    melee_bonus_v_infantry: 0,
     missile_damage: 0,
     missile_ap_damage: 0,
+    missile_bonus_v_cavalry: 0,
+    missile_bonus_v_infantry: 0,
     range: 0,
     reload: 10,
+    ranged_attack_speed: 0,
     accuracy: 40,
     edited: {},
   },
@@ -54,6 +64,7 @@ const sampleUnits = [
     upkeep_cost: 250,
     model_count: 12,
     model_count_locked: false,
+    morale: 50,
     armour_value: 60,
     armour_options: [60, 80],
     hit_points: 5,
@@ -61,17 +72,26 @@ const sampleUnits = [
     charge_bonus: 40,
     melee_attack: 20,
     melee_defence: 25,
+    missile_block_chance: 0,
+    movement_speed: 0,
+    melee_attack_speed: 0,
     ammo: 0,
+    missile_resistance: 0,
     fire_resistance: 0,
     magic_resistance: 0,
     physical_resistance: 0,
     ward_save: 0,
     melee_damage: 25,
     melee_ap_damage: 8,
+    melee_bonus_v_cavalry: 0,
+    melee_bonus_v_infantry: 0,
     missile_damage: 0,
     missile_ap_damage: 0,
+    missile_bonus_v_cavalry: 0,
+    missile_bonus_v_infantry: 0,
     range: 0,
     reload: 10,
+    ranged_attack_speed: 0,
     accuracy: 30,
     edited: {},
   },
@@ -113,6 +133,115 @@ describe('unit data modification modal', () => {
     expect(wrapper.find('col[style="width: 147.42px;"]').exists()).toBe(true)
   })
 
+  it('places missile resistance immediately before fire resistance', async () => {
+    const wrapper = mount(UnitDataModificationModal, { props: { open: false } })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const headers = wrapper.findAll('th').map(header => header.attributes('data-testid'))
+    expect(headers.indexOf('unit-data-header-missile_resistance'))
+      .toBe(headers.indexOf('unit-data-header-fire_resistance') - 1)
+  })
+
+  it('shows movement speed after leadership for Warhammer', async () => {
+    const wrapper = mount(UnitDataModificationModal, { props: { open: false, gameId: 'warhammer3' } })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const headers = wrapper.findAll('th').map(header => header.attributes('data-testid'))
+    expect(headers).toContain('unit-data-header-movement_speed')
+    expect(headers.indexOf('unit-data-header-movement_speed'))
+      .toBe(headers.indexOf('unit-data-header-morale') + 1)
+  })
+
+  it('uses Three Kingdoms labels and fields without resistance or reload columns', async () => {
+    const wrapper = mount(UnitDataModificationModal, {
+      props: { open: false, gameId: 'three_kingdoms' },
+    })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const headers = wrapper.findAll('th').map(header => header.attributes('data-testid'))
+    expect(wrapper.get('[data-testid="unit-data-header-morale"]').text()).toContain('士气')
+    expect(wrapper.get('[data-testid="unit-data-header-melee_defence"]').text()).toContain('近战闪避')
+    expect(headers.indexOf('unit-data-header-morale'))
+      .toBe(headers.indexOf('unit-data-header-movement_speed') - 1)
+    expect(headers.indexOf('unit-data-header-movement_speed'))
+      .toBe(headers.indexOf('unit-data-header-armour') - 1)
+    expect(headers).toContain('unit-data-header-missile_block_chance')
+    expect(headers).toContain('unit-data-header-movement_speed')
+    expect(headers).toContain('unit-data-header-melee_attack_speed')
+    expect(headers).toContain('unit-data-header-ranged_attack_speed')
+    expect(headers).toContain('unit-data-header-melee_bonus_v_cavalry')
+    expect(headers).toContain('unit-data-header-missile_bonus_v_infantry')
+    expect(headers).not.toContain('unit-data-header-missile_resistance')
+    expect(headers).not.toContain('unit-data-header-fire_resistance')
+    expect(headers).not.toContain('unit-data-header-reload')
+    expect(headers).not.toContain('unit-data-header-explosion_damage')
+    expect(headers).not.toContain('unit-data-header-explosion_ap_damage')
+    expect(headers).not.toContain('unit-data-header-race')
+  })
+
+  it('rounds Three Kingdoms movement speed to one decimal place', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      units: [{ ...sampleUnits[0], movement_speed: 35.26 }],
+      stats: { unit_count: 1, edited_unit_count: 0 },
+    })
+    const wrapper = mount(UnitDataModificationModal, {
+      props: { open: false, gameId: 'three_kingdoms' },
+    })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.get('[data-testid="unit-movement_speed-inf_swordsmen"]')
+    expect(input.element.value).toBe('35.3')
+    expect(input.attributes('step')).toBe('0.1')
+  })
+
+  it('rounds Warhammer movement speed to one decimal place', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      units: [{ ...sampleUnits[0], movement_speed: 35.26 }],
+      stats: { unit_count: 1, edited_unit_count: 0 },
+    })
+    const wrapper = mount(UnitDataModificationModal, {
+      props: { open: false, gameId: 'warhammer3' },
+    })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.get('[data-testid="unit-movement_speed-inf_swordsmen"]')
+    expect(input.element.value).toBe('35.3')
+    expect(input.attributes('step')).toBe('0.1')
+  })
+
+  it('rounds Three Kingdoms melee attack speed to one decimal place', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      units: [{ ...sampleUnits[0], melee_attack_speed: 2.56 }],
+      stats: { unit_count: 1, edited_unit_count: 0 },
+    })
+    const wrapper = mount(UnitDataModificationModal, {
+      props: { open: false, gameId: 'three_kingdoms' },
+    })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.get('[data-testid="unit-melee_attack_speed-inf_swordsmen"]')
+    expect(input.element.value).toBe('2.6')
+    expect(input.attributes('step')).toBe('0.1')
+
+    await input.setValue(25.06)
+    await wrapper.get('[data-testid="unit-data-save"]').trigger('click')
+    expect(wrapper.emitted('save')[0][0]).toEqual({
+      inf_swordsmen: { melee_attack_speed: 25.1 },
+    })
+  })
+
   it('filters rows through the search bar', async () => {
     const wrapper = mount(UnitDataModificationModal, { props: { open: false } })
     await wrapper.setProps({ open: true })
@@ -149,6 +278,55 @@ describe('unit data modification modal', () => {
 
     const payload = wrapper.emitted('save')[0][0]
     expect(payload).toEqual({ inf_swordsmen: { campaign_cap: 9 } })
+  })
+
+  it('allows the model count of a single-model unit to be edited', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      units: [
+        {
+          ...sampleUnits[0],
+          key: 'single_monster',
+          model_count: 1,
+          model_count_locked: false,
+          original_values: { model_count: 1 },
+        },
+      ],
+      stats: { unit_count: 1, edited_unit_count: 0 },
+    })
+    const wrapper = mount(UnitDataModificationModal, { props: { open: false } })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    const input = wrapper.get('[data-testid="unit-model_count-single_monster"]')
+    expect(input.attributes('disabled')).toBeUndefined()
+    await input.setValue(3)
+    await wrapper.get('[data-testid="unit-data-save"]').trigger('click')
+
+    expect(wrapper.emitted('save')[0][0]).toEqual({ single_monster: { model_count: 3 } })
+  })
+
+  it('disables only the fields the Three Kingdoms backend marks as unsafe', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      units: [
+        {
+          ...sampleUnits[0],
+          key: 'three_kingdoms_artillery',
+          model_count_locked: true,
+          hit_points_locked: true,
+          enabled_locked: true,
+        },
+      ],
+      stats: { unit_count: 1, edited_unit_count: 0 },
+    })
+    const wrapper = mount(UnitDataModificationModal, { props: { open: false } })
+    await wrapper.setProps({ open: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="unit-model_count-three_kingdoms_artillery"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="unit-hit_points-three_kingdoms_artillery"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="unit-enabled-three_kingdoms_artillery"]').attributes('disabled')).toBeDefined()
   })
 
   it('uses land_units HP as model HP and updates total live', async () => {

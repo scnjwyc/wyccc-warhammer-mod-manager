@@ -119,6 +119,7 @@ const suggestionValues = (key, mods, typeMap) => {
     return [
       { value: 'data', label: t('details.sourceData') },
       { value: 'workshop', label: t('details.sourceWorkshop') },
+      { value: 'local', label: t('details.sourceLocal') },
     ]
   }
   const values = new Set()

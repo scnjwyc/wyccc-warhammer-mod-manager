@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { localizedModTypeName, localizedPlaysetName, t } from './languages'
 import { executeKeyboardShortcut, isUndoShortcut, resolveKeyboardShortcut } from './keyboardShortcuts'
 import { useAppStore } from './store'
+import { GAME_OPTIONS } from './games'
 import ConfirmationModal from './components/ConfirmationModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import CompatibilityPatchModal from './components/CompatibilityPatchModal.vue'
@@ -52,6 +53,14 @@ const contextMod = computed(() => store.modMap.get(contextMenu.modId) || null)
 const contextModActive = computed(() => !!contextMod.value && store.activeIds.includes(contextMod.value.id))
 const activeGame = computed(() => store.settings.selected_game || 'warhammer3')
 const supportsWh3Tools = computed(() => activeGame.value === 'warhammer3')
+const supportsUnitDataTools = computed(() => (
+  activeGame.value === 'warhammer3' || activeGame.value === 'three_kingdoms'
+))
+const activeGameDefinition = computed(() => (
+  GAME_OPTIONS.find(game => game.id === activeGame.value) || GAME_OPTIONS[0]
+))
+const supportsPackActions = computed(() => activeGameDefinition.value.modFormat === 'pack')
+const supportsSaveGames = computed(() => activeGameDefinition.value.supportsSaveGames)
 const unitSizeFeature = computed(() => store.gameDataFeatures.unit_size)
 const friendlyFireFeature = computed(() => store.gameDataFeatures.friendly_fire)
 const unitCapFeature = computed(() => store.gameDataFeatures.unit_cap)
@@ -65,8 +74,8 @@ const REQUIRED_NANU_ROR_PACKS = [
     requirement: 'enabled',
   },
   {
-    pack: 'wyccc_nanu_ror_patch.pack',
-    name: "Nanu's Dynamic RORs Ultimate Patch",
+    pack: 'wyccc_nanu_rors_patch.pack',
+    name: "Nanu's Dynamic RORs Ultimate Compatibility Patch",
     requirement: 'installed',
   },
 ]
@@ -143,10 +152,20 @@ const completeConfirmation = confirmed => {
 watch(supportsWh3Tools, supported => {
   if (supported) return
   showGameDataModification.value = false
-  showUnitDataModification.value = false
   showCompatibilityPatch.value = false
   showOfficialProfileImport.value = false
   officialProfilePreview.value = null
+})
+
+watch(supportsUnitDataTools, supported => {
+  if (!supported) showUnitDataModification.value = false
+})
+
+watch(supportsSaveGames, supported => {
+  if (supported) return
+  showSaveGames.value = false
+  showSaveModsComparison.value = false
+  saveModsComparison.value = null
 })
 
 const initialize = async () => {
@@ -190,14 +209,14 @@ const openGameDataModification = () => {
 }
 
 const openUnitDataModification = async (mod = null) => {
-  if (!supportsWh3Tools.value) return
+  if (!supportsUnitDataTools.value) return
   try {
     await store.refreshUnitDataFeature()
   } catch (error) {
     store.notify(error?.message || String(error), 'error')
     return
   }
-  if (!store.unitDataFeatureSubscribed) {
+  if (store.unitDataFeature?.required !== false && !store.unitDataFeatureSubscribed) {
     await requestConfirmation({
       message: t('gameData.requiredModNotSubscribed', {
         mod: store.unitDataFeature?.title || 'Dynamic Units Modify',
@@ -1001,7 +1020,7 @@ onBeforeUnmount(() => {
           {{ t('app.gameDataModification') }}
         </button>
         <button
-          v-if="supportsWh3Tools"
+          v-if="supportsUnitDataTools"
           type="button"
           class="secondary-button sync-data-button"
           :disabled="!!store.busy || store.runtime.running"
@@ -1021,6 +1040,7 @@ onBeforeUnmount(() => {
           {{ t('app.compatibilityPatch') }}
         </button>
         <button
+          v-if="supportsPackActions"
           type="button"
           class="secondary-button sync-data-button"
           :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
@@ -1037,6 +1057,7 @@ onBeforeUnmount(() => {
 
       <div class="footer-actions">
         <button
+          v-if="supportsSaveGames"
           type="button"
           class="secondary-button save-list-button"
           :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
@@ -1045,6 +1066,7 @@ onBeforeUnmount(() => {
           {{ t('app.saveList') }}
         </button>
         <button
+          v-if="supportsSaveGames"
           type="button"
           class="continue-button"
           :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
@@ -1092,9 +1114,10 @@ onBeforeUnmount(() => {
     />
 
     <UnitDataModificationModal
-      v-if="supportsWh3Tools"
+      v-if="supportsUnitDataTools"
       :open="showUnitDataModification"
       :busy="store.busy"
+      :game-id="activeGame"
       :initial-search="unitDataSearch"
       @close="showUnitDataModification = false"
       @save="saveUnitData"
@@ -1205,6 +1228,7 @@ onBeforeUnmount(() => {
       :ai-enabled="!!store.settings.ai_enabled"
       :game-running="store.runtime.running"
       :keyboard-shortcuts="store.settings.keyboard_shortcuts"
+      :pack-actions="supportsPackActions"
       @close="closeModContextMenu"
       @action="handleContextAction"
     />

@@ -16,6 +16,7 @@ const props = defineProps({
   aiEnabled: { type: Boolean, default: false },
   gameRunning: { type: Boolean, default: false },
   keyboardShortcuts: { type: Object, default: () => ({}) },
+  packActions: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['close', 'action'])
@@ -38,7 +39,9 @@ const submenuToLeft = computed(() => {
 
 const hasWorkshop = computed(() => !!props.mod?.workshop_id)
 const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.sources : [props.mod?.source]))
-const canCopyToData = computed(() => !!props.mod?.path && !sources.value.has('data'))
+const canCopyToData = computed(() => (
+  props.packActions && !!props.mod?.path && !sources.value.has('data')
+))
 const selectedModIds = computed(() => [...new Set(
   (Array.isArray(props.selectedModIds) ? props.selectedModIds : [])
     .map(id => String(id || '').trim())
@@ -49,9 +52,12 @@ const eligibleUpdateIds = computed(() => new Set(
     .map(id => String(id || '').trim())
     .filter(Boolean),
 ))
-const canUploadWorkshop = computed(() => sources.value.has('data') && !hasWorkshop.value)
+const canUploadWorkshop = computed(() => (
+  props.packActions && sources.value.has('data') && !hasWorkshop.value
+))
 const canUpdateWorkshop = computed(() => (
-  hasWorkshop.value
+  props.packActions
+  && hasWorkshop.value
   && selectedModIds.value.length > 0
   && selectedModIds.value.every(id => eligibleUpdateIds.value.has(id))
 ))
@@ -265,6 +271,7 @@ const run = (action, value = null, close = true) => {
         <span>{{ batchLabel(t('context.copyModPath')) }}</span>
       </button>
       <button
+        v-if="packActions"
         type="button"
         class="context-menu-item danger-item"
         :disabled="gameRunning"
@@ -280,6 +287,7 @@ const run = (action, value = null, close = true) => {
         <span>{{ batchLabel(t('context.openFileFolder')) }}</span>
       </button>
       <button
+        v-if="packActions"
         type="button"
         class="context-menu-item"
         :disabled="isBatchSelection"
@@ -299,6 +307,7 @@ const run = (action, value = null, close = true) => {
         <span>{{ batchLabel(mod.hidden ? t('context.unhide') : t('context.hide')) }}</span>
       </button>
       <button
+        v-if="packActions"
         type="button"
         class="context-menu-item"
         :disabled="!canCopyToData"

@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.5"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
@@ -75,11 +75,13 @@ INTERNAL_FEATURE_PACK_NAMES = frozenset(
 CORE_VANILLA_PACKS = {
     "data.pack",
     "db.pack",
+    "database.pack",
     "data_script.pack",
 }
 
 SOURCE_DATA = "data"
 SOURCE_WORKSHOP = "workshop"
+SOURCE_LOCAL = "local"
 
 PACK_TYPE_MOD = "mod"
 PACK_TYPE_MOVIE = "movie"

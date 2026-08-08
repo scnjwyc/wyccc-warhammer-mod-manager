@@ -262,16 +262,17 @@ describe('anchored mod selection', () => {
     expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible', 'hidden'])
   })
 
-  it('never displays the hidden Nanu ROR patch in either MOD list', () => {
+  it('never displays the hidden Nanu ROR compatibility patch in either MOD list', () => {
     const store = useAppStore()
     store.mods = [
-      { id: 'patch', pack_name: 'wyccc_nanu_ror_patch.pack', hidden: false },
+      { id: 'patch', pack_name: 'wyccc_nanu_rors_patch.pack', hidden: false },
+      { id: 'legacy', pack_name: 'wyccc_nanu_ror_patch.pack', hidden: false },
       { id: 'visible', pack_name: 'visible.pack', hidden: false },
     ]
     store.activeIds = ['patch']
 
     expect(store.activeMods.map(mod => mod.id)).toEqual([])
-    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['visible'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['legacy', 'visible'])
     store.currentPlaysetId = 'show-hidden'
     expect(store.activeDisplayMods.map(mod => mod.id)).toEqual([])
   })

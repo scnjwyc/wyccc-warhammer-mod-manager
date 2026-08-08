@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
 import struct
 import time
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 from .app_settings import DEFAULT_LANGUAGE
@@ -16,8 +19,8 @@ from .constants import (
     PACK_TYPE_MOVIE,
     PACK_TYPE_UNKNOWN,
     SOURCE_DATA,
+    SOURCE_LOCAL,
     SOURCE_WORKSHOP,
-    WH3_PACK_MAGIC,
 )
 from .models import GamePaths, ModAsset, ScanResult
 from .steam_paths import candidate_steam_roots, game_last_updated_at
@@ -26,6 +29,69 @@ from .workshop import WorkshopMetadataService
 _MANIFEST_FILE_RE = re.compile(r"^\s*([^\s]+)")
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _STEAM_KEYVALUES_TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
+_PACK_MAGICS = {b"PFH2", b"PFH3", b"PFH4", b"PFH5", b"PFH6"}
+_PACK_TYPE_MASK = 0x0F
+_PACK_FLAG_INDEX_TIMESTAMPS = 0x40
+_PACK_FLAG_ENCRYPTED_INDEX = 0x80
+_PACK_FLAG_EXTENDED_HEADER = 0x100
+_MAX_PACK_INDEX_SIZE = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _PackLayout:
+    magic: bytes
+    type_and_flags: int
+    dependency_count: int
+    dependency_size: int
+    file_count: int
+    file_index_size: int
+    header_size: int
+
+
+def _read_pack_layout(path: Path) -> _PackLayout | None:
+    """Read the common PFH2-PFH6 index layout without loading Pack payloads."""
+    try:
+        file_size = path.stat().st_size
+        with path.open("rb") as stream:
+            prefix = stream.read(12)
+            magic_offset = 8 if prefix[:3] == b"MFH" and prefix[8:12] in _PACK_MAGICS else 0
+            magic = prefix[magic_offset:magic_offset + 4]
+            if magic not in _PACK_MAGICS:
+                return None
+            stream.seek(magic_offset + 4)
+            type_and_flags_data = stream.read(4)
+            index_fields = stream.read(16)
+            if len(type_and_flags_data) != 4 or len(index_fields) != 16:
+                return None
+            type_and_flags = struct.unpack("<I", type_and_flags_data)[0]
+            dependency_count, dependency_size, file_count, file_index_size = struct.unpack(
+                "<4I", index_fields
+            )
+            timestamp_size = 8 if magic in {b"PFH2", b"PFH3"} else 4
+            if len(stream.read(timestamp_size)) != timestamp_size:
+                return None
+    except OSError:
+        return None
+
+    extra_header_size = 280 if magic == b"PFH6" else (
+        20 if type_and_flags & _PACK_FLAG_EXTENDED_HEADER else 0
+    )
+    header_size = magic_offset + 4 + 4 + 16 + timestamp_size + extra_header_size
+    if (
+        dependency_size > _MAX_PACK_INDEX_SIZE
+        or file_index_size > _MAX_PACK_INDEX_SIZE
+        or header_size + dependency_size + file_index_size > file_size
+    ):
+        return None
+    return _PackLayout(
+        magic=magic,
+        type_and_flags=type_and_flags,
+        dependency_count=dependency_count,
+        dependency_size=dependency_size,
+        file_count=file_count,
+        file_index_size=file_index_size,
+        header_size=header_size,
+    )
 
 
 def _parse_steam_keyvalues(text: str) -> dict[str, object]:
@@ -152,31 +218,24 @@ def _steam_subscription_times(paths: GamePaths) -> dict[str, int]:
 
 
 def read_pack_type(path: Path) -> str:
-    try:
-        with path.open("rb") as stream:
-            header = stream.read(8)
-    except OSError:
+    layout = _read_pack_layout(path)
+    if layout is None:
         return PACK_TYPE_UNKNOWN
-    if len(header) < 8 or header[:4] != WH3_PACK_MAGIC:
-        return PACK_TYPE_UNKNOWN
-    byte_mask = struct.unpack("<I", header[4:8])[0]
-    return PACK_TYPE_MOVIE if byte_mask == 4 else PACK_TYPE_MOD
+    pack_type = layout.type_and_flags & _PACK_TYPE_MASK
+    return PACK_TYPE_MOVIE if pack_type == 4 else PACK_TYPE_MOD
 
 
 def read_pack_dependencies(path: Path) -> list[str]:
-    """Read the NUL-separated dependency block from a PFH5 pack header."""
+    """Read the NUL-separated dependency block from a PFH2-PFH6 Pack header."""
+    layout = _read_pack_layout(path)
+    if layout is None or layout.dependency_size <= 0:
+        return []
     try:
         with path.open("rb") as stream:
-            header = stream.read(28)
-            if len(header) < 28 or header[:4] != WH3_PACK_MAGIC:
+            stream.seek(layout.header_size)
+            dependency_block = stream.read(layout.dependency_size)
+            if len(dependency_block) != layout.dependency_size:
                 return []
-            dependency_size = struct.unpack_from("<I", header, 12)[0]
-            if dependency_size <= 0:
-                return []
-            remaining = max(0, path.stat().st_size - 28)
-            if dependency_size > remaining or dependency_size > 16 * 1024 * 1024:
-                return []
-            dependency_block = stream.read(dependency_size)
     except OSError:
         return []
 
@@ -196,30 +255,30 @@ def read_pack_dependencies(path: Path) -> list[str]:
 
 
 def read_pack_entry_names(path: Path) -> list[str]:
-    """Read PFH5 entry names without loading or decompressing entry payloads."""
+    """Read PFH2-PFH6 entry names without loading or decompressing payloads."""
+    layout = _read_pack_layout(path)
+    if layout is None or layout.type_and_flags & _PACK_FLAG_ENCRYPTED_INDEX:
+        return []
     try:
         with path.open("rb") as stream:
-            header = stream.read(28)
-            if len(header) < 28 or header[:4] != WH3_PACK_MAGIC:
-                return []
-            _, _, dependency_size, file_count, index_size, _ = struct.unpack_from(
-                "<6i", header, 4
-            )
-            if dependency_size < 0 or file_count < 0 or index_size < 0:
-                return []
-            stream.seek(28 + dependency_size)
-            index = stream.read(index_size)
-            if len(index) != index_size:
+            stream.seek(layout.header_size + layout.dependency_size)
+            index = stream.read(layout.file_index_size)
+            if len(index) != layout.file_index_size:
                 return []
     except OSError:
         return []
 
     names: list[str] = []
     cursor = 0
-    for _ in range(file_count):
-        if cursor + 5 > len(index):
+    timestamp_size = (
+        8 if layout.magic in {b"PFH2", b"PFH3"} else 4
+    ) if layout.type_and_flags & _PACK_FLAG_INDEX_TIMESTAMPS else 0
+    compression_flag_size = 1 if layout.magic in {b"PFH5", b"PFH6"} else 0
+    fixed_entry_size = 4 + timestamp_size + compression_flag_size
+    for _ in range(layout.file_count):
+        if cursor + fixed_entry_size > len(index):
             return []
-        cursor += 5
+        cursor += fixed_entry_size
         terminator = index.find(b"\0", cursor)
         if terminator < 0:
             return []
@@ -268,6 +327,24 @@ def _find_preview(directory: Path, pack_name: str, workshop: bool) -> str:
     return ""
 
 
+def _valid_feral_manifest_entry(item: object) -> bool:
+    if not isinstance(item, dict):
+        return False
+    filename = str(item.get("filename") or "").strip().replace("\\", "/")
+    relative = PurePosixPath(filename)
+    checksum = item.get("checksum")
+    return (
+        bool(filename)
+        and not relative.is_absolute()
+        and bool(relative.parts)
+        and relative.parts[0].casefold() == "data"
+        and all(part not in {"", ".", ".."} for part in relative.parts)
+        and isinstance(checksum, int)
+        and not isinstance(checksum, bool)
+        and 0 <= checksum <= 0xFFFFFFFF
+    )
+
+
 class ModScanner:
     def __init__(self, workshop_metadata: WorkshopMetadataService):
         self.workshop_metadata = workshop_metadata
@@ -281,9 +358,14 @@ class ModScanner:
         result = ScanResult()
         assets: dict[str, ModAsset] = {}
         data_path = Path(paths.data_path) if paths.data_path else Path()
+        directory_mods = paths.game_definition.mod_format == "feral_directory"
 
-        vanilla = self._read_vanilla_manifest(data_path, result.warnings)
-        if paths.data_path:
+        vanilla = (
+            set()
+            if directory_mods
+            else self._read_vanilla_manifest(data_path, result.warnings)
+        )
+        if paths.data_path and not directory_mods:
             self._scan_pack_directory(
                 data_path,
                 SOURCE_DATA,
@@ -303,9 +385,21 @@ class ModScanner:
                     if child.name in INTERNAL_FEATURE_WORKSHOP_IDS:
                         continue
                     workshop_ids.append(child.name)
-                    self._scan_workshop_item(child, child.name, assets, result)
+                    if directory_mods:
+                        self._scan_feral_directory_mod(
+                            child,
+                            SOURCE_WORKSHOP,
+                            assets,
+                            result,
+                            workshop_id=child.name,
+                        )
+                    else:
+                        self._scan_workshop_item(child, child.name, assets, result)
             elif str(workshop_root):
                 result.warnings.append(f"Workshop 目录不存在：{workshop_root}")
+
+        if directory_mods:
+            self._scan_feral_local_mods(assets, result)
 
         subscription_times = _steam_subscription_times(paths)
 
@@ -366,11 +460,12 @@ class ModScanner:
                 remote_updated = int(workshop_data.get("updated_at") or 0)
                 if remote_updated:
                     asset.updated_at = remote_updated
-            if asset.pack_type == PACK_TYPE_UNKNOWN:
+            if not directory_mods and asset.pack_type == PACK_TYPE_UNKNOWN:
                 result.warnings.append(f"无法识别 PFH5 Pack 头：{asset.path}")
 
         self._merge_data_workshop_duplicates(assets)
-        self._mark_missing_dependencies(assets, vanilla)
+        if not directory_mods:
+            self._mark_missing_dependencies(assets, vanilla)
 
         if settings.get("check_outdated_mods"):
             result.game_updated_at = game_last_updated_at(paths)
@@ -691,6 +786,105 @@ class ModScanner:
         for pack_path in pack_paths:
             asset = self._make_asset(pack_path, SOURCE_WORKSHOP, workshop_id)
             assets[asset.id] = asset
+
+    def _scan_feral_local_mods(
+        self,
+        assets: dict[str, ModAsset],
+        result: ScanResult,
+    ) -> None:
+        local_app_data = str(os.environ.get("LOCALAPPDATA") or "").strip()
+        if not local_app_data:
+            return
+        mods_root = (
+            Path(local_app_data)
+            / "Feral Interactive"
+            / "Total War ROME REMASTERED"
+            / "Mods"
+        )
+        for folder_name in ("Local Mods", "My Mods"):
+            root = mods_root / folder_name
+            if not root.is_dir():
+                continue
+            result.scanned_roots.append(str(root.resolve(strict=False)))
+            try:
+                children = sorted(root.iterdir(), key=lambda item: item.name.casefold())
+            except OSError as exc:
+                result.warnings.append(f"无法扫描 Rome Remastered 本地 MOD 目录 {root}：{exc}")
+                continue
+            for child in children:
+                if child.is_dir():
+                    self._scan_feral_directory_mod(child, SOURCE_LOCAL, assets, result)
+
+    @staticmethod
+    def _scan_feral_directory_mod(
+        directory: Path,
+        source: str,
+        assets: dict[str, ModAsset],
+        result: ScanResult,
+        workshop_id: str = "",
+    ) -> None:
+        modinfo_path = directory / "modinfo.json"
+        filelist_path = directory / "filelist.json"
+        data_path = directory / "data"
+        try:
+            modinfo = json.loads(modinfo_path.read_text(encoding="utf-8-sig"))
+            filelist = json.loads(filelist_path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            result.warnings.append(
+                f"已跳过无效的 Rome Remastered MOD {directory.name}：{exc}"
+            )
+            return
+        valid_manifest = isinstance(filelist, list) and all(
+            _valid_feral_manifest_entry(item) for item in filelist
+        )
+        if not isinstance(modinfo, dict) or not valid_manifest or not data_path.is_dir():
+            result.warnings.append(
+                f"已跳过无效的 Rome Remastered MOD {directory.name}：缺少有效的 modinfo.json、filelist.json 或 data 目录"
+            )
+            return
+
+        preview_path = ""
+        preview_name = str(modinfo.get("Preview Image") or "").strip()
+        if preview_name:
+            candidate = (directory / preview_name).resolve(strict=False)
+            try:
+                candidate.relative_to(directory.resolve(strict=False))
+            except ValueError:
+                candidate = Path()
+            if candidate.is_file() and candidate.suffix.casefold() in _IMAGE_SUFFIXES:
+                preview_path = str(candidate)
+        if not preview_path:
+            preview_path = _find_preview(directory, directory.name, bool(workshop_id))
+
+        try:
+            stat = directory.stat()
+            updated_at = int(max(modinfo_path.stat().st_mtime, filelist_path.stat().st_mtime) * 1000)
+            created_at = int(stat.st_ctime * 1000)
+        except OSError:
+            updated_at = 0
+            created_at = 0
+        asset = ModAsset(
+            id=_asset_id(source, directory, workshop_id),
+            pack_name=directory.name,
+            display_name=str(modinfo.get("Mod Name") or directory.name).strip() or directory.name,
+            path=str(directory.resolve(strict=False)),
+            directory=str(directory.parent.resolve(strict=False)),
+            source=source,
+            workshop_id=workshop_id,
+            description=str(modinfo.get("Description") or ""),
+            preview_path=preview_path,
+            workshop_url=(
+                f"https://steamcommunity.com/sharedfiles/filedetails/?id={workshop_id}"
+                if workshop_id
+                else ""
+            ),
+            pack_type=PACK_TYPE_MOD,
+            updated_at=updated_at,
+            created_at=created_at,
+            is_symlink=directory.is_symlink(),
+            sources=[source],
+        )
+        assets[asset.id] = asset
 
     @staticmethod
     def _make_asset(pack_path: Path, source: str, workshop_id: str = "") -> ModAsset:

@@ -382,7 +382,7 @@ class SettingsService:
             return GamePaths(game_id=definition.id)
 
         game_path = Path(game_path_value)
-        data_path = game_path / "data"
+        data_path = game_path / Path(definition.data_relative_path)
         workshop_path = Path(workshop_path_value) if workshop_path_value else None
         if not workshop_path_value:
             inferred = game_path.parent.parent / "workshop" / "content" / definition.app_id

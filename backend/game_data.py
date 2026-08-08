@@ -16,6 +16,7 @@ from .game_data_settings import (
     normalize_unit_recruitment_capacity_multiplier,
     normalize_unit_scale_multiplier,
 )
+from .three_kingdoms_schema import load_three_kingdoms_schemas
 
 
 SCHEMA_PATH = Path(__file__).with_name("wh3_db_schema.json")
@@ -42,6 +43,172 @@ def _load_schemas() -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
 # current schemas, while the historical schemas for the original game-data
 # transformations remain in ``wh3_db_schema.json``.
 EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
+    # WH3 movement references pass through these component tables before
+    # reaching battle_entities_tables.  They are kept here because the
+    # focused historical WH3 schema file predates the current definitions.
+    "mounts_tables": {
+        10: (
+            ("key", "StringU8"),
+            ("animation", "StringU8"),
+            ("entity", "StringU8"),
+            ("audio_armour_type", "OptionalStringU8"),
+            ("variant", "StringU8"),
+            ("voiceover", "StringU8"),
+        ),
+        9: (
+            ("key", "StringU8"),
+            ("animation", "StringU8"),
+            ("entity", "StringU8"),
+            ("audio_armour_type", "StringU8"),
+            ("variant", "StringU8"),
+            ("voiceover", "StringU8"),
+        ),
+    },
+    "battlefield_engines_tables": {
+        23: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+            ("destruct_meta", "OptionalStringU8"),
+            ("audio_armour_type", "OptionalStringU8"),
+            ("riders_shoot_behaviour", "StringU8"),
+            ("scale", "F32"),
+        ),
+        22: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+            ("destruct_meta", "OptionalStringU8"),
+            ("audio_armour_type", "OptionalStringU8"),
+            ("riders_shoot_behaviour", "StringU8"),
+        ),
+        21: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+            ("destruct_meta", "OptionalStringU8"),
+            ("audio_armour_type", "OptionalStringU8"),
+        ),
+        19: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("first_person", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+            ("destruct_meta", "OptionalStringU8"),
+        ),
+        18: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("first_person", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+        ),
+        17: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("first_person", "OptionalStringU8"),
+        ),
+    },
+    "land_unit_articulated_vehicles_tables": {
+        6: (
+            ("ammo_caisson_entity", "OptionalStringU8"),
+            ("ammo_caisson_destruction", "StringU8"),
+            ("ammo_caisson_model", "OptionalStringU8"),
+            ("ammo_caisson_destroyed_model", "OptionalStringU8"),
+            ("articulated_entity", "OptionalStringU8"),
+            ("key", "StringU8"),
+            ("head_offset", "F32"),
+            ("engine_articulation_node_index", "I32"),
+            ("draughts_articulation_node_index", "I32"),
+            ("is_train", "Boolean"),
+        ),
+        4: (
+            ("ammo_caisson_destroyed_model", "OptionalStringU8"),
+            ("ammo_caisson_destruction", "StringU8"),
+            ("ammo_caisson_entity", "OptionalStringU8"),
+            ("ammo_caisson_model", "OptionalStringU8"),
+            ("articulated_entity", "OptionalStringU8"),
+            ("key", "StringU8"),
+            ("articulation_node_1_offset", "F32"),
+            ("articulation_node_1_radius", "F32"),
+            ("articulation_node_2_offset", "F32"),
+            ("articulation_node_2_radius", "F32"),
+            ("articulation_node_3_offset", "F32"),
+            ("articulation_node_3_radius", "F32"),
+            ("articulation_max_angle", "F32"),
+            ("head_offset", "F32"),
+        ),
+    },
     "melee_weapons_tables": {
         25: (
             ("bonus_v_large", "I32"), ("bonus_v_infantry", "I32"), ("key", "StringU8"),
@@ -100,6 +267,17 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
             ("exclude", "Boolean"), ("unit_caste", "OptionalStringU8"),
             ("unit_category", "OptionalStringU8"), ("unit_class", "OptionalStringU8"),
             ("unit_record", "OptionalStringU8"), ("unit_set", "StringU8"),
+        ),
+    },
+    "building_units_allowed_tables": {
+        4: (
+            ("building", "StringU8"),
+            ("unit", "StringU8"),
+            ("XP", "I32"),
+            ("key", "I32"),
+            ("conditions", "I32"),
+            ("faction", "OptionalStringU8"),
+            ("enabled", "Boolean"),
         ),
     },
     # Recruitment gating used by the unit-data editor when a unit is disabled.
@@ -237,10 +415,14 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
 }
 
 TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS}
+THREE_KINGDOMS_TABLE_SCHEMAS = load_three_kingdoms_schemas()
 TABLE_ORDER = (
     "_kv_rules_tables",
     "main_units_tables",
     "land_units_tables",
+    "mounts_tables",
+    "battlefield_engines_tables",
+    "land_unit_articulated_vehicles_tables",
     "battle_entities_tables",
     "melee_weapons_tables",
     "missile_weapons_tables",
@@ -249,6 +431,7 @@ TABLE_ORDER = (
     "unit_purchasable_effect_sets_tables",
     "unit_armour_types_tables",
     "unit_set_to_unit_junctions_tables",
+    "building_units_allowed_tables",
     "units_to_groupings_military_permissions_tables",
     "units_to_exclusive_faction_permissions_tables",
     "factions_tables",
@@ -257,11 +440,16 @@ TABLE_ORDER = (
     "projectiles_explosions_tables",
     "battle_vortexs_tables",
 )
-TABLE_PREFIXES = tuple(f"db\\{table_name}\\" for table_name in TABLE_ORDER)
+THREE_KINGDOMS_TABLE_ORDER = tuple(THREE_KINGDOMS_TABLE_SCHEMAS)
+ALL_TABLE_ORDER = tuple(dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER)))
+TABLE_PREFIXES = tuple(f"db\\{table_name}\\" for table_name in ALL_TABLE_ORDER)
 CURRENT_TABLE_VERSIONS = {
     "_kv_rules_tables": 0,
     "main_units_tables": 7,
     "land_units_tables": 54,
+    "mounts_tables": 10,
+    "battlefield_engines_tables": 23,
+    "land_unit_articulated_vehicles_tables": 6,
     "battle_entities_tables": 39,
     "melee_weapons_tables": 25,
     "missile_weapons_tables": 11,
@@ -270,6 +458,7 @@ CURRENT_TABLE_VERSIONS = {
     "unit_purchasable_effect_sets_tables": 1,
     "unit_armour_types_tables": 6,
     "unit_set_to_unit_junctions_tables": 1,
+    "building_units_allowed_tables": 4,
     "units_to_groupings_military_permissions_tables": 1,
     "units_to_exclusive_faction_permissions_tables": 1,
     "factions_tables": 6,
@@ -278,10 +467,17 @@ CURRENT_TABLE_VERSIONS = {
     "projectiles_explosions_tables": 19,
     "battle_vortexs_tables": 19,
 }
+THREE_KINGDOMS_CURRENT_TABLE_VERSIONS = {
+    table_name: max(versions)
+    for table_name, versions in THREE_KINGDOMS_TABLE_SCHEMAS.items()
+}
 TABLE_KEY_FIELDS = {
     "_kv_rules_tables": "key",
     "main_units_tables": "unit",
     "land_units_tables": "key",
+    "mounts_tables": "key",
+    "battlefield_engines_tables": "key",
+    "land_unit_articulated_vehicles_tables": "key",
     "battle_entities_tables": "key",
     "melee_weapons_tables": "key",
     "missile_weapons_tables": "key",
@@ -290,6 +486,7 @@ TABLE_KEY_FIELDS = {
     "unit_purchasable_effect_sets_tables": "unit",
     "unit_armour_types_tables": "key",
     "unit_set_to_unit_junctions_tables": "unit_set",
+    "building_units_allowed_tables": "key",
     "units_to_groupings_military_permissions_tables": "unit",
     "units_to_exclusive_faction_permissions_tables": "unit",
     "factions_tables": "key",
@@ -298,6 +495,45 @@ TABLE_KEY_FIELDS = {
     "projectiles_explosions_tables": "key",
     "battle_vortexs_tables": "vortex_key",
 }
+THREE_KINGDOMS_TABLE_KEY_FIELDS = {
+    "main_units_tables": "unit",
+    "land_units_tables": "key",
+    "composed_entities_tables": "key",
+    "battle_entities_tables": "key",
+    "mens_tables": "key",
+    "mounts_tables": "key",
+    "animals_tables": "key",
+    "battlefield_engines_tables": "key",
+    "melee_weapons_tables": "key",
+    "missile_weapons_tables": "key",
+    "projectiles_tables": "key",
+    "projectiles_explosions_tables": "key",
+    "unit_armour_types_tables": "key",
+    "building_units_allowed_tables": "key",
+    "unit_shield_types_tables": "key",
+    "units_to_groupings_military_permissions_tables": "unit",
+    "units_to_exclusive_faction_permissions_tables": "key",
+    "factions_tables": "key",
+    "cultures_subcultures_tables": "subculture",
+}
+
+
+def is_three_kingdoms_game(game_id: str | None) -> bool:
+    return str(game_id or "").strip().casefold() == "three_kingdoms"
+
+
+def table_schemas_for_game(
+    game_id: str | None = None,
+) -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
+    return THREE_KINGDOMS_TABLE_SCHEMAS if is_three_kingdoms_game(game_id) else TABLE_SCHEMAS
+
+
+def current_table_versions_for_game(game_id: str | None = None) -> Mapping[str, int]:
+    return (
+        THREE_KINGDOMS_CURRENT_TABLE_VERSIONS
+        if is_three_kingdoms_game(game_id)
+        else CURRENT_TABLE_VERSIONS
+    )
 
 NON_SPELL_FRIENDLY_FIRE_KV_RULES = (
     ("projectile_friendly_fire_man_height_coefficient", 0.6),
@@ -420,8 +656,12 @@ def _parse_field(payload: bytes, cursor: int, field_type: str, context: str) -> 
     raise ValueError(f"不支持的 DB 字段类型：{field_type}（{context}）")
 
 
-def parse_db_table(table_name: str, payload: bytes) -> ParsedDbTable:
-    schemas = TABLE_SCHEMAS.get(table_name)
+def parse_db_table(
+    table_name: str,
+    payload: bytes,
+    game_id: str | None = None,
+) -> ParsedDbTable:
+    schemas = table_schemas_for_game(game_id).get(table_name)
     if not schemas:
         raise ValueError(f"不支持的 DB 表：{table_name}")
 
@@ -445,7 +685,11 @@ def parse_db_table(table_name: str, payload: bytes) -> ParsedDbTable:
             continue
         break
 
-    resolved_version = version if version is not None else CURRENT_TABLE_VERSIONS[table_name]
+    resolved_version = (
+        version
+        if version is not None
+        else current_table_versions_for_game(game_id)[table_name]
+    )
     schema = schemas.get(resolved_version)
     if not schema:
         supported = ", ".join(str(item) for item in sorted(schemas))
@@ -582,20 +826,17 @@ def _compare_internal_names(first: str, second: str) -> int:
     return 0
 
 
-def _has_higher_priority(candidate: _Candidate, existing: _Candidate) -> bool:
-    if candidate.source_rank != existing.source_rank:
-        return candidate.source_rank < existing.source_rank
-
-    file_order = _compare_internal_names(candidate.internal_name, existing.internal_name)
+def _compare_candidate_priority(first: _Candidate, second: _Candidate) -> int:
+    file_order = _compare_internal_names(first.internal_name, second.internal_name)
     if file_order:
-        return file_order < 0
-    return (
-        candidate.entry_rank,
-        candidate.row_rank,
-    ) < (
-        existing.entry_rank,
-        existing.row_rank,
-    )
+        return file_order
+    first_order = (first.source_rank, first.entry_rank, first.row_rank)
+    second_order = (second.source_rank, second.entry_rank, second.row_rank)
+    return (first_order > second_order) - (first_order < second_order)
+
+
+def _has_higher_priority(candidate: _Candidate, existing: _Candidate) -> bool:
+    return _compare_candidate_priority(candidate, existing) < 0
 
 
 def _entry_table_name(name: str) -> tuple[str, str] | None:
@@ -605,7 +846,7 @@ def _entry_table_name(name: str) -> tuple[str, str] | None:
         return None
     if parts[2].casefold().endswith(".tsv"):
         return None
-    matched = next((table for table in TABLE_ORDER if table.casefold() == parts[1].casefold()), None)
+    matched = next((table for table in ALL_TABLE_ORDER if table.casefold() == parts[1].casefold()), None)
     if not matched:
         return None
     return matched, parts[2]
@@ -642,6 +883,7 @@ def _collect_effective_rows(
     sources: Sequence[DbSource],
     needed_tables: set[str],
     *,
+    game_id: str | None = None,
     skip_main_unit_compatibility_placeholders: bool = False,
     all_candidates: dict[str, dict[str, list[_Candidate]]] | None = None,
 ) -> dict[str, dict[str, _Candidate]]:
@@ -656,7 +898,7 @@ def _collect_effective_rows(
                 continue
             table_name, internal_name = resolved
             try:
-                parsed = parse_db_table(table_name, entry.payload)
+                parsed = parse_db_table(table_name, entry.payload, game_id)
             except ValueError as exc:
                 raise ValueError(f"读取 {source.name} 中的 {entry.name} 失败：{exc}") from exc
             for row_rank, row in enumerate(parsed.rows):
@@ -666,7 +908,7 @@ def _collect_effective_rows(
                     and _is_main_unit_compatibility_placeholder(internal_name, row)
                 ):
                     continue
-                key = _table_row_key(table_name, row)
+                key = _table_row_key(table_name, row, game_id)
                 if not key:
                     raise ValueError(f"{source.name} 中的 {entry.name} 存在空主键")
                 candidate = _Candidate(
@@ -748,8 +990,22 @@ def _generated_internal_name(
     return internal_name
 
 
-def _table_row_key(table_name: str, row: ParsedDbRow) -> str:
+def _table_row_key(
+    table_name: str,
+    row: ParsedDbRow,
+    game_id: str | None = None,
+) -> str:
     """Return the primary key used to merge one supported DB row."""
+    if is_three_kingdoms_game(game_id):
+        values = row.values
+        if table_name == "land_units_templates_tables":
+            return "\x1f".join(
+                str(values.get(field) or "")
+                for field in ("land_unit", "composed_entity")
+            )
+        return str(
+            values.get(THREE_KINGDOMS_TABLE_KEY_FIELDS.get(table_name, "key")) or ""
+        )
     if table_name == "effect_bonus_value_missile_weapon_junctions_tables":
         values = row.values
         return "\x1f".join(

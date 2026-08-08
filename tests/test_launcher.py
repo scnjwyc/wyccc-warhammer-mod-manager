@@ -126,6 +126,60 @@ class LauncherProcessTests(unittest.TestCase):
                         process_name="Three_Kingdoms.exe",
                     )
 
+    def test_launch_passes_the_selected_steam_app_id_to_the_game(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War Rome II"
+            game.mkdir()
+            (game / "Rome2.exe").write_bytes(b"")
+            mod_list = game / "used_mods.txt"
+            mod_list.write_text('mod "example.pack";\n', encoding="utf-8")
+
+            with (
+                patch("backend.launcher.is_game_running", return_value=False),
+                patch("backend.launcher.subprocess.Popen") as popen,
+            ):
+                popen.return_value.pid = 42
+                result = launch_game(
+                    str(game),
+                    str(mod_list),
+                    executable_name="Rome2.exe",
+                    process_name="Rome2.exe",
+                    app_id="214950",
+                )
+
+        environment = popen.call_args.kwargs["env"]
+        self.assertEqual(environment["SteamAppId"], "214950")
+        self.assertEqual(environment["SteamGameId"], "214950")
+        self.assertEqual(result["pid"], 42)
+
+    def test_launches_rome_remastered_official_manager_without_pack_list_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary) / "Total War ROME REMASTERED"
+            launcher = game / "launcher" / "launcher.exe"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_bytes(b"")
+            (game / "Total War ROME REMASTERED.exe").write_bytes(b"")
+
+            with (
+                patch("backend.launcher.is_game_running", return_value=False),
+                patch("backend.launcher.subprocess.Popen") as popen,
+            ):
+                popen.return_value.pid = 84
+                result = launch_game(
+                    str(game),
+                    "",
+                    executable_name="Total War ROME REMASTERED.exe",
+                    process_name="Total War ROME REMASTERED.exe",
+                    app_id="885970",
+                    launch_executable_name="launcher/launcher.exe",
+                    uses_mod_list=False,
+                )
+
+        self.assertEqual(popen.call_args.args[0], [str(launcher)])
+        self.assertEqual(result["arguments"], [])
+        self.assertEqual(result["executable"], str(launcher))
+
 
 if __name__ == "__main__":
     unittest.main()

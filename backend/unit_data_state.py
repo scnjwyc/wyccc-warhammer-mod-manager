@@ -20,7 +20,9 @@ from .unit_data import _sanitize_edits
 UNIT_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_unit_data_patch.json"
 UNIT_DATA_EDITS_NAME = "unit_data_edits.json"
 FINGERPRINT_SCHEMA_VERSION = 1
-UNIT_DATA_BUILDER_VERSION = 1
+# Bump whenever the generated DB entry layout or recruitment-gating logic
+# changes, so an old runtime patch cannot be reused after an update.
+UNIT_DATA_BUILDER_VERSION = 2
 
 
 def _edits_store(output_dir: Path) -> AtomicJsonStore:
@@ -83,10 +85,20 @@ def build_unit_data_inputs(
     settings: Mapping[str, Any],
     edits: Mapping[str, Any],
     source_snapshot: Any | None = None,
+    game_id: str | None = None,
 ) -> dict[str, Any]:
     snapshot = source_snapshot
-    if snapshot is None:
-        snapshot = collect_game_data_source_snapshot(data_path, assets, active_ids)
+    # With no edits there is no patch to build, so avoid requiring the vanilla
+    # database Pack merely to produce the stable zero-modification result.
+    # This also keeps an untouched Three Kingdoms launch independent of the
+    # unit-data DB reader.
+    if snapshot is None and _sanitize_edits(edits):
+        snapshot = collect_game_data_source_snapshot(
+            data_path,
+            assets,
+            active_ids,
+            game_id=game_id,
+        )
     sources = [
         {
             "role": entry.spec.role,
@@ -108,11 +120,12 @@ def build_unit_data_inputs(
                 "target_db_sha256": entry.content_sha256,
             },
         }
-        for entry in snapshot.entries
+        for entry in (snapshot.entries if snapshot is not None else ())
     ]
     return {
         "fingerprint_schema_version": FINGERPRINT_SCHEMA_VERSION,
         "builder_version": UNIT_DATA_BUILDER_VERSION,
+        "game_id": str(game_id or "warhammer3"),
         "playset_id": str(playset_id),
         "active_ids": [str(mod_id) for mod_id in active_ids],
         "settings": {
@@ -209,12 +222,18 @@ def ensure_unit_data_patch(
     active_ids: Sequence[str],
     playset_id: str,
     settings: Mapping[str, Any],
+    game_id: str | None = None,
 ) -> dict[str, Any]:
     """Build the unit-data patch when edits exist; reuse a valid cached result."""
     output_dir = Path(output_dir)
     edits = load_unit_data_edits(output_dir)
     snapshot = (
-        collect_game_data_source_snapshot(data_path, assets, active_ids)
+        collect_game_data_source_snapshot(
+            data_path,
+            assets,
+            active_ids,
+            game_id=game_id,
+        )
         if edits
         else None
     )
@@ -226,6 +245,7 @@ def ensure_unit_data_patch(
         settings,
         edits,
         snapshot,
+        game_id,
     )
     fingerprint = fingerprint_unit_data_inputs(inputs)
     store = _manifest_store(output_dir)
@@ -259,6 +279,7 @@ def ensure_unit_data_patch(
             dict(settings),
             edits,
             source_snapshot=snapshot,
+            game_id=game_id,
         )
         if built.get("path") and Path(str(built["path"])).is_file():
             build_status = "generated"

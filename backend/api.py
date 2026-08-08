@@ -14,7 +14,7 @@ import uuid
 import webbrowser
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 
 from PIL import Image, ImageOps
@@ -280,6 +280,10 @@ class API:
         if not bool(getattr(self._active_game(), capability, False)):
             raise ValueError(f"{feature} is only available for Total War: WARHAMMER III")
 
+    def _require_pack_mod_format(self, feature: str) -> None:
+        if self._active_game().mod_format != "pack":
+            raise ValueError(f"{feature} 不支持 Rome Remastered 目录式 MOD")
+
     def close(self) -> None:
         self.mod_monitor.stop()
         self._exit_low_consumption_callback = None
@@ -374,6 +378,15 @@ class API:
 
     @staticmethod
     def _unit_data_feature_status(paths: GamePaths) -> dict[str, Any]:
+        if paths.game_definition.supports_unit_data_modification and (
+            paths.game_definition.id == "three_kingdoms"
+        ):
+            return {
+                "pack_name": "",
+                "title": "",
+                "subscribed": True,
+                "required": False,
+            }
         workshop_path = Path(paths.workshop_path) if paths.workshop_path else None
         subscribed = False
         if workshop_path and workshop_path.is_dir():
@@ -398,7 +411,7 @@ class API:
 
     def _get_unit_data_feature_status(self) -> dict[str, Any]:
         self._require_game_capability(
-            "supports_game_data_modification",
+            "supports_unit_data_modification",
             "Unit data modification",
         )
         return self._unit_data_feature_status(self.settings_service.resolve_game_paths())
@@ -634,18 +647,18 @@ class API:
 
     def _get_unit_data_list(self) -> dict[str, Any]:
         self._require_game_capability(
-            "supports_game_data_modification",
+            "supports_unit_data_modification",
             "Unit data modification",
         )
         paths = self.settings_service.resolve_game_paths()
         if not paths.data_path:
             raise ValueError("尚未设置游戏数据目录")
         active_ids = self._unit_data_source_ids()
-        settings = self.settings_service.get()
         snapshot = collect_game_data_source_snapshot(
             paths.data_path,
             self._assets,
             active_ids,
+            game_id=paths.game_id,
         )
         edits = load_unit_data_edits(self.data_dir / "runtime")
         mod_loc_files = [
@@ -661,13 +674,13 @@ class API:
         )
         result = build_unit_table_snapshot(
             snapshot.sources,
-            settings,
             edits,
             name_map=name_map,
             culture_map=culture_map,
             source_names=[
                 _display_source_name(source) for source in snapshot.sources
             ],
+            game_id=self._active_game().id,
         )
         result["source_count"] = len(snapshot.entries)
         result["source_pack_names"] = [
@@ -677,7 +690,7 @@ class API:
 
     def _save_unit_data_edits(self, edits: dict[str, Any]) -> dict[str, Any]:
         self._require_game_capability(
-            "supports_game_data_modification",
+            "supports_unit_data_modification",
             "Unit data modification",
         )
         if not isinstance(edits, dict):
@@ -695,6 +708,7 @@ class API:
                 self._active_game().id
             ),
             settings=settings,
+            game_id=self._active_game().id,
         )
         return {**saved, "patch": patch}
 
@@ -986,6 +1000,8 @@ class API:
 
     def _preview_load_order(self, ordered_mod_ids: list[str]) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        if not paths.game_definition.uses_mod_list:
+            return self._directory_mod_plan(ordered_mod_ids)
         path_map = self.launch_path_aliases.prepare(
             paths.game_path,
             paths.workshop_path,
@@ -1014,6 +1030,31 @@ class API:
         expected_token: str = "",
     ) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        if not paths.game_definition.uses_mod_list:
+            plan = self._directory_mod_plan(ordered_mod_ids)
+            game_id = paths.game_id
+            current_playset = self.state_repository.get_current_playset(game_id)
+            current_ids = self._canonicalize_mod_ids(current_playset["mod_ids"])
+            missing_ids = {mod_id for mod_id in current_ids if mod_id not in self._assets}
+            active_queue = list(plan["ordered_mod_ids"])
+            playset_order: list[str] = []
+            for mod_id in current_ids:
+                if mod_id in missing_ids:
+                    playset_order.append(mod_id)
+                elif active_queue:
+                    playset_order.append(active_queue.pop(0))
+            playset_order.extend(active_queue)
+            self.state_repository.update_current_playset(
+                list(dict.fromkeys(playset_order)),
+                game_id,
+            )
+            self._refresh_missing_dependency_warnings(plan["ordered_mod_ids"])
+            self._last_order_token = f"managed:{game_id}"
+            return {
+                "plan": plan,
+                "backup": None,
+                "order_token": self._last_order_token,
+            }
         path_map = self.launch_path_aliases.prepare(
             paths.game_path,
             paths.workshop_path,
@@ -1036,6 +1077,7 @@ class API:
             plan,
             expected_token or self._last_order_token,
             comparison_path,
+            encoding=paths.game_definition.mod_list_encoding,
         )
         current_playset = self.state_repository.get_current_playset(game_id)
         current_ids = self._canonicalize_mod_ids(current_playset["mod_ids"])
@@ -1070,6 +1112,27 @@ class API:
             "order_token": token,
         }
 
+    def _directory_mod_plan(self, ordered_mod_ids: list[str]) -> dict[str, Any]:
+        normalized_ids = self._canonicalize_mod_ids(ordered_mod_ids)
+        selected: list[ModAsset] = []
+        missing_ids: list[str] = []
+        for mod_id in normalized_ids:
+            asset = self._assets.get(mod_id)
+            if not asset or not Path(asset.path).is_dir():
+                missing_ids.append(mod_id)
+            else:
+                selected.append(asset)
+        if missing_ids:
+            raise ValueError(f"以下启用项已不存在：{', '.join(missing_ids[:5])}")
+        return {
+            "ordered_mod_ids": [asset.id for asset in selected],
+            "working_directories": [asset.path for asset in selected],
+            "pack_names": [asset.pack_name for asset in selected],
+            "content": "",
+            "target_path": "",
+            "activation": "external_launcher",
+        }
+
     def _launch_game(
         self,
         ordered_mod_ids: list[str],
@@ -1094,6 +1157,8 @@ class API:
         save_name: str,
     ) -> dict[str, Any]:
         with self._order_lock:
+            if save_name and not self._active_game().supports_save_games:
+                raise ValueError("当前游戏不支持从管理器直接载入存档")
             selected_save = self.save_games.require(save_name) if save_name else None
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
             paths = self.settings_service.resolve_game_paths()
@@ -1102,11 +1167,19 @@ class API:
                 paths.workshop_path,
             )
             settings = self.settings_service.get()
-            if not paths.game_definition.supports_game_data_modification:
+            if not paths.game_definition.supports_unit_data_modification:
                 return self._launch_game_without_runtime_packs(
                     paths,
                     saved,
                     selected_save,
+                )
+            if not paths.game_definition.supports_game_data_modification:
+                return self._launch_game_with_unit_data_patch(
+                    paths,
+                    saved,
+                    selected_save,
+                    settings,
+                    path_map,
                 )
             subscription_state = self._resolve_game_data_subscription_state(settings)
             try:
@@ -1117,6 +1190,7 @@ class API:
                     active_ids=saved["plan"]["ordered_mod_ids"],
                     playset_id=self.state_repository.get_current_playset_id(paths.game_id),
                     settings=settings,
+                    game_id=paths.game_id,
                 )
             except Exception:
                 logger.exception("Unit data patch status=generation_failed")
@@ -1302,6 +1376,7 @@ class API:
                 str(selected_save["name"]) if selected_save else "",
                 executable_name=paths.game_definition.executable_name,
                 process_name=paths.game_definition.process_name,
+                app_id=paths.game_definition.app_id,
             )
             self.set_game_running(True, force=True)
             return {
@@ -1315,6 +1390,95 @@ class API:
                 "save": selected_save,
             }
 
+    def _launch_game_with_unit_data_patch(
+        self,
+        paths: GamePaths,
+        saved: dict[str, Any],
+        selected_save: dict[str, Any] | None,
+        settings: Mapping[str, Any],
+        path_map: Any,
+    ) -> dict[str, Any]:
+        """Launch a game that supports only the unit-data runtime patch."""
+        try:
+            unit_data_patch = ensure_unit_data_patch(
+                output_dir=self.data_dir / "runtime",
+                data_path=paths.data_path,
+                assets=self._assets,
+                active_ids=saved["plan"]["ordered_mod_ids"],
+                playset_id=self.state_repository.get_current_playset_id(paths.game_id),
+                settings=settings,
+                game_id=paths.game_id,
+            )
+        except Exception:
+            logger.exception("Unit data patch status=generation_failed")
+            raise
+        data_root = Path(paths.data_path).resolve(strict=False)
+        unit_data_path = self._stage_runtime_pack_in_data(
+            str(unit_data_patch.get("path") or ""),
+            data_root,
+            UNIT_DATA_PATCH_NAME,
+        )
+        launch_plan = saved["plan"]
+        launch_path = str(saved["plan"]["target_path"])
+        if unit_data_path is not None:
+            unit_data_id = "runtime:unit-data-patch"
+            runtime_assets = {
+                **self._assets,
+                unit_data_id: ModAsset(
+                    id=unit_data_id,
+                    pack_name=UNIT_DATA_PATCH_NAME,
+                    display_name="Wyccc 单位数据补丁",
+                    path=str(unit_data_path),
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
+                ),
+            }
+            runtime_plan = self.load_order.build_plan(
+                paths.game_path,
+                paths.data_path,
+                runtime_assets,
+                [*saved["plan"]["ordered_mod_ids"], unit_data_id],
+                target_name="wyccc_launch_mods.txt",
+                path_mapper=path_map.map_path,
+            )
+            self.load_order._atomic_write(Path(runtime_plan.target_path), runtime_plan.content)
+            launch_plan = runtime_plan.to_dict()
+            launch_path = runtime_plan.target_path
+        process = launch_game(
+            path_map.map_path(paths.game_path),
+            launch_path,
+            str(selected_save["name"]) if selected_save else "",
+            executable_name=paths.game_definition.executable_name,
+            process_name=paths.game_definition.process_name,
+            app_id=paths.game_definition.app_id,
+        )
+        self.set_game_running(True, force=True)
+        return {
+            **saved,
+            "process": process,
+            "unit_data_patch": unit_data_patch,
+            "game_data_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "changed_inputs": [],
+                "entry_count": 0,
+                "options": [],
+                "game_data": {},
+            },
+            "dynamic_ror_compatibility_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "entry_count": 0,
+                "stats": {},
+            },
+            "runtime_options": {"path": "", "entry_count": 0, "options": []},
+            "launch_plan": launch_plan,
+            "save": selected_save,
+        }
+
     def _launch_game_without_runtime_packs(
         self,
         paths: GamePaths,
@@ -1322,18 +1486,25 @@ class API:
         selected_save: dict[str, Any] | None,
     ) -> dict[str, Any]:
         launch_plan = saved["plan"]
-        path_map = self.launch_path_aliases.prepare(
-            paths.game_path,
-            paths.workshop_path,
+        path_map = self.launch_path_aliases.prepare(paths.game_path, paths.workshop_path)
+        mapped_game_path = (
+            path_map.map_path(paths.game_path)
+            if paths.game_definition.uses_mod_list
+            else paths.game_path
         )
         process = launch_game(
-            path_map.map_path(paths.game_path),
+            mapped_game_path,
             str(launch_plan["target_path"]),
             str(selected_save["name"]) if selected_save else "",
             executable_name=paths.game_definition.executable_name,
             process_name=paths.game_definition.process_name,
+            app_id=paths.game_definition.app_id,
+            launch_executable_name=paths.game_definition.launch_executable_name,
+            uses_mod_list=paths.game_definition.uses_mod_list,
         )
-        self.set_game_running(True, force=True)
+        external_mod_manager = not paths.game_definition.uses_mod_list
+        running = self.detect_game_running() if external_mod_manager else True
+        self.set_game_running(running, force=True)
         return {
             **saved,
             "process": process,
@@ -1368,6 +1539,8 @@ class API:
             },
             "launch_plan": launch_plan,
             "save": selected_save,
+            "external_mod_manager": external_mod_manager,
+            "runtime": self._runtime_payload(running),
         }
 
     def _continue_game(
@@ -1375,6 +1548,8 @@ class API:
         ordered_mod_ids: list[str],
         expected_token: str = "",
     ) -> dict[str, Any]:
+        if not self._active_game().supports_save_games:
+            raise ValueError("当前游戏不支持从管理器直接继续存档")
         latest = self.save_games.latest()
         return self._launch_game(
             ordered_mod_ids,
@@ -1398,6 +1573,8 @@ class API:
         }
 
     def _list_save_games(self) -> dict[str, Any]:
+        if not self._active_game().supports_save_games:
+            raise ValueError("当前游戏不支持管理器存档功能")
         return {
             "directory": str(self.save_games.save_directory.resolve(strict=False)),
             "items": self.save_games.list(),
@@ -1410,6 +1587,8 @@ class API:
         return self.scanner._read_vanilla_manifest(data_path, warnings)
 
     def _get_save_mods(self, save_name: str) -> dict[str, Any]:
+        if not self._active_game().supports_save_games:
+            raise ValueError("当前游戏不支持管理器存档功能")
         return self.save_games.pack_names(save_name, self._vanilla_pack_names())
 
     def _record_mod_change(self) -> None:
@@ -2004,6 +2183,7 @@ class API:
         return {"opened": bool(webbrowser.open(normalized)), "url": normalized}
 
     def _preview_delete_mod_files(self, mod_ids: list[str]) -> dict[str, Any]:
+        self._require_pack_mod_format("删除 MOD 文件")
         if self.detect_game_running():
             raise ValueError("游戏运行期间不能删除 MOD 文件")
         if not isinstance(mod_ids, list):
@@ -2022,6 +2202,7 @@ class API:
         return {**preview, "token": token}
 
     def _delete_mod_files(self, preview_token: str) -> dict[str, Any]:
+        self._require_pack_mod_format("删除 MOD 文件")
         if self.detect_game_running():
             raise ValueError("游戏运行期间不能删除 MOD 文件")
         token = str(preview_token or "").strip()
@@ -2169,6 +2350,7 @@ class API:
         mod_id: str,
         publish_data: dict[str, Any],
     ) -> dict[str, Any]:
+        self._require_pack_mod_format("Workshop 发布")
         if not isinstance(publish_data, dict):
             raise ValueError("工坊发布参数无效")
         mode = str(publish_data.get("mode") or "").strip()
@@ -2268,6 +2450,7 @@ class API:
             raise ValueError(str(exc)) from exc
 
     def _open_mod_in_rpfm(self, mod_id: str) -> dict[str, Any]:
+        self._require_pack_mod_format("RPFM")
         asset = self._require_asset(mod_id)
         pack_path = Path(asset.path)
         if not pack_path.is_file():
@@ -2297,6 +2480,7 @@ class API:
         return {"opened": True, "path": str(pack_path.resolve(strict=False))}
 
     def _copy_mod_to_data(self, mod_id: str) -> dict[str, Any]:
+        self._require_pack_mod_format("复制到 Data")
         asset = self._require_asset(mod_id)
         source = Path(asset.path)
         if not source.is_file():
@@ -2316,6 +2500,7 @@ class API:
         return {"copied": True, "already_in_data": False, "target_path": str(target)}
 
     def _sync_workshop_to_data(self) -> dict[str, Any]:
+        self._require_pack_mod_format("同步到 Data")
         paths = self.settings_service.resolve_game_paths()
         data_path = Path(paths.data_path) if paths.data_path else Path()
         workshop_root = Path(paths.workshop_path) if paths.workshop_path else Path()
@@ -2551,11 +2736,22 @@ class API:
         data = Path(data_path) if data_path else Path()
         workshop = Path(workshop_path) if workshop_path else Path()
         executable = Path(paths.executable_path) if paths.executable_path else Path()
-        game_ready = bool(game_path) and executable.is_file() and data.is_dir()
+        launch_executable = (
+            game / Path(paths.game_definition.launch_executable_name)
+            if game_path and paths.game_definition.launch_executable_name
+            else executable
+        )
+        game_ready = (
+            bool(game_path)
+            and executable.is_file()
+            and launch_executable.is_file()
+            and data.is_dir()
+        )
         return {
             "game_ready": game_ready,
             "game_path_exists": bool(game_path) and game.is_dir(),
             "executable_exists": bool(game_path) and executable.is_file(),
+            "launcher_exists": bool(game_path) and launch_executable.is_file(),
             "data_path_exists": bool(data_path) and data.is_dir(),
             "workshop_path_exists": bool(workshop_path) and workshop.is_dir(),
         }

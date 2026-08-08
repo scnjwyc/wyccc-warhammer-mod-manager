@@ -572,11 +572,34 @@ def _movie_pack_paths(directory: Path) -> list[Path]:
     return [path for path in pack_paths if read_pack_type(path) == PACK_TYPE_MOVIE]
 
 
+def _vanilla_database_pack_path(
+    data_root: Path,
+    game_id: str | None = None,
+) -> Path:
+    """Resolve the original database Pack for a game's data directory.
+
+    Most Total War games use ``db.pack``; Three Kingdoms stores its original
+    database in ``database.pack`` instead.  The on-disk fallback keeps callers
+    that do not provide ``game_id`` compatible with both layouts.
+    """
+    normalized_game_id = str(game_id or "").strip().casefold()
+    if normalized_game_id == "three_kingdoms":
+        preferred_names = ("database.pack", "db.pack")
+    else:
+        preferred_names = ("db.pack", "database.pack")
+    for name in preferred_names:
+        candidate = data_root / name
+        if candidate.is_file():
+            return candidate.resolve(strict=False)
+    return (data_root / preferred_names[0]).resolve(strict=False)
+
+
 def resolve_game_data_source_specs(
     data_path: str | Path,
     assets: Mapping[str, ModAsset],
     active_ids: Sequence[str],
     unit_data_patch_path: str | Path | None = None,
+    game_id: str | None = None,
 ) -> tuple[GameDataSourceSpec, ...]:
     """Resolve every Pack that can affect a game-data patch for this launch.
 
@@ -653,7 +676,7 @@ def resolve_game_data_source_specs(
     )
     specs.append(
         GameDataSourceSpec(
-            path=(data_root / "db.pack").resolve(strict=False),
+            path=_vanilla_database_pack_path(data_root, game_id),
             asset=None,
             role="vanilla",
         )
@@ -714,12 +737,14 @@ def collect_game_data_source_snapshot(
     assets: Mapping[str, ModAsset],
     active_ids: Sequence[str],
     unit_data_patch_path: str | Path | None = None,
+    game_id: str | None = None,
 ) -> GameDataSourceSnapshot:
     specs = resolve_game_data_source_specs(
         data_path,
         assets,
         active_ids,
         unit_data_patch_path=unit_data_patch_path,
+        game_id=game_id,
     )
     workers = min(8, max(1, len(specs)))
     if workers > 1:
@@ -751,8 +776,8 @@ def _game_data_source_name(
             return f'自动加载 Movie Pack "{path.name}"'
         return f'自动加载 Movie MOD "{asset.effective_name}" [pack: {path.name}]'
     if asset is None:
-        if path.name.casefold() == "db.pack":
-            return "原版数据库 db.pack"
+        if role == "vanilla" or path.name.casefold() in {"db.pack", "database.pack"}:
+            return f"原版数据库 {path.name}"
         return f'Pack "{path.name}"'
 
     source_name = {
@@ -773,6 +798,7 @@ def build_game_data_patch(
     *,
     source_snapshot: GameDataSourceSnapshot | None = None,
     unit_data_patch_path: str | Path | None = None,
+    game_id: str | None = None,
 ) -> dict[str, Any]:
     effective_settings = _effective_game_data_settings(settings, subscribed_workshop_ids)
     output_path = Path(output_dir) / GAME_DATA_PATCH_NAME
@@ -790,6 +816,7 @@ def build_game_data_patch(
         assets,
         active_ids,
         unit_data_patch_path=unit_data_patch_path,
+        game_id=game_id,
     )
     sources = snapshot.sources
     diagnostics = snapshot.diagnostics()
@@ -824,6 +851,7 @@ def build_unit_data_patch(
     edits: dict[str, dict[str, Any]],
     *,
     source_snapshot: GameDataSourceSnapshot | None = None,
+    game_id: str | None = None,
 ) -> dict[str, Any]:
     """Write the hidden unit-data patch pack when per-unit edits exist."""
     output_path = Path(output_dir) / UNIT_DATA_PATCH_NAME
@@ -838,8 +866,9 @@ def build_unit_data_patch(
         data_path,
         assets,
         active_ids,
+        game_id=game_id,
     )
-    built = build_unit_data_entries(snapshot.sources, settings, edits)
+    built = build_unit_data_entries(snapshot.sources, settings, edits, game_id)
     entries = [PackEntry(entry.name, entry.payload) for entry in built.entries]
     if not entries:
         output_path.unlink(missing_ok=True)

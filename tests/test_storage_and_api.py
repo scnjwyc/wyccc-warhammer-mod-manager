@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -434,6 +435,65 @@ class StorageContractTests(unittest.TestCase):
 
 
 class ApiContractTests(unittest.TestCase):
+    def test_rome_directory_order_stays_managed_and_launch_hands_off_to_feral(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War ROME REMASTERED"
+            data = game / "Contents" / "Resources" / "Data" / "data"
+            launcher = game / "launcher" / "launcher.exe"
+            workshop = root / "workshop" / "885970"
+            mod_root = workshop / "123"
+            data.mkdir(parents=True)
+            launcher.parent.mkdir(parents=True)
+            launcher.write_bytes(b"")
+            (game / "Total War ROME REMASTERED.exe").write_bytes(b"")
+            (mod_root / "data").mkdir(parents=True)
+            (mod_root / "modinfo.json").write_text(
+                json.dumps({"Mod Name": "Rome example", "Supports Rome": True}),
+                encoding="utf-8",
+            )
+            (mod_root / "filelist.json").write_text(
+                json.dumps([{"filename": "data/example.txt", "checksum": 1}]),
+                encoding="utf-8",
+            )
+
+            api = API(root / "state")
+            configured = api.call(
+                "save_settings",
+                [{
+                    "selected_game": "rome_remastered",
+                    "game_path": str(game),
+                    "workshop_path": str(workshop),
+                    "fetch_workshop_metadata": False,
+                }],
+            )
+            self.assertTrue(configured["ok"])
+            scan = api.call("scan_mods", [False])
+            self.assertTrue(scan["ok"])
+            mod_id = scan["data"]["mods"][0]["id"]
+            saved = api.call("save_load_order", [[mod_id], scan["data"]["order_token"]])
+
+            self.assertTrue(saved["ok"])
+            self.assertEqual(saved["data"]["plan"]["activation"], "external_launcher")
+            self.assertFalse((game / "used_mods.txt").exists())
+            with (
+                patch(
+                    "backend.api.launch_game",
+                    return_value={"pid": 42, "arguments": [], "executable": str(launcher)},
+                ) as launch,
+                patch.object(api, "detect_game_running", return_value=False),
+            ):
+                launched = api.call(
+                    "launch_game",
+                    [[mod_id], saved["data"]["order_token"]],
+                )
+
+        self.assertTrue(launched["ok"])
+        self.assertTrue(launched["data"]["external_mod_manager"])
+        self.assertFalse(launched["data"]["runtime"]["running"])
+        self.assertEqual(launch.call_args.kwargs["launch_executable_name"], "launcher/launcher.exe")
+        self.assertFalse(launch.call_args.kwargs["uses_mod_list"])
+
     def test_unit_data_source_ids_exclude_internal_runtime_packs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -828,7 +888,24 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(launched["ok"])
         self.assertEqual(launch.call_args.kwargs["executable_name"], "Three_Kingdoms.exe")
         self.assertEqual(launch.call_args.kwargs["process_name"], "Three_Kingdoms.exe")
+        self.assertEqual(launched["data"]["unit_data_patch"]["status"], "zero_modification")
         self.assertEqual(launched["data"]["game_data_patch"]["status"], "unsupported")
+
+    def test_three_kingdoms_unit_data_needs_no_workshop_feature_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api, _ = self._prepare_three_kingdoms_api(Path(temporary))
+            result = api.call("get_unit_data_feature_status")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["data"],
+            {
+                "pack_name": "",
+                "title": "",
+                "subscribed": True,
+                "required": False,
+            },
+        )
 
     def test_launch_uses_ascii_aliases_when_game_and_workshop_paths_are_non_ascii(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

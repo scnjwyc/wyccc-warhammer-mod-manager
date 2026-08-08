@@ -199,6 +199,7 @@ def game_last_updated_at(paths: GamePaths) -> int:
             Path(paths.executable_path),
             game_root / "data" / "data.pack",
             game_root / "data" / "db.pack",
+            game_root / "data" / "database.pack",
             game_root / "data" / "data_script.pack",
         ):
             try:
@@ -223,8 +224,17 @@ def _discover_game_paths(definition: GameDefinition) -> GamePaths:
             install_dir = _read_install_dir(manifest, definition.install_dir)
             game_path = steamapps / "common" / install_dir
             executable = game_path / definition.executable_name
-            data_path = game_path / "data"
-            if not executable.is_file() or not data_path.is_dir():
+            launch_executable = (
+                game_path / Path(definition.launch_executable_name)
+                if definition.launch_executable_name
+                else executable
+            )
+            data_path = game_path / Path(definition.data_relative_path)
+            if (
+                not executable.is_file()
+                or not launch_executable.is_file()
+                or not data_path.is_dir()
+            ):
                 continue
             workshop_path = steamapps / "workshop" / "content" / definition.app_id
             return GamePaths(

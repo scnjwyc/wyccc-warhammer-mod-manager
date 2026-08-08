@@ -5,17 +5,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .games import get_game_definition
+
 
 _PACK_NAME_RE = re.compile(r'^[^<>:"/\\|?*\x00-\x1f]{1,260}\.pack$', re.IGNORECASE)
 _PACK_SUFFIX = b".pack"
 _MAX_PACK_TOKEN_BYTES = 1024
 _LENGTH_PREFIX_BYTES = 4
-_SAVE_PROFILE_DIRECTORIES = {
-    "warhammer3": "Warhammer3",
-    "three_kingdoms": "ThreeKingdoms",
-}
-
-
 def _has_legacy_pack_terminator(content: bytes, token_end: int) -> bool:
     return token_end < len(content) and content[token_end] == 0
 
@@ -37,10 +33,7 @@ def default_save_directory(game_id: str | None = None) -> Path:
         return Path(override).expanduser().resolve(strict=False)
     app_data = os.environ.get("APPDATA", "").strip()
     root = Path(app_data) if app_data else Path.home() / "AppData" / "Roaming"
-    profile_directory = _SAVE_PROFILE_DIRECTORIES.get(
-        str(game_id or "").strip(),
-        _SAVE_PROFILE_DIRECTORIES["warhammer3"],
-    )
+    profile_directory = get_game_definition(game_id).save_directory_name
     return root / "The Creative Assembly" / profile_directory / "save_games"
 
 

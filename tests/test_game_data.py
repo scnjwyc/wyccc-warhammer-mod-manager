@@ -184,7 +184,7 @@ class GameDataPatchTests(unittest.TestCase):
             {31, 32, 33, 34, 38, 39},
         )
 
-    def test_pack_load_order_outranks_internal_table_file_names(self) -> None:
+    def test_internal_table_file_names_outrank_pack_load_order(self) -> None:
         mod = DbSource(
             "sfo.pack",
             (
@@ -269,11 +269,11 @@ class GameDataPatchTests(unittest.TestCase):
             row["key"]: row
             for row in _rows_for(result, "land_units_tables")
         }
-        self.assertEqual(main_rows["unit_knights"]["num_men"], 64)
-        self.assertEqual(land_rows["land_knights"]["num_mounts"], 64)
-        self.assertEqual(land_rows["land_knights"]["rank_depth"], 8)
+        self.assertEqual(main_rows["unit_knights"]["num_men"], 48)
+        self.assertEqual(land_rows["land_knights"]["num_mounts"], 48)
+        self.assertEqual(land_rows["land_knights"]["rank_depth"], 6)
 
-    def test_enabled_mod_order_selects_the_first_pack_before_table_names(self) -> None:
+    def test_internal_table_name_takes_priority_before_enabled_mod_order(self) -> None:
         first = DbSource(
             "compatibility_patch.pack",
             (
@@ -301,14 +301,45 @@ class GameDataPatchTests(unittest.TestCase):
             ),
         )
 
-        first_wins = _collect_effective_rows(
+        compatibility_first = _collect_effective_rows(
             [first, second],
             {"main_units_tables"},
         )
-        second_wins = _collect_effective_rows(
+        overhaul_first = _collect_effective_rows(
             [second, first],
             {"main_units_tables"},
         )
+
+        self.assertEqual(
+            compatibility_first["main_units_tables"]["shared_unit"].row.values["num_men"],
+            20,
+        )
+        self.assertEqual(
+            overhaul_first["main_units_tables"]["shared_unit"].row.values["num_men"],
+            20,
+        )
+
+    def test_enabled_mod_order_breaks_ties_for_the_same_internal_table_name(self) -> None:
+        def source(name: str, num_men: int) -> DbSource:
+            return DbSource(
+                name,
+                (
+                    GameDataEntry(
+                        "db\\main_units_tables\\shared_data",
+                        _table_payload(
+                            "main_units_tables",
+                            7,
+                            [{"unit": "shared_unit", "num_men": num_men}],
+                        ),
+                    ),
+                ),
+            )
+
+        first = source("first.pack", 30)
+        second = source("second.pack", 20)
+
+        first_wins = _collect_effective_rows([first, second], {"main_units_tables"})
+        second_wins = _collect_effective_rows([second, first], {"main_units_tables"})
 
         self.assertEqual(
             first_wins["main_units_tables"]["shared_unit"].row.values["num_men"],

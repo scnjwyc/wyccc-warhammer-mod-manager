@@ -226,12 +226,22 @@ def launch_game(
     *,
     executable_name: str = WH3_EXECUTABLE,
     process_name: str = WH3_PROCESS_NAME,
+    app_id: str = "",
+    launch_executable_name: str = "",
+    uses_mod_list: bool = True,
 ) -> dict[str, int | str | list[str]]:
     game_root = Path(game_path)
     executable = game_root / str(executable_name or WH3_EXECUTABLE)
     if not executable.is_file():
         raise ValueError(f"找不到游戏可执行文件：{executable}")
-    if not Path(mod_list_path).is_file():
+    launch_executable = (
+        game_root / Path(launch_executable_name)
+        if launch_executable_name
+        else executable
+    )
+    if not launch_executable.is_file():
+        raise ValueError(f"找不到游戏启动器：{launch_executable}")
+    if uses_mod_list and not Path(mod_list_path).is_file():
         raise ValueError(f"找不到启动清单：{mod_list_path}")
     if is_game_running(executable, process_name=process_name):
         raise ValueError(f"{executable.name} 已经在运行")
@@ -247,7 +257,8 @@ def launch_game(
         arguments.extend(
             ["game_startup_mode", "campaign_load", normalized_save_name, ";"]
         )
-    arguments.append(f"{Path(mod_list_path).name};")
+    if uses_mod_list:
+        arguments.append(f"{Path(mod_list_path).name};")
     argument = " ".join(
         f'"{value}"' if " " in value else value for value in arguments
     )
@@ -257,15 +268,21 @@ def launch_game(
             getattr(subprocess, "DETACHED_PROCESS", 0)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         )
+    environment = os.environ.copy()
+    normalized_app_id = str(app_id or "").strip()
+    if normalized_app_id.isdigit():
+        environment["SteamAppId"] = normalized_app_id
+        environment["SteamGameId"] = normalized_app_id
     process = subprocess.Popen(
-        [str(executable), *arguments],
+        [str(launch_executable), *arguments],
         cwd=str(game_root),
         close_fds=True,
         creationflags=creationflags,
+        env=environment,
     )
     return {
         "pid": process.pid,
         "argument": argument,
         "arguments": arguments,
-        "executable": str(executable),
+        "executable": str(launch_executable),
     }

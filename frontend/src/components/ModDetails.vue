@@ -29,6 +29,7 @@ watch(
 const sourceLabel = source => ({
   workshop: t('details.sourceWorkshop'),
   data: t('details.sourceData'),
+  local: t('details.sourceLocal'),
 }[source] || source)
 
 const formatDate = value => {

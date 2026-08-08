@@ -15,6 +15,7 @@ import {
   normalizeShortcutMap,
   shortcutFromKeyboardEvent,
 } from '../keyboardShortcuts'
+import { GAME_OPTIONS } from '../games'
 import { useAppStore } from '../store'
 import ThemedSelect from './ThemedSelect.vue'
 
@@ -32,21 +33,6 @@ const activeTab = ref('basic')
 const donationOpen = ref(false)
 const shortcutCaptureId = ref('')
 const shortcutError = ref('')
-
-const GAME_OPTIONS = [
-  {
-    id: 'warhammer3',
-    labelKey: 'settings.gameWarhammer3',
-    gamePathPlaceholder: '...\\steamapps\\common\\Total War WARHAMMER III',
-    workshopPathPlaceholder: '...\\workshop\\content\\1142710',
-  },
-  {
-    id: 'three_kingdoms',
-    labelKey: 'settings.gameThreeKingdoms',
-    gamePathPlaceholder: '...\\steamapps\\common\\Total War THREE KINGDOMS',
-    workshopPathPlaceholder: '...\\workshop\\content\\779340',
-  },
-]
 
 const cloneGameInstallations = (installations, legacy = {}) => Object.fromEntries(
   GAME_OPTIONS.map(game => {
@@ -75,9 +61,7 @@ const languageSelectOptions = computed(() => LANGUAGE_OPTIONS.map(language => ({
 const activeInstallation = computed(() => (
   draft.game_installations?.[selectedGameOption.value.id] || {}
 ))
-const requiresThreeKingdomsManualPath = computed(() => (
-  selectedGameOption.value.id === 'three_kingdoms' && !props.health.game_ready
-))
+const requiresManualPath = computed(() => !props.health.game_ready)
 
 const tabs = [
   { id: 'basic', labelKey: 'settings.tabBasic', detailKey: 'settings.tabBasicDetail', marker: '01' },
@@ -305,8 +289,8 @@ const closeSettings = () => {
               </div>
             </label>
 
-            <p v-if="requiresThreeKingdomsManualPath" class="settings-page-note" data-testid="three-kingdoms-manual-path">
-              {{ t('settings.manualPathRequired') }}
+            <p v-if="requiresManualPath" class="settings-page-note" data-testid="manual-game-path">
+              {{ t('settings.manualPathRequired', { game: t(selectedGameOption.labelKey) }) }}
             </p>
 
             <label class="field-label">

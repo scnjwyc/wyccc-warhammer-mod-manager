@@ -26,7 +26,7 @@ describe('compatibility patch modal', () => {
         requiredPacksEnabled: false,
         missingPacks: [
           "Nanu's Dynamic Regiments of Renown",
-          "Nanu's Dynamic RORs Ultimate Patch",
+          "Nanu's Dynamic RORs Ultimate Compatibility Patch",
         ],
       },
     })
@@ -36,7 +36,7 @@ describe('compatibility patch modal', () => {
     expect(checkbox.attributes('disabled')).toBeDefined()
     const requirement = wrapper.get('[data-testid="dynamic-ror-required-packs"]')
     expect(requirement.text()).toContain("Nanu's Dynamic Regiments of Renown")
-    expect(requirement.text()).toContain("Nanu's Dynamic RORs Ultimate Patch")
+    expect(requirement.text()).toContain("Nanu's Dynamic RORs Ultimate Compatibility Patch")
   })
 
   it('does not emit save while a required pack is missing', async () => {
@@ -45,7 +45,7 @@ describe('compatibility patch modal', () => {
         open: true,
         settings: {},
         requiredPacksEnabled: false,
-        missingPacks: ["Nanu's Dynamic RORs Ultimate Patch"],
+        missingPacks: ["Nanu's Dynamic RORs Ultimate Compatibility Patch"],
       },
     })
     await wrapper.get('form').trigger('submit')

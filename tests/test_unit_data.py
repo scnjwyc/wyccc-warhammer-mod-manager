@@ -15,6 +15,7 @@ from backend.game_data import (
 from backend.unit_data import (
     _armour_key_for_value,
     _base_visible_count,
+    _collect_permission_rows,
     _language_loc_packs,
     _sanitize_edits,
     build_unit_data_entries,
@@ -138,6 +139,7 @@ def _fixture_source() -> DbSource:
                             "key": "land_inf_swordsmen",
                             "man_entity": "man_swordsmen",
                             "armour": "wh2_main_body_10",
+                            "morale": 55,
                             "charge_bonus": 15,
                             "melee_attack": 28,
                             "melee_defence": 32,
@@ -159,6 +161,8 @@ def _fixture_source() -> DbSource:
                         {
                             "key": "land_veh_chariot",
                             "man_entity": "man_chariot_crew",
+                            "mount": "mount_chariot",
+                            "articulated_record": "art_chariot",
                             "armour": "wh2_main_heavy_metal_60",
                             "charge_bonus": 40,
                             "melee_attack": 20,
@@ -177,6 +181,7 @@ def _fixture_source() -> DbSource:
                         {
                             "key": "land_art_ballista",
                             "man_entity": "man_ballista_crew",
+                            "engine": "engine_ballista",
                             "armour": "wh2_main_body_20",
                             "charge_bonus": 0,
                             "melee_attack": 10,
@@ -196,14 +201,60 @@ def _fixture_source() -> DbSource:
                 ),
             ),
             GameDataEntry(
+                "db\\mounts_tables\\data__",
+                _table_payload(
+                    "mounts_tables",
+                    10,
+                    [
+                        {
+                            "key": "mount_chariot",
+                            "animation": "animation_chariot",
+                            "entity": "mount_chariot_entity",
+                            "audio_armour_type": "body",
+                            "variant": "variant_chariot",
+                            "voiceover": "vo_default",
+                        },
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\battlefield_engines_tables\\data__",
+                _table_payload(
+                    "battlefield_engines_tables",
+                    23,
+                    [
+                        {
+                            "key": "engine_ballista",
+                            "battle_entity": "engine_ballista_entity",
+                        },
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\land_unit_articulated_vehicles_tables\\data__",
+                _table_payload(
+                    "land_unit_articulated_vehicles_tables",
+                    6,
+                    [
+                        {
+                            "key": "art_chariot",
+                            "articulated_entity": "art_chariot_entity",
+                        },
+                    ],
+                ),
+            ),
+            GameDataEntry(
                 "db\\battle_entities_tables\\data__",
                 _table_payload(
                     "battle_entities_tables",
                     39,
                     [
-                        {"key": "man_swordsmen", "hit_points": 60},
-                        {"key": "man_chariot_crew", "hit_points": 55},
-                        {"key": "man_ballista_crew", "hit_points": 50},
+                        {"key": "man_swordsmen", "hit_points": 60, "run_speed": 2.8},
+                        {"key": "man_chariot_crew", "hit_points": 55, "run_speed": 0.0},
+                        {"key": "mount_chariot_entity", "hit_points": 55, "run_speed": 6.4},
+                        {"key": "art_chariot_entity", "hit_points": 55, "run_speed": 6.4},
+                        {"key": "man_ballista_crew", "hit_points": 50, "run_speed": 3.0},
+                        {"key": "engine_ballista_entity", "hit_points": 100, "run_speed": 2.0},
                     ],
                 ),
             ),
@@ -226,6 +277,33 @@ def _fixture_source() -> DbSource:
                         {"key": "wh2_main_body_100", "armour_value": 100, "audio_type": "body"},
                         {"key": "wh2_main_heavy_metal_60", "armour_value": 60, "audio_type": "heavy_metal"},
                         {"key": "wh2_main_heavy_metal_80", "armour_value": 80, "audio_type": "heavy_metal"},
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\building_units_allowed_tables\\data__",
+                _table_payload(
+                    "building_units_allowed_tables",
+                    4,
+                    [
+                        {
+                            "building": "building_barracks",
+                            "unit": "inf_swordsmen",
+                            "XP": 0,
+                            "key": 101,
+                            "conditions": 0,
+                            "faction": None,
+                            "enabled": True,
+                        },
+                        {
+                            "building": "building_stables",
+                            "unit": "veh_chariot",
+                            "XP": 0,
+                            "key": 102,
+                            "conditions": 0,
+                            "faction": None,
+                            "enabled": True,
+                        },
                     ],
                 ),
             ),
@@ -294,7 +372,6 @@ class UnitDataSnapshotTests(unittest.TestCase):
         source = _fixture_source()
         snapshot = build_unit_table_snapshot(
             [source],
-            {"unit_model_multiplier": 1},
             {},
         )
         rows = {row["key"]: row for row in snapshot["units"]}
@@ -305,6 +382,7 @@ class UnitDataSnapshotTests(unittest.TestCase):
         self.assertEqual(swordsmen["recruitment_cost"], 400)
         self.assertEqual(swordsmen["upkeep_cost"], 100)
         self.assertEqual(swordsmen["model_count"], 90)
+        self.assertEqual(swordsmen["morale"], 55)
         self.assertEqual(swordsmen["hit_points"], 8)
         self.assertEqual(swordsmen["total_hp"], 8 * 90)
         self.assertEqual(swordsmen["charge_bonus"], 15)
@@ -319,20 +397,91 @@ class UnitDataSnapshotTests(unittest.TestCase):
         self.assertEqual(swordsmen["original_values"]["model_count"], 90)
 
     def test_chariot_and_war_machine_use_real_entity_counts(self) -> None:
-        snapshot = build_unit_table_snapshot([_fixture_source()], {}, {})
+        snapshot = build_unit_table_snapshot([_fixture_source()], {})
         rows = {row["key"]: row for row in snapshot["units"]}
         self.assertEqual(rows["veh_chariot"]["model_count"], 12)
         self.assertEqual(rows["art_ballista"]["model_count"], 4)
 
-    def test_model_count_reflects_unit_scale_multiplier(self) -> None:
+    def test_warhammer_movement_uses_entity_speed_times_ten(self) -> None:
+        snapshot = build_unit_table_snapshot([_fixture_source()], {})
+        rows = {row["key"]: row for row in snapshot["units"]}
+        self.assertAlmostEqual(rows["inf_swordsmen"]["movement_speed"], 28.0, places=5)
+        self.assertAlmostEqual(rows["veh_chariot"]["movement_speed"], 64.0, places=5)
+        # The engine speed is intentionally different from the crew speed;
+        # war machines must resolve land_units.engine rather than man_entity.
+        self.assertAlmostEqual(rows["art_ballista"]["movement_speed"], 20.0, places=5)
+        self.assertFalse(rows["art_ballista"]["movement_speed_locked"])
+
+    def test_warhammer_movement_edit_is_already_a_game_display_value(self) -> None:
         snapshot = build_unit_table_snapshot(
             [_fixture_source()],
-            {"unit_model_multiplier": 2},
+            {"inf_swordsmen": {"movement_speed": 33.3}},
+        )
+        row = next(item for item in snapshot["units"] if item["key"] == "inf_swordsmen")
+        self.assertEqual(row["movement_speed"], 33.3)
+
+    def test_display_uses_base_values_without_game_data_multipliers(self) -> None:
+        snapshot = build_unit_table_snapshot(
+            [_fixture_source()],
             {},
         )
         rows = {row["key"]: row for row in snapshot["units"]}
-        self.assertEqual(rows["inf_swordsmen"]["model_count"], 180)
-        self.assertEqual(rows["veh_chariot"]["model_count"], 24)
+        self.assertEqual(rows["inf_swordsmen"]["model_count"], 90)
+        self.assertEqual(rows["inf_swordsmen"]["hit_points"], 8)
+        self.assertEqual(rows["inf_swordsmen"]["total_hp"], 720)
+        self.assertEqual(rows["veh_chariot"]["model_count"], 12)
+
+    def test_single_entity_model_count_remains_editable(self) -> None:
+        source = DbSource(
+            "single_entity.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\single_entity_data",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "single_monster",
+                                "caste": "monster",
+                                "land_unit": "land_single_monster",
+                                "num_men": 1,
+                            }
+                        ],
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\land_units_tables\\single_entity_data",
+                    _table_payload(
+                        "land_units_tables",
+                        54,
+                        [
+                            {
+                                "key": "land_single_monster",
+                                "rank_depth": 1,
+                            }
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        snapshot = build_unit_table_snapshot(
+            [source],
+            {"single_monster": {"model_count": 3}},
+        )
+        row = snapshot["units"][0]
+
+        self.assertFalse(row["model_count_locked"])
+        self.assertEqual(row["model_count"], 3)
+
+        patch = build_unit_data_entries(
+            [source],
+            {"unit_model_multiplier": 1},
+            {"single_monster": {"model_count": 3}},
+        )
+        main = _rows_by_key(patch, "main_units_tables")
+        self.assertEqual(main["single_monster"]["num_men"], 3)
 
 
 class UnitDataPatchTests(unittest.TestCase):
@@ -344,9 +493,11 @@ class UnitDataPatchTests(unittest.TestCase):
                 "recruitment_cost": 600,
                 "upkeep_cost": 200,
                 "model_count": 120,
+                "morale": 70,
                 "armour": 100,
                 "hit_points": 80,
                 "charge_bonus": 30,
+                "missile_resistance": 25,
                 "melee_damage": 40,
                 "melee_ap_damage": 12,
             }
@@ -356,7 +507,9 @@ class UnitDataPatchTests(unittest.TestCase):
         self.assertEqual(main["inf_swordsmen"]["num_men"], 120)
         self.assertEqual(main["inf_swordsmen"]["campaign_cap"], 9)
         land = _rows_by_key(result, "land_units_tables")
+        self.assertEqual(land["land_inf_swordsmen"]["morale"], 70)
         self.assertEqual(land["land_inf_swordsmen"]["charge_bonus"], 30)
+        self.assertEqual(land["land_inf_swordsmen"]["damage_mod_missile"], 25)
         self.assertEqual(land["land_inf_swordsmen"]["armour"], "wh2_main_body_100")
         self.assertEqual(land["land_inf_swordsmen"]["bonus_hit_points"], 80)
         entities = _rows_by_key(result, "battle_entities_tables")
@@ -377,6 +530,9 @@ class UnitDataPatchTests(unittest.TestCase):
         self.assertIn("veh_chariot", groupings)
         exclusive = _rows_by_key(result, "units_to_exclusive_faction_permissions_tables")
         self.assertIn("veh_chariot", exclusive)
+        buildings = _rows_by_key(result, "building_units_allowed_tables")
+        self.assertNotIn("inf_swordsmen", buildings)
+        self.assertTrue(buildings["veh_chariot"]["enabled"])
 
     def test_no_edits_produces_no_entries(self) -> None:
         result = build_unit_data_entries([_fixture_source()], {}, {})
@@ -393,6 +549,75 @@ class UnitDataPatchTests(unittest.TestCase):
         # The unit patch stores the absolute value; the game-data patch scales
         # it by the multiplier on top.
         self.assertEqual(main["inf_swordsmen"]["num_men"], 100)
+
+    def test_movement_edit_clones_entity_and_writes_internal_tenth(self) -> None:
+        source = _fixture_source()
+        result = build_unit_data_entries(
+            [source],
+            {},
+            {"inf_swordsmen": {"movement_speed": 35.0}},
+        )
+        land = _rows_by_key(result, "land_units_tables")
+        entities = _rows_by_key(result, "battle_entities_tables")
+        clone_keys = [key for key in entities if key.startswith("wyccc_wh3_battle_entity_")]
+        self.assertEqual(len(clone_keys), 1)
+        self.assertEqual(land["land_inf_swordsmen"]["man_entity"], clone_keys[0])
+        self.assertAlmostEqual(entities[clone_keys[0]]["run_speed"], 3.5, places=5)
+        self.assertAlmostEqual(entities["man_swordsmen"]["run_speed"], 2.8, places=5)
+
+    def test_war_machine_movement_edit_clones_engine_not_crew_entity(self) -> None:
+        result = build_unit_data_entries(
+            [_fixture_source()],
+            {},
+            {"art_ballista": {"movement_speed": 27.0}},
+        )
+        land = _rows_by_key(result, "land_units_tables")
+        engines = _rows_by_key(result, "battlefield_engines_tables")
+        entities = _rows_by_key(result, "battle_entities_tables")
+        entity_clone_keys = [
+            key for key in entities if key.startswith("wyccc_wh3_battle_entity_")
+        ]
+        engine_clone_keys = [
+            key
+            for key in engines
+            if key.startswith("wyccc_wh3_battlefield_engines_")
+        ]
+        self.assertEqual(len(entity_clone_keys), 1)
+        self.assertEqual(len(engine_clone_keys), 1)
+        self.assertEqual(land["land_art_ballista"]["engine"], engine_clone_keys[0])
+        self.assertEqual(
+            engines[engine_clone_keys[0]]["battle_entity"], entity_clone_keys[0]
+        )
+        self.assertEqual(land["land_art_ballista"]["man_entity"], "man_ballista_crew")
+        self.assertAlmostEqual(entities[entity_clone_keys[0]]["run_speed"], 2.7, places=5)
+        self.assertAlmostEqual(entities["man_ballista_crew"]["run_speed"], 3.0, places=5)
+
+    def test_chariot_movement_uses_mount_and_articulated_entities(self) -> None:
+        result = build_unit_data_entries(
+            [_fixture_source()],
+            {},
+            {"veh_chariot": {"movement_speed": 72.0}},
+        )
+        land = _rows_by_key(result, "land_units_tables")
+        mounts = _rows_by_key(result, "mounts_tables")
+        articulated = _rows_by_key(result, "land_unit_articulated_vehicles_tables")
+        entities = _rows_by_key(result, "battle_entities_tables")
+        entity_clone_keys = [
+            key for key in entities if key.startswith("wyccc_wh3_battle_entity_")
+        ]
+        self.assertEqual(len(entity_clone_keys), 2)
+        self.assertEqual(land["land_veh_chariot"]["man_entity"], "man_chariot_crew")
+        self.assertAlmostEqual(entities["man_chariot_crew"]["run_speed"], 0.0, places=5)
+        mount_clone_key = land["land_veh_chariot"]["mount"]
+        articulated_clone_key = land["land_veh_chariot"]["articulated_record"]
+        self.assertTrue(mount_clone_key.startswith("wyccc_wh3_mounts_"))
+        self.assertTrue(articulated_clone_key.startswith("wyccc_wh3_land_unit_articulated_vehicles_"))
+        self.assertIn(mount_clone_key, mounts)
+        self.assertIn(articulated_clone_key, articulated)
+        self.assertIn(mounts[mount_clone_key]["entity"], entity_clone_keys)
+        self.assertIn(articulated[articulated_clone_key]["articulated_entity"], entity_clone_keys)
+        for entity_key in entity_clone_keys:
+            self.assertAlmostEqual(entities[entity_key]["run_speed"], 7.2, places=5)
 
 
 class UnitDataHelpersTests(unittest.TestCase):
@@ -494,7 +719,7 @@ class UnitDataHelpersTests(unittest.TestCase):
             names_en, _ = collect_unit_name_map(data, [], "en-US")
             self.assertEqual(names_en["land_test"], "English Name")
 
-    def test_mod_loc_names_follow_enabled_mod_order(self) -> None:
+    def test_same_mod_loc_names_follow_enabled_mod_order(self) -> None:
         import tempfile
 
         from backend.start_options import PackEntry, write_pfh5_pack
@@ -553,13 +778,90 @@ class UnitDataHelpersTests(unittest.TestCase):
             )
             self.assertEqual(reversed_names["sfo_new_unit"], "SFO New Unit")
 
+    def test_mod_loc_internal_name_takes_priority_before_enabled_order(self) -> None:
+        import tempfile
+
+        from backend.start_options import PackEntry, write_pfh5_pack
+
+        def loc_payload(key: str, text: str) -> bytes:
+            key_bytes = key.encode("utf-16le")
+            text_bytes = text.encode("utf-16le")
+            return b"".join(
+                (
+                    b"\xff\xfeLOC\x00",
+                    struct.pack("<i", 1),
+                    struct.pack("<i", 1),
+                    struct.pack("<H", len(key)),
+                    key_bytes,
+                    struct.pack("<H", len(text)),
+                    text_bytes,
+                    b"\0",
+                )
+            )
+
+        with tempfile.TemporaryDirectory(prefix="wmm_mod_loc_name_") as raw:
+            data = Path(raw)
+            common_key = "land_units_onscreen_name_shared_unit"
+            base = data / "base.pack"
+            priority = data / "priority.pack"
+            write_pfh5_pack(
+                base,
+                [PackEntry("text\\z_base.loc", loc_payload(common_key, "Base Name"))],
+            )
+            write_pfh5_pack(
+                priority,
+                [
+                    PackEntry(
+                        "text\\!priority.loc",
+                        loc_payload(common_key, "Priority Name"),
+                    )
+                ],
+            )
+
+            for ordered_packs in ([base, priority], [priority, base]):
+                with self.subTest(ordered_packs=[path.name for path in ordered_packs]):
+                    names, _cultures = collect_unit_name_map(
+                        data,
+                        ordered_packs,
+                        "en-US",
+                    )
+                    self.assertEqual(names["shared_unit"], "Priority Name")
+
+    def test_permission_table_internal_name_takes_priority_before_enabled_order(self) -> None:
+        def source(pack_name: str, internal_name: str, exclusive: bool) -> DbSource:
+            return DbSource(
+                pack_name,
+                (
+                    GameDataEntry(
+                        "db\\units_to_exclusive_faction_permissions_tables\\"
+                        + internal_name,
+                        _versionless_payload(
+                            [_exclusive_row("shared_unit", "shared_faction", exclusive)]
+                        ),
+                    ),
+                ),
+            )
+
+        lower_name = source("lower.pack", "z_permissions", False)
+        higher_name = source("higher.pack", "!permissions", True)
+
+        for ordered_sources in ([lower_name, higher_name], [higher_name, lower_name]):
+            with self.subTest(ordered_sources=[item.name for item in ordered_sources]):
+                rows = _collect_permission_rows(
+                    ordered_sources,
+                    "units_to_exclusive_faction_permissions_tables",
+                )
+                self.assertTrue(
+                    rows[("shared_unit", "shared_faction")].row.values["exclusive"]
+                )
+
     def test_source_chain_shows_original_then_overrides(self) -> None:
         original = _fixture_source()
         override = DbSource(
             "sfo.pack",
             (
                 GameDataEntry(
-                    "db\\main_units_tables\\sfo_data",
+                    "db\\main_units_tables\\!sfo_data",
                     _table_payload(
                         "main_units_tables",
                         7,
@@ -578,7 +880,6 @@ class UnitDataHelpersTests(unittest.TestCase):
         snapshot = build_unit_table_snapshot(
             [override, original],
             {},
-            {},
         )
         rows = {row["key"]: row for row in snapshot["units"]}
         self.assertEqual(rows["inf_swordsmen"]["mod_name"], "原版")
@@ -587,10 +888,45 @@ class UnitDataHelpersTests(unittest.TestCase):
             ["原版", "sfo.pack"],
         )
 
+    def test_source_chain_follows_internal_db_priority_before_source_order(self) -> None:
+        original = _fixture_source()
+
+        def override_source(name: str, internal_name: str, num_men: int) -> DbSource:
+            return DbSource(
+                name,
+                (
+                    GameDataEntry(
+                        "db\\main_units_tables\\" + internal_name,
+                        _table_payload(
+                            "main_units_tables",
+                            7,
+                            [
+                                {
+                                    "unit": "inf_swordsmen",
+                                    "caste": "melee_infantry",
+                                    "land_unit": "land_inf_swordsmen",
+                                    "num_men": num_men,
+                                }
+                            ],
+                        ),
+                    ),
+                ),
+            )
+
+        lowest = override_source("compatibility.pack", "z_compatibility", 60)
+        highest = override_source("overhaul.pack", "!overhaul", 120)
+        snapshot = build_unit_table_snapshot([lowest, highest, original], {})
+        row = next(item for item in snapshot["units"] if item["key"] == "inf_swordsmen")
+
+        self.assertEqual(row["model_count"], 120)
+        self.assertEqual(len(row["source_chain"]), 3)
+        self.assertEqual(row["source_chain"][0], "compatibility.pack")
+        self.assertEqual(row["source_chain"][-1], "overhaul.pack")
+        self.assertEqual(row["mod_name"], "compatibility.pack")
+
     def test_race_resolves_through_faction_and_subculture(self) -> None:
         snapshot = build_unit_table_snapshot(
             [_fixture_source()],
-            {},
             {},
             culture_map={"wh_main_emp_empire": "帝国"},
         )

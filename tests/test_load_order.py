@@ -136,10 +136,10 @@ class LoadOrderTests(unittest.TestCase):
             plan = service.build_plan(str(game), str(data), {"local": asset}, ["local"])
             original_write = LoadOrderService._atomic_write
 
-            def fail_primary(path: Path, content: str) -> Path:
+            def fail_primary(path: Path, content: str, *, encoding: str = "utf-8") -> Path:
                 if path.name == "used_mods.txt":
                     raise OSError("simulated primary failure")
-                return original_write(path, content)
+                return original_write(path, content, encoding=encoding)
 
             with patch.object(LoadOrderService, "_atomic_write", side_effect=fail_primary):
                 written, _, token = service.write_plan(plan, file_token(old_primary))
@@ -154,6 +154,28 @@ class LoadOrderTests(unittest.TestCase):
                 ["local"],
             )
             self.assertEqual(token, file_token(game / "my_mods.txt"))
+
+    def test_shogun_order_uses_utf16le_and_can_be_imported_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War SHOGUN 2"
+            data = game / "data"
+            pack = write_pack(data / "samurai.pack", magic=b"PFH3")
+            game.mkdir(exist_ok=True)
+            asset = make_asset(pack, "samurai", SOURCE_DATA)
+            service = LoadOrderService(root / "backups")
+            plan = service.build_plan(str(game), str(data), {asset.id: asset}, [asset.id])
+
+            written, _, _ = service.write_plan(plan, encoding="utf-16le")
+
+            self.assertEqual(
+                Path(written.target_path).read_bytes(),
+                plan.content.encode("utf-16le"),
+            )
+            self.assertEqual(
+                service.import_disk_order(str(game), [asset]),
+                [asset.id],
+            )
 
 
 if __name__ == "__main__":

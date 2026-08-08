@@ -10,6 +10,36 @@ from backend.steam_paths import discover_game_paths, discover_wh3_paths, game_la
 
 
 class SteamVdfTests(unittest.TestCase):
+    def test_discovers_rome_remastered_nested_data_and_feral_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            steam_root = root / "Steam"
+            steamapps = steam_root / "steamapps"
+            game = steamapps / "common" / "Total War ROME REMASTERED"
+            data = game / "Contents" / "Resources" / "Data" / "data"
+            workshop = steamapps / "workshop" / "content" / "885970"
+            data.mkdir(parents=True)
+            workshop.mkdir(parents=True)
+            (game / "launcher").mkdir()
+            (game / "launcher" / "launcher.exe").write_bytes(b"")
+            (game / "Total War ROME REMASTERED.exe").write_bytes(b"")
+            (steamapps / "appmanifest_885970.acf").write_text(
+                '"AppState" { "appid" "885970" "installdir" "Total War ROME REMASTERED" }',
+                encoding="utf-8",
+            )
+
+            with patch(
+                "backend.steam_paths.candidate_steam_roots",
+                return_value=[steam_root],
+            ):
+                discovered = discover_game_paths("rome_remastered")
+
+        self.assertEqual(Path(discovered.game_path).name, "Total War ROME REMASTERED")
+        self.assertEqual(Path(discovered.data_path).as_posix().split("/")[-5:], [
+            "Total War ROME REMASTERED", "Contents", "Resources", "Data", "data",
+        ])
+        self.assertEqual(Path(discovered.workshop_path).name, "885970")
+
     def test_discovers_three_kingdoms_from_secondary_steam_library(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

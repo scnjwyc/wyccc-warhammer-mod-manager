@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -158,6 +159,80 @@ class DependencyWarningWorkshopMetadata(DependencyWorkshopMetadata):
 
 
 class ScannerTests(unittest.TestCase):
+    @staticmethod
+    def _write_rome_directory_mod(root: Path, name: str, *, valid_manifest: bool = True) -> Path:
+        mod_root = root / name
+        (mod_root / "data").mkdir(parents=True)
+        (mod_root / "modinfo.json").write_text(
+            json.dumps(
+                {
+                    "Mod Name": f"Display {name}",
+                    "Description": "Directory mod",
+                    "Supports Rome": True,
+                    "Supports BI": False,
+                    "Supports Alex": False,
+                    "Workshop ID": 0,
+                }
+            ),
+            encoding="utf-8",
+        )
+        manifest = (
+            [{"filename": "data/example.txt", "checksum": 123}]
+            if valid_manifest
+            else [{"filename": "data/example.txt"}]
+        )
+        (mod_root / "filelist.json").write_text(json.dumps(manifest), encoding="utf-8")
+        return mod_root
+
+    def test_scans_rome_remastered_workshop_and_local_directory_mods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "885970"
+            (workshop / "123").mkdir(parents=True)
+
+            # A Workshop item is itself the directory MOD root.
+            self._write_rome_directory_mod(workshop, "456")
+            local_root = (
+                root
+                / "local-app-data"
+                / "Feral Interactive"
+                / "Total War ROME REMASTERED"
+                / "Mods"
+                / "Local Mods"
+            )
+            self._write_rome_directory_mod(local_root, "local-example")
+
+            metadata = OfflineWorkshopMetadata()
+            with patch.dict("os.environ", {"LOCALAPPDATA": str(root / "local-app-data")}):
+                result = ModScanner(metadata).scan(
+                    GamePaths(game_id="rome_remastered", workshop_path=str(workshop)),
+                    {"language": "en-US", "check_outdated_mods": False},
+                )
+
+        self.assertEqual(
+            {(mod.source, mod.workshop_id, mod.display_name) for mod in result.mods},
+            {
+                ("workshop", "456", "Display 456"),
+                ("local", "", "Display local-example"),
+            },
+        )
+        self.assertEqual(metadata.requested_ids, ["123", "456"])
+        self.assertEqual(metadata.requested_app_id, 885970)
+        self.assertTrue(any("123" in str(warning) for warning in result.warnings))
+        self.assertEqual(Path(next(mod for mod in result.mods if mod.workshop_id).path).name, "456")
+
+    def test_rejects_rome_directory_mod_without_valid_filelist(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workshop = Path(temporary) / "workshop"
+            self._write_rome_directory_mod(workshop, "789", valid_manifest=False)
+            result = ModScanner(OfflineWorkshopMetadata()).scan(
+                GamePaths(game_id="rome_remastered", workshop_path=str(workshop)),
+                {"language": "en-US", "check_outdated_mods": False},
+            )
+
+        self.assertEqual(result.mods, [])
+        self.assertTrue(any("789" in str(warning) for warning in result.warnings))
+
     def test_three_kingdoms_scanner_requests_metadata_for_its_steam_app(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -218,6 +293,36 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(read_pack_type(normal), PACK_TYPE_MOD)
             self.assertEqual(read_pack_type(movie), PACK_TYPE_MOVIE)
             self.assertEqual(read_pack_type(invalid), "unknown")
+
+    def test_reads_all_workshop_compatible_pack_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for magic in (b"PFH2", b"PFH3", b"PFH4", b"PFH5", b"PFH6"):
+                with self.subTest(magic=magic):
+                    pack = write_pack(
+                        root / f"{magic.decode().lower()}.pack",
+                        byte_mask=0x40,
+                        dependencies=["data.pack", "base.pack"],
+                        entries=[("db\\main_units_tables\\fixture", b"row")],
+                        magic=magic,
+                    )
+                    self.assertEqual(read_pack_type(pack), PACK_TYPE_MOD)
+                    self.assertEqual(read_pack_dependencies(pack), ["data.pack", "base.pack"])
+                    self.assertEqual(read_unit_data_tables(pack), ["main_units_tables"])
+
+            movie = write_pack(
+                root / "movie-with-flags.pack",
+                byte_mask=4 | 0x40,
+                magic=b"PFH4",
+            )
+            old_workshop = write_pack(
+                root / "old-workshop.pack",
+                entries=[("text\\fixture.loc", b"loc")],
+                magic=b"PFH3",
+                fake_workshop_preamble=True,
+            )
+            self.assertEqual(read_pack_type(movie), PACK_TYPE_MOVIE)
+            self.assertEqual(read_pack_type(old_workshop), PACK_TYPE_MOD)
 
     def test_reads_unit_data_table_families_from_pack_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

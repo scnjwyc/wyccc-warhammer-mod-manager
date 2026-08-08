@@ -60,6 +60,7 @@ const sourcesOf = mod => [...new Set(mod.sources?.length ? mod.sources : [mod.so
 const sourceLabel = source => ({
   workshop: t('list.workshopSource'),
   data: t('list.dataSource'),
+  local: t('list.localSource'),
 }[source] || String(source).toUpperCase())
 const authorOf = mod => mod.author?.trim() || (mod.workshop_id ? t('list.authorUnavailable') : t('list.localFile'))
 const typesOf = mod => [...new Set(mod.mod_types?.length ? mod.mod_types : [mod.mod_type || 'unknown'])]

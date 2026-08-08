@@ -178,7 +178,7 @@ describe('language settings', () => {
 
     expect(wrapper.get('[data-testid="game-path-input"]').attributes('placeholder')).toContain('Total War THREE KINGDOMS')
     expect(wrapper.get('[data-testid="workshop-path-input"]').attributes('placeholder')).toContain('779340')
-    expect(wrapper.get('[data-testid="three-kingdoms-manual-path"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="manual-game-path"]').text()).toContain('全面战争：三国')
     expect(wrapper.emitted('detect').at(-1)).toEqual(['three_kingdoms'])
 
     await wrapper.get('[data-testid="game-path-input"]').setValue('D:/Steam/steamapps/common/Total War THREE KINGDOMS')

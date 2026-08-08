@@ -1,25 +1,63 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "published_at": "2026-08-08",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.1/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.5/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.1/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.1/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.5/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.5/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "7c3850e1f9bea3c0a5ab51328109a08aab0527e3a3a0f0c934f87b7da0defc6c",
-    "size": 62559157
+    "sha256": "D4D6E2B445FD025A62C56562C1517F3D243C2FA636E5E5584C003EF8000105A7",
+    "size": 62602867
   },
   "changelog": [
+    {
+      "title": "新增",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "启动器目前已兼容所有拥有创意工坊的全面战争系列游戏。"
+        },
+        {
+          "type": "feature",
+          "text": "单位数据修改功能已支持《全面战争：三国》。"
+        }
+      ]
+    },
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "单位数据修改功能新增了一些字段的修改。"
+        }
+      ]
+    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复单位数据修改界面没有正确读取多语言文件的问题。"
+          "text": "修复单位数据修改功能载入 DB 顺序不正确的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复禁用单位招募修改未生效的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复模组数量修改存在的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复战锤战车等单位移速读取错误的问题。"
+        },
+        {
+          "type": "fix",
+          "text": "修复三国近战攻速精度显示和保存不正确的问题。"
         }
       ]
     }

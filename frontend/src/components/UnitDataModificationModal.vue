@@ -7,6 +7,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   busy: { type: String, default: '' },
   initialSearch: { type: String, default: '' },
+  gameId: { type: String, default: 'warhammer3' },
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -48,50 +49,71 @@ const casteLabel = caste => {
 const COLUMNS = Object.freeze([
   { field: 'mod_name', labelKey: 'unitData.modName', width: 351, sticky: true, kind: 'modlink', helpKey: 'unitData.help.modName' },
   { field: 'name', labelKey: 'unitData.name', width: 231.66, sticky: true, kind: 'namekey', helpKey: 'unitData.help.name' },
-  { field: 'race', labelKey: 'unitData.race', width: 126, kind: 'text', helpKey: 'unitData.help.race' },
+  { field: 'race', labelKey: 'unitData.race', width: 126, kind: 'text', helpKey: 'unitData.help.race', excludeGames: ['three_kingdoms'] },
   { field: 'caste', labelKey: 'unitData.caste', width: 112, kind: 'caste', helpKey: 'unitData.help.caste' },
   { field: 'enabled', labelKey: 'unitData.enabled', width: 105, kind: 'bool', helpKey: 'unitData.help.enabled' },
   { field: 'campaign_cap', labelKey: 'unitData.campaignCap', width: 105, kind: 'number', helpKey: 'unitData.help.campaignCap' },
   { field: 'recruitment_cost', labelKey: 'unitData.recruitmentCost', width: 105, kind: 'number', helpKey: 'unitData.help.recruitmentCost' },
   { field: 'upkeep_cost', labelKey: 'unitData.upkeepCost', width: 105, kind: 'number', helpKey: 'unitData.help.upkeepCost' },
   { field: 'model_count', labelKey: 'unitData.modelCount', width: 105, kind: 'number', helpKey: 'unitData.help.modelCount' },
+  { field: 'morale', labelKey: 'unitData.leadership', threeKingdomsLabelKey: 'unitData.morale', width: 105, kind: 'number', helpKey: 'unitData.help.leadership', threeKingdomsHelpKey: 'unitData.help.morale' },
+  { field: 'movement_speed', labelKey: 'unitData.movementSpeed', width: 110.88, kind: 'number', step: 0.1, helpKey: 'unitData.help.movementSpeed' },
   { field: 'armour', labelKey: 'unitData.armour', width: 98, kind: 'armour', helpKey: 'unitData.help.armour' },
+  { field: 'missile_block_chance', labelKey: 'unitData.missileBlockChance', width: 110.88, kind: 'number', helpKey: 'unitData.help.missileBlockChance', onlyGames: ['three_kingdoms'] },
   { field: 'hit_points', labelKey: 'unitData.hitPoints', width: 126, kind: 'number', helpKey: 'unitData.help.hitPoints' },
   { field: 'total_hp', labelKey: 'unitData.totalHp', width: 112, kind: 'readonly', helpKey: 'unitData.help.totalHp' },
   { field: 'charge_bonus', labelKey: 'unitData.chargeBonus', width: 110.88, kind: 'number', helpKey: 'unitData.help.chargeBonus' },
   { field: 'melee_attack', labelKey: 'unitData.meleeAttack', width: 110.88, kind: 'number', helpKey: 'unitData.help.meleeAttack' },
-  { field: 'melee_defence', labelKey: 'unitData.meleeDefence', width: 110.88, kind: 'number', helpKey: 'unitData.help.meleeDefence' },
+  { field: 'melee_defence', labelKey: 'unitData.meleeDefence', threeKingdomsLabelKey: 'unitData.meleeDodge', width: 110.88, kind: 'number', helpKey: 'unitData.help.meleeDefence', threeKingdomsHelpKey: 'unitData.help.meleeDodge' },
   { field: 'ammo', labelKey: 'unitData.ammo', width: 100.8, kind: 'number', helpKey: 'unitData.help.ammo' },
-  { field: 'fire_resistance', labelKey: 'unitData.fireResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.fireResistance' },
-  { field: 'magic_resistance', labelKey: 'unitData.magicResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.magicResistance' },
-  { field: 'physical_resistance', labelKey: 'unitData.physicalResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.physicalResistance' },
-  { field: 'ward_save', labelKey: 'unitData.wardSave', width: 110.88, kind: 'number', helpKey: 'unitData.help.wardSave' },
+  { field: 'missile_resistance', labelKey: 'unitData.missileResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.missileResistance', excludeGames: ['three_kingdoms'] },
+  { field: 'fire_resistance', labelKey: 'unitData.fireResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.fireResistance', excludeGames: ['three_kingdoms'] },
+  { field: 'magic_resistance', labelKey: 'unitData.magicResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.magicResistance', excludeGames: ['three_kingdoms'] },
+  { field: 'physical_resistance', labelKey: 'unitData.physicalResistance', width: 110.88, kind: 'number', helpKey: 'unitData.help.physicalResistance', excludeGames: ['three_kingdoms'] },
+  { field: 'ward_save', labelKey: 'unitData.wardSave', width: 110.88, kind: 'number', helpKey: 'unitData.help.wardSave', excludeGames: ['three_kingdoms'] },
   { field: 'melee_damage', labelKey: 'unitData.meleeDamage', width: 126.36, kind: 'number', helpKey: 'unitData.help.meleeDamage' },
   { field: 'melee_ap_damage', labelKey: 'unitData.meleeApDamage', width: 136.89, kind: 'number', helpKey: 'unitData.help.meleeApDamage' },
+  { field: 'melee_attack_speed', labelKey: 'unitData.meleeAttackSpeed', width: 126.36, kind: 'number', step: 0.1, helpKey: 'unitData.help.meleeAttackSpeed', onlyGames: ['three_kingdoms'] },
+  { field: 'melee_bonus_v_cavalry', labelKey: 'unitData.meleeBonusVCavalry', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVCavalry', onlyGames: ['three_kingdoms'] },
+  { field: 'melee_bonus_v_infantry', labelKey: 'unitData.meleeBonusVInfantry', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVInfantry', onlyGames: ['three_kingdoms'] },
   { field: 'missile_damage', labelKey: 'unitData.missileDamage', width: 136.89, kind: 'number', helpKey: 'unitData.help.missileDamage' },
   { field: 'missile_ap_damage', labelKey: 'unitData.missileApDamage', width: 136.89, kind: 'number', helpKey: 'unitData.help.missileApDamage' },
-  { field: 'explosion_damage', labelKey: 'unitData.explosionDamage', width: 147.42, kind: 'number', helpKey: 'unitData.help.explosionDamage' },
-  { field: 'explosion_ap_damage', labelKey: 'unitData.explosionApDamage', width: 147.42, kind: 'number', helpKey: 'unitData.help.explosionApDamage' },
+  { field: 'missile_bonus_v_cavalry', labelKey: 'unitData.missileBonusVCavalry', width: 147.42, kind: 'number', helpKey: 'unitData.help.missileBonusVCavalry', onlyGames: ['three_kingdoms'] },
+  { field: 'missile_bonus_v_infantry', labelKey: 'unitData.missileBonusVInfantry', width: 147.42, kind: 'number', helpKey: 'unitData.help.missileBonusVInfantry', onlyGames: ['three_kingdoms'] },
+  { field: 'explosion_damage', labelKey: 'unitData.explosionDamage', width: 147.42, kind: 'number', helpKey: 'unitData.help.explosionDamage', excludeGames: ['three_kingdoms'] },
+  { field: 'explosion_ap_damage', labelKey: 'unitData.explosionApDamage', width: 147.42, kind: 'number', helpKey: 'unitData.help.explosionApDamage', excludeGames: ['three_kingdoms'] },
   { field: 'range', labelKey: 'unitData.range', width: 110.88, kind: 'number', helpKey: 'unitData.help.range' },
-  { field: 'reload', labelKey: 'unitData.reload', width: 110.88, kind: 'number', helpKey: 'unitData.help.reload' },
+  { field: 'reload', labelKey: 'unitData.reload', width: 110.88, kind: 'number', helpKey: 'unitData.help.reload', excludeGames: ['three_kingdoms'] },
+  { field: 'ranged_attack_speed', labelKey: 'unitData.rangedAttackSpeed', width: 126.36, kind: 'number', helpKey: 'unitData.help.rangedAttackSpeed', onlyGames: ['three_kingdoms'] },
   { field: 'accuracy', labelKey: 'unitData.accuracy', width: 110.88, kind: 'number', helpKey: 'unitData.help.accuracy' },
 ])
 
 const EDITABLE_COLUMN_KINDS = new Set(['bool', 'armour', 'number'])
 const isEditableColumn = column => EDITABLE_COLUMN_KINDS.has(column.kind)
-const editableColumnTones = Object.freeze(
-  COLUMNS.reduce((tones, column) => {
-    if (isEditableColumn(column)) {
-      const editableIndex = Object.keys(tones).length
-      tones[column.field] = editableIndex % 2 === 0 ? 'even' : 'odd'
-    }
-    return tones
-  }, {}),
+const isThreeKingdoms = computed(() => props.gameId === 'three_kingdoms')
+const visibleColumns = computed(() => COLUMNS.filter(column => (
+  (!column.onlyGames || column.onlyGames.includes(props.gameId))
+  && (!column.excludeGames || !column.excludeGames.includes(props.gameId))
+)))
+const editableColumnTone = column => {
+  const editableIndex = visibleColumns.value
+    .filter(isEditableColumn)
+    .findIndex(candidate => candidate.field === column.field)
+  return editableIndex >= 0 && editableIndex % 2 === 0 ? 'even' : 'odd'
+}
+const columnLabelKey = column => (
+  isThreeKingdoms.value && column.threeKingdomsLabelKey
+    ? column.threeKingdomsLabelKey
+    : column.labelKey
 )
-const editableColumnTone = column => editableColumnTones[column.field] || ''
+const columnHelpKey = column => (
+  isThreeKingdoms.value && column.threeKingdomsHelpKey
+    ? column.threeKingdomsHelpKey
+    : column.helpKey
+)
 
 const tableWidth = computed(() => (
-  COLUMNS.reduce((total, column) => total + column.width, 0)
+  visibleColumns.value.reduce((total, column) => total + column.width, 0)
 ))
 
 const cellStyle = column => {
@@ -99,7 +121,7 @@ const cellStyle = column => {
   const style = { width, minWidth: width, maxWidth: width }
   if (column.sticky) {
     let left = 0
-    for (const candidate of COLUMNS) {
+    for (const candidate of visibleColumns.value) {
       if (candidate.field === column.field) break
       if (candidate.sticky) left += candidate.width
     }
@@ -158,6 +180,15 @@ watch(
   () => { page.value = 1 },
 )
 
+watch(
+  () => props.gameId,
+  () => {
+    if (!visibleColumns.value.some(column => column.field === sortField.value)) {
+      sortField.value = ''
+    }
+  },
+)
+
 watch(totalPages, pages => {
   if (page.value > pages) page.value = pages
 })
@@ -192,18 +223,45 @@ const originalValue = (row, field) => {
   return row[field]
 }
 
-const displayOriginalValue = value => (
-  value === null || value === undefined || value === '' ? '—' : String(value)
-)
+const ONE_DECIMAL_FIELDS = new Set(['movement_speed', 'melee_attack_speed'])
+const NORMALIZE_ONE_DECIMAL_FIELDS = new Set(['melee_attack_speed'])
+
+const formatOneDecimal = value => {
+  if (value === null || value === undefined || value === '') return value
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric.toFixed(1) : String(value)
+}
+
+const displayOriginalValue = (value, field = '') => {
+  if (value === null || value === undefined || value === '') return '—'
+  return ONE_DECIMAL_FIELDS.has(field) ? formatOneDecimal(value) : String(value)
+}
 
 const cellValue = (row, field) => {
   const draft = draftEdits[row.key]
   return draft && field in draft ? draft[field] : row[field]
 }
 
+const displayCellValue = (row, column) => (
+  ONE_DECIMAL_FIELDS.has(column.field)
+    ? formatOneDecimal(cellValue(row, column.field))
+    : cellValue(row, column.field)
+)
+
 const armourValue = row => {
   const draft = draftEdits[row.key]
   return draft && 'armour' in draft ? draft.armour : row.armour_value
+}
+
+const fieldLocked = (row, field) => {
+  if (field === 'model_count') return Boolean(row.model_count_locked)
+  if (field === 'hit_points') return Boolean(row.hit_points_locked)
+  if (field === 'enabled') return Boolean(row.enabled_locked)
+  if (field === 'missile_block_chance') return Boolean(row.missile_block_chance_locked)
+  if (field === 'movement_speed') return Boolean(row.movement_speed_locked)
+  if (field === 'melee_attack_speed') return Boolean(row.melee_attack_speed_locked)
+  if (field === 'ranged_attack_speed') return Boolean(row.ranged_attack_speed_locked)
+  return false
 }
 
 const setCell = (row, field, value) => {
@@ -215,7 +273,18 @@ const setCell = (row, field, value) => {
 
 const setNumericCell = (row, field, event) => {
   const raw = event.target.value
-  setCell(row, field, raw === '' ? '' : Number(raw))
+  if (raw === '') {
+    setCell(row, field, '')
+    return
+  }
+  const numeric = Number(raw)
+  setCell(
+    row,
+    field,
+    NORMALIZE_ONE_DECIMAL_FIELDS.has(field) && Number.isFinite(numeric)
+      ? Number(numeric.toFixed(1))
+      : numeric,
+  )
 }
 
 const clearAllEdits = () => {
@@ -232,6 +301,9 @@ const removeFieldEdit = (row, field) => {
 }
 
 const effectiveTotalHp = row => {
+  if (row.hit_points_locked) return row.total_hp
+  const draft = draftEdits[row.key]
+  if (!draft || (!('hit_points' in draft) && !('model_count' in draft))) return row.total_hp
   const hp = Number(cellValue(row, 'hit_points') ?? 0)
   const models = Math.max(1, Number(cellValue(row, 'model_count') ?? 1) || 1)
   return hp * models
@@ -262,9 +334,9 @@ const hideHoverTooltip = () => {
 const showOriginalValueTooltip = (event, row, column) => {
   if (!isFieldEdited(row, column.field)) return
   showHoverTooltip(event, {
-    title: t('unitData.originalValueTitle', { field: t(column.labelKey) }),
+    title: t('unitData.originalValueTitle', { field: t(columnLabelKey(column)) }),
     body: t('unitData.originalValue', {
-      value: displayOriginalValue(originalValue(row, column.field)),
+      value: displayOriginalValue(originalValue(row, column.field), column.field),
     }),
   })
 }
@@ -362,7 +434,7 @@ const submit = () => {
           <table class="unit-data-table" :style="{ width: `${tableWidth}px` }">
             <colgroup>
               <col
-                v-for="column in COLUMNS"
+                v-for="column in visibleColumns"
                 :key="`col-${column.field}`"
                 :style="{ width: `${column.width}px` }"
               />
@@ -370,7 +442,7 @@ const submit = () => {
             <thead>
               <tr>
                 <th
-                  v-for="column in COLUMNS"
+                  v-for="column in visibleColumns"
                   :key="column.field"
                   class="unit-data-th"
                   :class="{
@@ -380,8 +452,8 @@ const submit = () => {
                   :style="cellStyle(column)"
                   :data-testid="`unit-data-header-${column.field}`"
                 >
-                  <span class="unit-data-th-label" role="button" tabindex="0" :title="t(column.labelKey)" @click="toggleSort(column)" @keydown.enter="toggleSort(column)">
-                    {{ t(column.labelKey) }}
+                  <span class="unit-data-th-label" role="button" tabindex="0" :title="t(columnLabelKey(column))" @click="toggleSort(column)" @keydown.enter="toggleSort(column)">
+                    {{ t(columnLabelKey(column)) }}
                     <span v-if="sortField === column.field" class="unit-data-sort-mark">
                       {{ sortDesc ? '↓' : '↑' }}
                     </span>
@@ -391,9 +463,9 @@ const submit = () => {
                     class="unit-data-info"
                     :aria-label="t('unitData.infoTitle')"
                     :data-testid="`unit-data-help-${column.field}`"
-                    @mouseenter="showHoverTooltip($event, { title: `${t('unitData.infoTitle')}：${t(column.labelKey)}`, body: t(column.helpKey) })"
+                    @mouseenter="showHoverTooltip($event, { title: `${t('unitData.infoTitle')}：${t(columnLabelKey(column))}`, body: t(columnHelpKey(column)) })"
                     @mouseleave="hideHoverTooltip"
-                    @focus="showHoverTooltip($event, { title: `${t('unitData.infoTitle')}：${t(column.labelKey)}`, body: t(column.helpKey) })"
+                    @focus="showHoverTooltip($event, { title: `${t('unitData.infoTitle')}：${t(columnLabelKey(column))}`, body: t(columnHelpKey(column)) })"
                     @blur="hideHoverTooltip"
                   >!</button>
                 </th>
@@ -402,7 +474,7 @@ const submit = () => {
             <tbody>
               <tr v-for="row in pageRows" :key="row.key" v-memo="[row, draftEdits[row.key]]" class="unit-data-row">
                 <td
-                  v-for="column in COLUMNS"
+                  v-for="column in visibleColumns"
                   :key="column.field"
                   class="unit-data-td"
                   :class="{
@@ -458,7 +530,7 @@ const submit = () => {
                       class="unit-data-checkbox"
                       :class="{ 'unit-data-edited-control': isFieldEdited(row, column.field) }"
                       :checked="cellValue(row, 'enabled') !== false"
-                      :disabled="!!busy"
+                      :disabled="!!busy || fieldLocked(row, column.field)"
                       :aria-label="t('unitData.enabled')"
                       :data-testid="`unit-enabled-${row.key}`"
                       @mouseenter="showOriginalValueTooltip($event, row, column)"
@@ -515,8 +587,9 @@ const submit = () => {
                       type="number"
                       class="unit-data-input"
                       :class="{ 'unit-data-edited-control': isFieldEdited(row, column.field) }"
-                      :value="cellValue(row, column.field)"
-                      :disabled="!!busy || (column.field === 'model_count' && row.model_count_locked)"
+                      :value="displayCellValue(row, column)"
+                      :step="column.step || 1"
+                      :disabled="!!busy || fieldLocked(row, column.field)"
                       :data-testid="`unit-${column.field}-${row.key}`"
                       @mouseenter="showOriginalValueTooltip($event, row, column)"
                       @mouseleave="hideHoverTooltip"

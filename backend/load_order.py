@@ -57,9 +57,15 @@ class LoadOrderService:
         if not source_path.is_file():
             return []
         try:
-            content = source_path.read_text(encoding="utf-8-sig", errors="replace")
+            raw_content = source_path.read_bytes()
         except OSError:
             return []
+        if raw_content.startswith((b"\xff\xfe", b"\xfe\xff")):
+            content = raw_content.decode("utf-16", errors="replace")
+        elif raw_content and raw_content[1::2].count(0) * 4 >= len(raw_content):
+            content = raw_content.decode("utf-16le", errors="replace")
+        else:
+            content = raw_content.decode("utf-8-sig", errors="replace")
         by_name: dict[str, list[ModAsset]] = {}
         for mod in mods:
             by_name.setdefault(mod.pack_name.casefold(), []).append(mod)
@@ -138,6 +144,7 @@ class LoadOrderService:
         plan: LaunchPlan,
         expected_token: str = "",
         comparison_path: Path | None = None,
+        encoding: str = "utf-8",
     ) -> tuple[LaunchPlan, str, str]:
         primary = Path(plan.target_path)
         comparison_path = comparison_path or current_order_path(str(primary.parent))
@@ -153,10 +160,10 @@ class LoadOrderService:
             backup_path = str(backup)
 
         try:
-            written_path = self._atomic_write(primary, plan.content)
+            written_path = self._atomic_write(primary, plan.content, encoding=encoding)
         except OSError:
             fallback = primary.with_name("my_mods.txt")
-            written_path = self._atomic_write(fallback, plan.content)
+            written_path = self._atomic_write(fallback, plan.content, encoding=encoding)
             plan = LaunchPlan(
                 ordered_mod_ids=plan.ordered_mod_ids,
                 working_directories=plan.working_directories,
@@ -167,11 +174,11 @@ class LoadOrderService:
         return plan, backup_path, file_token(written_path)
 
     @staticmethod
-    def _atomic_write(path: Path, content: str) -> Path:
+    def _atomic_write(path: Path, content: str, *, encoding: str = "utf-8") -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         unique = f"{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}"
         temp = path.with_name(f".{path.name}.{unique}.tmp")
-        data = content.encode("utf-8")
+        data = content.encode(encoding)
         try:
             with temp.open("wb") as stream:
                 stream.write(data)
