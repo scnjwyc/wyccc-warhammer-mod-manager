@@ -183,6 +183,27 @@ describe('ModList previews and source collisions', () => {
     expect(badge.text()).toBe('! 缺少依赖')
   })
 
+  it('renders a Workshop update as a yellow warning badge', () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: 'Mods',
+        mods: [{
+          ...duplicateMod,
+          warnings: [{
+            code: 'workshop_update_available',
+            severity: 'warning',
+            message: 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新',
+          }],
+        }],
+      },
+    })
+
+    const badge = wrapper.get('[data-testid="mod-warning-badge"]')
+    expect(badge.classes()).not.toContain('error')
+    expect(badge.text()).toBe('! 警告')
+    expect(badge.attributes('title')).toContain('Steam 创意工坊信息显示该 MOD 有新更新')
+  })
+
   it('does not show a stale missing-dependency badge in the inactive list', () => {
     const wrapper = mount(ModList, {
       props: {

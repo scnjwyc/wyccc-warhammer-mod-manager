@@ -245,6 +245,16 @@ describe('built-in interface languages', () => {
     expect(message).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
+  it('localizes the Workshop update-available warning', () => {
+    const source = 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新'
+    applyInterfaceLanguage('zh-CN')
+    expect(localizeBackendMessage(source)).toBe(source)
+    applyInterfaceLanguage('en-US')
+    expect(localizeBackendMessage(source)).toBe(
+      'Steam Workshop reports that this MOD has a newer update available; check the Workshop to update it.',
+    )
+  })
+
   it('explains an unavailable game data subscription check in English', () => {
     applyInterfaceLanguage('en-US')
     const message = localizeBackendMessage(

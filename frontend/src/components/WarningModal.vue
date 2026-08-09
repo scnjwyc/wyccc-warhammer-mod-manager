@@ -14,6 +14,7 @@ const ignorableCount = computed(() => props.items.filter(item => item.ignorable)
 
 const typeLabel = item => ({
   outdated_mod: t('app.warningOutdated'),
+  workshop_update_available: t('app.warningWorkshopUpdate'),
   missing_dependency: t('app.warningMissingDependency'),
   workshop_dependency_refresh: t('warnings.workshopDependencyTitle'),
 }[item.code] || t('warnings.scanNotice'))

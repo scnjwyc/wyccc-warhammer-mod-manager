@@ -73,6 +73,71 @@ def _versionless_payload(rows: list[bytes]) -> bytes:
     return b"".join((b"\1", struct.pack("<i", len(rows)), *rows))
 
 
+def _guid_prefix(guid: str) -> bytes:
+    return b"".join(
+        (
+            b"\xfd\xfe\xfc\xff",
+            struct.pack("<H", len(guid)),
+            guid.encode("utf-16le"),
+        )
+    )
+
+
+def _guid_table_payload(
+    table_name: str,
+    version: int,
+    rows: list[dict[str, Any]],
+    guid: str,
+) -> bytes:
+    return _guid_prefix(guid) + _table_payload(table_name, version, rows)
+
+
+def _string_u8(value: str) -> bytes:
+    raw = value.encode("ascii")
+    return struct.pack("<H", len(raw)) + raw
+
+
+def _custom_battle_row(faction: str, unit: str) -> bytes:
+    return b"".join(
+        (
+            _string_u8(faction),
+            b"\0",  # general_unit
+            _string_u8(unit),
+            b"\1\1",  # siege_unit_attacker / siege_unit_defender
+            b"\0\0\0",  # general portrait, uniform, set-piece character
+            b"\0",  # campaign_exclusive
+            b"\0",  # armory_item_set
+            b"\0",  # supports_upgrades
+        )
+    )
+
+
+def _custom_battle_payload(rows: list[bytes], guid: str) -> bytes:
+    return b"".join(
+        (
+            _guid_prefix(guid),
+            b"\xfc\xfd\xfe\xff",
+            struct.pack("<i", 11),
+            b"\1",
+            struct.pack("<i", len(rows)),
+            *rows,
+        )
+    )
+
+
+def _allied_recruitment_payload(units: list[str], guid: str) -> bytes:
+    return b"".join(
+        (
+            _guid_prefix(guid),
+            b"\xfc\xfd\xfe\xff",
+            struct.pack("<i", 0),
+            b"\1",
+            struct.pack("<i", len(units)),
+            *(_string_u8(unit) for unit in units),
+        )
+    )
+
+
 def _grouping_row(unit: str, group: str) -> bytes:
     encoded = [
         struct.pack("<H", len(str(value).encode("ascii"))) + str(value).encode("ascii")
@@ -485,6 +550,147 @@ class UnitDataSnapshotTests(unittest.TestCase):
 
 
 class UnitDataPatchTests(unittest.TestCase):
+    def test_disabled_unit_rebuilds_only_affected_permission_files_with_original_headers(self) -> None:
+        target = "inf_swordsmen"
+        building_guid = "11111111-1111-1111-1111-111111111111"
+        grouping_guid = "22222222-2222-2222-2222-222222222222"
+        source = DbSource(
+            "mod.pack",
+            (
+                GameDataEntry(
+                    "db\\building_units_allowed_tables\\mod_buildings",
+                    _guid_table_payload(
+                        "building_units_allowed_tables",
+                        4,
+                        [
+                            {
+                                "building": "mod_barracks",
+                                "unit": target,
+                                "XP": 0,
+                                "key": 1,
+                                "conditions": 0,
+                                "faction": None,
+                                "enabled": True,
+                            },
+                            {
+                                "building": "mod_barracks",
+                                "unit": "kept_unit",
+                                "XP": 0,
+                                "key": 2,
+                                "conditions": 0,
+                                "faction": None,
+                                "enabled": True,
+                            },
+                        ],
+                        building_guid,
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\building_units_allowed_tables\\unrelated_buildings",
+                    _guid_table_payload(
+                        "building_units_allowed_tables",
+                        4,
+                        [
+                            {
+                                "building": "other_barracks",
+                                "unit": "other_unit",
+                                "XP": 0,
+                                "key": 3,
+                                "conditions": 0,
+                                "faction": None,
+                                "enabled": True,
+                            }
+                        ],
+                        "33333333-3333-3333-3333-333333333333",
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\units_to_groupings_military_permissions_tables\\mod_groups",
+                    _guid_prefix(grouping_guid)
+                    + _versionless_payload(
+                        [
+                            _grouping_row(target, "mod_group"),
+                            _grouping_row("kept_unit", "mod_group"),
+                        ]
+                    ),
+                ),
+                GameDataEntry(
+                    "db\\units_to_groupings_military_permissions_tables\\unrelated_groups",
+                    _guid_prefix("44444444-4444-4444-4444-444444444444")
+                    + _versionless_payload([_grouping_row("other_unit", "other_group")]),
+                ),
+            ),
+        )
+
+        result = build_unit_data_entries([source], {}, {target: {"enabled": False}})
+        entries = {entry.name: entry.payload for entry in result.entries}
+
+        building_name = "db\\building_units_allowed_tables\\mod_buildings"
+        grouping_name = "db\\units_to_groupings_military_permissions_tables\\mod_groups"
+        self.assertEqual(
+            {
+                name
+                for name in entries
+                if name.startswith("db\\building_units_allowed_tables\\")
+                or name.startswith("db\\units_to_groupings_military_permissions_tables\\")
+            },
+            {building_name, grouping_name},
+        )
+        self.assertTrue(entries[building_name].startswith(_guid_prefix(building_guid)))
+        self.assertTrue(entries[grouping_name].startswith(_guid_prefix(grouping_guid)))
+        self.assertNotIn(target.encode("ascii"), entries[building_name])
+        self.assertNotIn(target.encode("ascii"), entries[grouping_name])
+        self.assertIn(b"kept_unit", entries[building_name])
+        self.assertIn(b"kept_unit", entries[grouping_name])
+
+    def test_disabled_unit_is_removed_from_custom_battle_permissions(self) -> None:
+        target = "inf_swordsmen"
+        guid = "55555555-5555-5555-5555-555555555555"
+        source = DbSource(
+            "mod.pack",
+            (
+                GameDataEntry(
+                    "db\\units_custom_battle_permissions_tables\\mod_battle",
+                    _custom_battle_payload(
+                        [
+                            _custom_battle_row("wh_main_emp_empire", target),
+                            _custom_battle_row("wh_main_emp_empire", "kept_unit"),
+                        ],
+                        guid,
+                    ),
+                ),
+            ),
+        )
+
+        result = build_unit_data_entries([source], {}, {target: {"enabled": False}})
+        entries = {entry.name: entry.payload for entry in result.entries}
+        payload = entries["db\\units_custom_battle_permissions_tables\\mod_battle"]
+
+        self.assertTrue(payload.startswith(_guid_prefix(guid)))
+        self.assertNotIn(target.encode("ascii"), payload)
+        self.assertIn(b"kept_unit", payload)
+
+    def test_disabled_unit_is_removed_from_allied_recruitment_permissions(self) -> None:
+        target = "inf_swordsmen"
+        guid = "66666666-6666-6666-6666-666666666666"
+        source = DbSource(
+            "mod.pack",
+            (
+                GameDataEntry(
+                    "db\\allied_recruitment_unit_permissions_tables\\mod_allies",
+                    _allied_recruitment_payload([target, "kept_unit"], guid),
+                ),
+            ),
+        )
+
+        result = build_unit_data_entries([source], {}, {target: {"enabled": False}})
+        entries = {entry.name: entry.payload for entry in result.entries}
+        payload = entries["db\\allied_recruitment_unit_permissions_tables\\mod_allies"]
+
+        self.assertTrue(payload.startswith(_guid_prefix(guid)))
+        self.assertNotIn(target.encode("ascii"), payload)
+        self.assertIn(b"kept_unit", payload)
+
     def test_applies_edits_across_joined_tables(self) -> None:
         source = _fixture_source()
         edits = {
@@ -529,7 +735,7 @@ class UnitDataPatchTests(unittest.TestCase):
         self.assertNotIn("inf_swordsmen", groupings)
         self.assertIn("veh_chariot", groupings)
         exclusive = _rows_by_key(result, "units_to_exclusive_faction_permissions_tables")
-        self.assertIn("veh_chariot", exclusive)
+        self.assertEqual(exclusive, {})
         buildings = _rows_by_key(result, "building_units_allowed_tables")
         self.assertNotIn("inf_swordsmen", buildings)
         self.assertTrue(buildings["veh_chariot"]["enabled"])

@@ -48,6 +48,8 @@ class ModAsset:
     workshop_url: str = ""
     pack_type: str = "unknown"
     updated_at: int = 0
+    file_updated_at: int = 0
+    workshop_updated_at: int = 0
     created_at: int = 0
     subscribed_at: int = 0
     is_symlink: bool = False

@@ -267,6 +267,13 @@ describe('ModContextMenu', () => {
       value: 'outdated_mod',
       mod: { id: mod.id },
     })
+
+    await buttonByText(wrapper, '忽略更新警告').trigger('click')
+    expect(wrapper.emitted('action')[1][0]).toMatchObject({
+      action: 'toggle-warning-ignore',
+      value: 'workshop_update_available',
+      mod: { id: mod.id },
+    })
     expect(wrapper.emitted('close')).toBeUndefined()
   })
 

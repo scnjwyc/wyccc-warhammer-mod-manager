@@ -133,6 +133,12 @@ const statusDisplay = computed(() => {
   return { text: t('status.ready'), kind: 'ready', spinning: false }
 })
 
+const persistentWarningLabel = code => ({
+  outdated_mod: t('app.warningOutdated'),
+  workshop_update_available: t('app.warningWorkshopUpdate'),
+  missing_dependency: t('app.warningMissingDependency'),
+}[code] || t('app.warningOutdated'))
+
 const requestConfirmation = ({ message, confirmLabel = '', danger = false }) => new Promise(resolve => {
   confirmationResolver?.(false)
   confirmationResolver = resolve
@@ -605,9 +611,7 @@ const handleContextAction = async ({ action, value, mod }) => {
           await store.setModWarningIgnored(modId, value, shouldIgnore)
         }
       }
-      const warningLabel = value === 'missing_dependency'
-        ? t('app.warningMissingDependency')
-        : t('app.warningOutdated')
+      const warningLabel = persistentWarningLabel(value)
       store.notify(
         t('app.warningBatchChanged', {
           action: shouldIgnore ? t('app.actionIgnored') : t('app.actionRestored'),
@@ -734,9 +738,7 @@ const ignoreWarning = async item => {
       await store.setModWarningIgnored(item.modId, item.code, true)
       store.notify(t('app.warningIgnored', {
         name: item.modName,
-        warning: item.code === 'missing_dependency'
-          ? t('app.warningMissingDependency')
-          : t('app.warningOutdated'),
+        warning: persistentWarningLabel(item.code),
       }))
     } else {
       store.ignoreScanWarning(item.code)

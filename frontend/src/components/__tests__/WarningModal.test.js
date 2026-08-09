@@ -65,4 +65,28 @@ describe('WarningModal', () => {
 
     expect(wrapper.text()).toContain('当前没有未忽略的问题')
   })
+
+  it('labels a Workshop update and allows it to be ignored', async () => {
+    const wrapper = mount(WarningModal, {
+      props: {
+        open: true,
+        items: [{
+          id: 'mod-a:workshop_update_available',
+          modId: 'mod-a',
+          modName: '测试 MOD',
+          code: 'workshop_update_available',
+          severity: 'warning',
+          message: 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新',
+          ignorable: true,
+        }],
+      },
+    })
+
+    expect(wrapper.get('.warning-modal-type').text()).toBe('MOD 有新更新')
+    await wrapper.get('.warning-ignore-button').trigger('click')
+    expect(wrapper.emitted('ignore')[0][0]).toMatchObject({
+      code: 'workshop_update_available',
+      modId: 'mod-a',
+    })
+  })
 })

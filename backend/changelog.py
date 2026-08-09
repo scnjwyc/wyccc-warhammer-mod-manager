@@ -9,6 +9,20 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.6",
+        "date": "2026-08-09",
+        "entries": (
+            (
+                "v106_added_title",
+                (("feature", "v106_workshop_update_warning"),),
+            ),
+            (
+                "v106_fixed_title",
+                (("fix", "v106_runtime_patch_load_order"),),
+            ),
+        ),
+    },
+    {
         "version": "1.0.5",
         "date": "2026-08-08",
         "entries": (
@@ -507,6 +521,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v106_added_title": "新增",
+        "v106_workshop_update_warning": "MOD更新检测，如果创意工坊的版本比玩家本地更高，则会进行警告提醒",
+        "v106_fixed_title": "修复",
+        "v106_runtime_patch_load_order": "由于内置排序问题导致的游戏数据修改、单位数据修改等功能存在异常，如果使用了这些功能，请务必更新",
         "v105_added_title": "新增",
         "v105_launcher_workshop_games": "启动器目前已兼容所有拥有创意工坊的全面战争系列游戏。",
         "v105_unit_data_three_kingdoms": "单位数据修改功能已支持《全面战争：三国》。",
@@ -698,6 +716,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v106_added_title": "Added",
+        "v106_workshop_update_warning": "MOD update detection now warns when the Steam Workshop version is newer than the player's local version.",
+        "v106_fixed_title": "Fixed",
+        "v106_runtime_patch_load_order": "Fixed an internal sorting issue that could cause Game Data Modification, Unit Data Modification, and related features to malfunction. Please update if you use these features.",
         "v105_added_title": "Added",
         "v105_launcher_workshop_games": "The launcher is now compatible with all Total War series games that support Steam Workshop.",
         "v105_unit_data_three_kingdoms": "Unit Data Modification now supports Total War: THREE KINGDOMS.",
@@ -889,6 +911,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v106_added_title": "추가",
+        "v106_workshop_update_warning": "MOD 업데이트 감지: Steam Workshop 버전이 플레이어의 로컬 버전보다 최신이면 경고를 표시합니다.",
+        "v106_fixed_title": "수정",
+        "v106_runtime_patch_load_order": "내부 정렬 문제로 게임 데이터 수정, 유닛 데이터 수정 등 기능이 비정상적으로 작동할 수 있던 문제를 수정했습니다. 해당 기능을 사용한다면 반드시 업데이트하세요.",
         "v105_added_title": "추가",
         "v105_launcher_workshop_games": "이제 Steam Workshop을 지원하는 모든 Total War 시리즈 게임과 호환됩니다.",
         "v105_unit_data_three_kingdoms": "유닛 데이터 수정 기능이 Total War: THREE KINGDOMS를 지원합니다.",
@@ -1080,6 +1106,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v106_added_title": "Добавлено",
+        "v106_workshop_update_warning": "Добавлено обнаружение обновлений MOD: если версия в Steam Workshop новее локальной версии игрока, отображается предупреждение.",
+        "v106_fixed_title": "Исправлено",
+        "v106_runtime_patch_load_order": "Исправлена проблема внутренней сортировки, из-за которой изменение игровых данных, изменение данных отрядов и связанные функции могли работать некорректно. Если вы используете эти функции, обязательно обновитесь.",
         "v105_added_title": "Добавлено",
         "v105_launcher_workshop_games": "Лаунчер теперь совместим со всеми играми серии Total War, поддерживающими Steam Workshop.",
         "v105_unit_data_three_kingdoms": "Изменение данных отрядов теперь поддерживает Total War: THREE KINGDOMS.",
@@ -1271,6 +1301,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v106_added_title": "追加",
+        "v106_workshop_update_warning": "MOD更新検出を追加しました。Steam Workshop版がプレイヤーのローカル版より新しい場合、警告を表示します。",
+        "v106_fixed_title": "修正",
+        "v106_runtime_patch_load_order": "内部の並び順の問題により、ゲームデータ変更、ユニットデータ変更などの機能が正常に動作しない場合がある問題を修正しました。これらの機能を使用している場合は、必ず更新してください。",
         "v105_added_title": "追加",
         "v105_launcher_workshop_games": "ランチャーがSteam Workshopに対応するすべてのTotal Warシリーズ作品に対応しました。",
         "v105_unit_data_three_kingdoms": "ユニットデータ変更機能がTotal War: THREE KINGDOMSに対応しました。",
@@ -1462,6 +1496,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v106_added_title": "Añadido",
+        "v106_workshop_update_warning": "Se añadió la detección de actualizaciones de MOD: se muestra una advertencia si la versión de Steam Workshop es más reciente que la versión local del jugador.",
+        "v106_fixed_title": "Corregido",
+        "v106_runtime_patch_load_order": "Se corrigió un problema de orden interno que podía hacer que la modificación de datos del juego, la modificación de datos de unidades y funciones relacionadas no funcionaran correctamente. Actualiza obligatoriamente si utilizas estas funciones.",
         "v105_added_title": "Añadido",
         "v105_launcher_workshop_games": "El lanzador ahora es compatible con todos los juegos de la serie Total War que admiten Steam Workshop.",
         "v105_unit_data_three_kingdoms": "La modificación de datos de unidades ahora es compatible con Total War: THREE KINGDOMS.",

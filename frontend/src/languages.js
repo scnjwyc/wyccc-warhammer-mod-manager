@@ -104,6 +104,7 @@ const entries = {
   'app.shortcutWorkshopUnavailable': ['所选 MOD 未关联创意工坊项目', 'The selected MOD has no Workshop item', '선택한 MOD에 창작마당 항목이 없습니다', 'У выбранного MOD нет элемента Мастерской', '選択した MOD にはワークショップ項目がありません'],
   'app.warningMissingDependency': ['缺失依赖', 'Missing dependency', '누락된 종속성', 'Отсутствует зависимость', '依存関係不足'],
   'app.warningOutdated': ['MOD 过期', 'Outdated MOD', '오래된 MOD', 'Устаревший MOD', '古い MOD'],
+  'app.warningWorkshopUpdate': ['MOD 有新更新', 'MOD update available', 'MOD 업데이트 가능', 'Доступно обновление MOD', 'MOD に更新あり'],
   'app.warningBatchChanged': ['已{action} {count} 个 MOD 的{warning}提示', '{action} the {warning} warning for {count} MODs', 'MOD {count}개의 {warning} 경고를 {action}', '{action} предупреждение «{warning}» для {count} MOD', '{count}件の MOD の「{warning}」警告を{action}'],
   'app.actionIgnored': ['忽略', 'Ignored', '무시했습니다', 'Игнорировано', '無視しました'],
   'app.actionRestored': ['恢复', 'Restored', '복원했습니다', 'Восстановлено', '復元しました'],
@@ -219,6 +220,7 @@ const entries = {
   'context.updateWorkshop': ['更新到工坊', 'Update on Workshop', '창작마당 업데이트', 'Обновить в Мастерской', 'ワークショップを更新'],
   'context.ignoreIssue': ['忽略问题', 'Ignore issue', '문제 무시', 'Игнорировать проблему', '問題を無視'],
   'context.ignoreOutdated': ['忽略 MOD 过期', 'Ignore outdated MOD', '오래된 MOD 경고 무시', 'Игнорировать устаревший MOD', '古い MOD を無視'],
+  'context.ignoreWorkshopUpdate': ['忽略更新警告', 'Ignore update warning', '업데이트 경고 무시', 'Игнорировать предупреждение об обновлении', '更新警告を無視'],
   'context.ignoreDependency': ['忽略缺失依赖', 'Ignore missing dependency', '누락된 종속성 무시', 'Игнорировать отсутствие зависимости', '依存関係不足を無視'],
   'context.openFileFolder': ['打开文件目录', 'Open file location', '파일 위치 열기', 'Открыть расположение файла', 'ファイルの場所を開く'],
   'context.copyModPath': ['复制 MOD 路径', 'Copy MOD path', 'MOD 경로 복사', 'Копировать путь MOD', 'MOD パスをコピー'],
@@ -296,6 +298,7 @@ const entries = {
   'warnings.workshopDependencyTitle': ['工坊依赖状态', 'Workshop dependency status', '창작마당 종속성 상태', 'Состояние зависимостей Мастерской', 'ワークショップ依存関係の状態'],
   'warnings.workshopDependencyMessage': ['Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态', 'Steam cannot currently read some Workshop dependencies, so cached data is being used; missing-dependency results may not be current.', 'Steam에서 일부 창작마당 종속성을 현재 읽을 수 없어 기존 캐시를 사용합니다. 누락 종속성 결과가 최신이 아닐 수 있습니다.', 'Steam временно не может прочитать часть зависимостей Мастерской, поэтому используются данные из кеша; результаты проверки могут быть неактуальны.', 'Steam が一部のワークショップ依存関係を一時的に取得できないため、既存のキャッシュを使用しています。依存関係不足の結果は最新でない可能性があります。'],
   'warnings.outdatedMessage': ['该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用', 'This MOD has not been updated since the game was updated; this does not mean the MOD is unusable.', '이 MOD는 게임 본체 업데이트 후 갱신되지 않았지만, 사용할 수 없다는 뜻은 아닙니다.', 'Этот MOD не обновлялся после обновления игры, но это не означает, что его нельзя использовать.', 'この MOD はゲーム本体の更新後に更新されていませんが、使用できないという意味ではありません。'],
+  'warnings.workshopUpdateMessage': ['Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新', 'Steam Workshop reports that this MOD has a newer update available; check the Workshop to update it.', 'Steam 창작마당에 이 MOD의 새 업데이트가 있습니다. 창작마당에서 확인하고 업데이트하세요.', 'Steam Workshop сообщает о доступном обновлении этого MOD; проверьте и обновите его в Мастерской.', 'Steam ワークショップにこの MOD の新しい更新があります。ワークショップで確認して更新してください。'],
   'warnings.missingMessage': ['缺少依赖：{names}', 'Missing dependencies: {names}', '누락된 종속성: {names}', 'Отсутствуют зависимости: {names}', '不足している依存関係：{names}'],
 
   'update.unknownSize': ['未知大小', 'Unknown size', '알 수 없는 크기', 'Неизвестный размер', 'サイズ不明'],
@@ -845,6 +848,7 @@ const spanishEntries = {
   "app.shortcutWorkshopUnavailable": "El MOD seleccionado no tiene un elemento del Taller",
   "app.warningMissingDependency": "Dependencia faltante",
   "app.warningOutdated": "Anticuado MOD",
+  "app.warningWorkshopUpdate": "Actualización de MOD disponible",
   "app.warningBatchChanged": "{action} la advertencia {warning} para {count} MODs",
   "app.actionIgnored": "ignorado",
   "app.actionRestored": "Restaurado",
@@ -957,6 +961,7 @@ const spanishEntries = {
   "context.updateWorkshop": "Actualización sobre el taller",
   "context.ignoreIssue": "Ignorar problema",
   "context.ignoreOutdated": "Ignorar MOD desactualizado",
+  "context.ignoreWorkshopUpdate": "Ignorar la advertencia de actualización",
   "context.ignoreDependency": "Ignorar la dependencia faltante",
   "context.openFileFolder": "Abrir ubicación del archivo",
   "context.copyModPath": "Copiar MOD ruta",
@@ -1029,6 +1034,7 @@ const spanishEntries = {
   "warnings.workshopDependencyTitle": "Estado de dependencia del taller",
   "warnings.workshopDependencyMessage": "Steam actualmente no puede leer algunas dependencias de Workshop, por lo que se están utilizando datos almacenados en caché; Es posible que los resultados de dependencias faltantes no estén actualizados.",
   "warnings.outdatedMessage": "Este MOD no se ha actualizado desde que se actualizó el juego; Esto no significa que MOD sea inutilizable.",
+  "warnings.workshopUpdateMessage": "Steam Workshop informa de que hay una actualización más reciente para este MOD; compruébala y actualízala en el Taller.",
   "warnings.missingMessage": "Dependencias faltantes: {names}",
   "update.unknownSize": "Tamaño desconocido",
   "update.typeFeature": "Añadido",
@@ -1814,6 +1820,9 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   }
   if (value === 'Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态') {
     return t('warnings.workshopDependencyMessage')
+  }
+  if (value === 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新') {
+    return t('warnings.workshopUpdateMessage')
   }
   if (value === '该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用') {
     return t('warnings.outdatedMessage')

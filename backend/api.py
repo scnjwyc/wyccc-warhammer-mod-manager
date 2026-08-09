@@ -851,6 +851,47 @@ class API:
                 if str(custom.get("published_workshop_id") or "")
                 in INTERNAL_FEATURE_WORKSHOP_IDS
             }
+            legacy_owned_candidates: list[tuple[ModAsset, dict[str, Any]]] = []
+            for mod in scan_result.mods:
+                custom = user_data.get(mod.id, {})
+                if not custom:
+                    custom = next(
+                        (user_data[alias] for alias in mod.alternate_ids if alias in user_data),
+                        {},
+                    )
+                has_update_warning = any(
+                    str(warning.get("code") or "") == "workshop_update_available"
+                    for warning in mod.warnings
+                    if isinstance(warning, dict)
+                )
+                if (
+                    has_update_warning
+                    and not str(custom.get("published_workshop_id") or "").strip()
+                    and SOURCE_DATA in (mod.sources or [mod.source])
+                    and mod.workshop_id.isdigit()
+                    and str(mod.creator_id or "").isdigit()
+                ):
+                    legacy_owned_candidates.append((mod, custom))
+            if legacy_owned_candidates:
+                try:
+                    current_user = get_current_user(
+                        app_id=int(self._active_game().app_id)
+                    )
+                except SteamworksBridgeError:
+                    current_user = {}
+                current_steam_id = str(current_user.get("steam_id") or "").strip()
+                if current_steam_id.isdigit():
+                    for mod, custom in legacy_owned_candidates:
+                        if str(mod.creator_id).strip() != current_steam_id:
+                            continue
+                        published_workshop_id = self.state_repository.set_published_workshop_id(
+                            mod.id,
+                            mod.workshop_id,
+                        )
+                        user_data[mod.id] = {
+                            **custom,
+                            "published_workshop_id": published_workshop_id,
+                        }
             for mod in scan_result.mods:
                 custom = user_data.get(mod.id, {})
                 if not custom:
@@ -871,6 +912,16 @@ class API:
                         "https://steamcommunity.com/sharedfiles/filedetails/"
                         f"?id={mod.workshop_id}"
                     )
+                published_workshop_id = str(custom.get("published_workshop_id") or "").strip()
+                if (
+                    published_workshop_id
+                    and SOURCE_DATA in (mod.sources or [mod.source])
+                ):
+                    mod.warnings = [
+                        warning
+                        for warning in mod.warnings
+                        if str(warning.get("code") or "") != "workshop_update_available"
+                    ]
                 mod.hidden = bool(
                     hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
                 )
@@ -1342,7 +1393,7 @@ class API:
                     paths.game_path,
                     paths.data_path,
                     runtime_assets,
-                    [*saved["plan"]["ordered_mod_ids"], *internal_ids],
+                    [*internal_ids, *saved["plan"]["ordered_mod_ids"]],
                     target_name="wyccc_launch_mods.txt",
                     path_mapper=path_map.map_path,
                 )
@@ -1438,7 +1489,7 @@ class API:
                 paths.game_path,
                 paths.data_path,
                 runtime_assets,
-                [*saved["plan"]["ordered_mod_ids"], unit_data_id],
+                [unit_data_id, *saved["plan"]["ordered_mod_ids"]],
                 target_name="wyccc_launch_mods.txt",
                 path_mapper=path_map.map_path,
             )

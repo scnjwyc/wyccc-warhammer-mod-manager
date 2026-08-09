@@ -78,7 +78,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.0.5',
+    appVersion: '1.0.6',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -177,7 +177,7 @@ export const useAppStore = defineStore('app', {
             modId: mod.id,
             modName: mod.effective_name || mod.display_name || mod.pack_name,
             code,
-            ignorable: ['outdated_mod', 'missing_dependency'].includes(code),
+            ignorable: ['outdated_mod', 'workshop_update_available', 'missing_dependency'].includes(code),
             dependencies: Array.isArray(warning.dependencies) ? warning.dependencies : [],
           })
         }

@@ -459,6 +459,7 @@ class ModScanner:
                     asset.created_at = remote_created
                 remote_updated = int(workshop_data.get("updated_at") or 0)
                 if remote_updated:
+                    asset.workshop_updated_at = remote_updated
                     asset.updated_at = remote_updated
             if not directory_mods and asset.pack_type == PACK_TYPE_UNKNOWN:
                 result.warnings.append(f"无法识别 PFH5 Pack 头：{asset.path}")
@@ -466,6 +467,22 @@ class ModScanner:
         self._merge_data_workshop_duplicates(assets)
         if not directory_mods:
             self._mark_missing_dependencies(assets, vanilla)
+
+        for asset in assets.values():
+            if (
+                asset.workshop_updated_at > 0
+                and asset.file_updated_at > 0
+                and asset.file_updated_at < asset.workshop_updated_at
+            ):
+                asset.warnings.append(
+                    {
+                        "code": "workshop_update_available",
+                        "severity": "warning",
+                        "message": "Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新",
+                        "file_updated_at": asset.file_updated_at,
+                        "workshop_updated_at": asset.workshop_updated_at,
+                    }
+                )
 
         if settings.get("check_outdated_mods"):
             result.game_updated_at = game_last_updated_at(paths)
@@ -550,6 +567,10 @@ class ModScanner:
             primary.display_name = workshop.display_name or primary.display_name
             primary.created_at = workshop.created_at or primary.created_at
             primary.updated_at = max(primary.updated_at, workshop.updated_at)
+            primary.workshop_updated_at = max(
+                primary.workshop_updated_at,
+                workshop.workshop_updated_at,
+            )
             primary.subscribed_at = workshop.subscribed_at or primary.subscribed_at
             primary.dependency_packs = list(
                 dict.fromkeys([*primary.dependency_packs, *workshop.dependency_packs])
@@ -880,6 +901,7 @@ class ModScanner:
             ),
             pack_type=PACK_TYPE_MOD,
             updated_at=updated_at,
+            file_updated_at=updated_at,
             created_at=created_at,
             is_symlink=directory.is_symlink(),
             sources=[source],
@@ -915,6 +937,7 @@ class ModScanner:
             pack_type=read_pack_type(pack_path),
             unit_data_tables=read_unit_data_tables(pack_path),
             updated_at=updated_at,
+            file_updated_at=updated_at,
             created_at=created_at,
             is_symlink=is_symlink,
             sources=[source],

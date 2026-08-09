@@ -19,7 +19,6 @@ from .game_data import (
     _compare_candidate_priority,
     _compare_internal_names,
     _generated_internal_name,
-    _leading_priority_markers,
     _patch_i32,
     _round_half_up_i32,
     is_three_kingdoms_game,
@@ -359,10 +358,17 @@ _PERMISSION_TABLES = (
     "units_to_exclusive_faction_permissions_tables",
 )
 
+_WARHAMMER_ADDITIONAL_PERMISSION_TABLES = (
+    "allied_recruitment_unit_permissions_tables",
+    "units_custom_battle_permissions_tables",
+)
+
 _PERMISSION_KEY_FIELDS = {
     "building_units_allowed_tables": ("key",),
     "units_to_groupings_military_permissions_tables": ("unit", "military_group"),
     "units_to_exclusive_faction_permissions_tables": ("unit", "faction"),
+    "allied_recruitment_unit_permissions_tables": ("unit",),
+    "units_custom_battle_permissions_tables": ("unit", "faction", "general_unit"),
 }
 
 _THREE_KINGDOMS_PERMISSION_KEY_FIELDS = {
@@ -388,6 +394,27 @@ def _permission_row_key(
     )
 
 
+def _permission_unit_key(
+    table_name: str,
+    values: Mapping[str, Any],
+    game_id: str | None = None,
+) -> str:
+    if table_name == "building_units_allowed_tables":
+        return str(values.get("unit") or "")
+    key_fields = (
+        _THREE_KINGDOMS_PERMISSION_KEY_FIELDS
+        if is_three_kingdoms_game(game_id)
+        else _PERMISSION_KEY_FIELDS
+    )
+    return str(values.get(key_fields[table_name][0]) or "")
+
+
+def _permission_tables_for_game(game_id: str | None = None) -> tuple[str, ...]:
+    if is_three_kingdoms_game(game_id):
+        return _PERMISSION_TABLES
+    return (*_PERMISSION_TABLES, *_WARHAMMER_ADDITIONAL_PERMISSION_TABLES)
+
+
 def _collect_permission_rows(
     sources: Sequence[Any],
     table_name: str,
@@ -405,20 +432,10 @@ def _collect_permission_rows(
             parsed = parse_db_table(table_name, entry.payload, game_id)
             for row_rank, row in enumerate(parsed.rows):
                 values = row.values
-                key_fields = (
-                    _THREE_KINGDOMS_PERMISSION_KEY_FIELDS.get(table_name, ("unit",))
-                    if is_three_kingdoms_game(game_id)
-                        else _PERMISSION_KEY_FIELDS[table_name]
-                )
                 # ``building_units_allowed`` uses a numeric row key as its
-                # primary key, while the unit reference is the second field.
-                # The two permission tables use their unit reference as the
-                # first field in WH3 and the exclusive table calls it ``key``
-                # in Three Kingdoms.
-                if table_name == "building_units_allowed_tables":
-                    unit_key = str(values.get("unit") or "")
-                else:
-                    unit_key = str(values.get(key_fields[0]) or "")
+                # primary key, while every other supported permission table
+                # stores the unit reference in its first permission key.
+                unit_key = _permission_unit_key(table_name, values, game_id)
                 if not unit_key:
                     raise ValueError(
                         f"{source.name} 中的 {entry.name} 存在空 unit 主键"
@@ -452,30 +469,6 @@ def _has_permission_priority(candidate: _PermissionRow, existing: _PermissionRow
         existing.entry_rank,
         existing.row_rank,
     )
-
-
-def _generated_permission_name(
-    rows: Sequence[_PermissionRow],
-    table_name: str,
-) -> str:
-    priority_markers = (
-        max(
-            (_leading_priority_markers(row.internal_name) for row in rows),
-            default=0,
-        )
-        + 1
-    )
-    internal_name = f"{'!' * priority_markers}wyccc_unit_data_{table_name}"
-    blockers = sorted(
-        {row.internal_name for row in rows},
-        key=str.casefold,
-    )
-    if any(_compare_internal_names(internal_name, blocker) >= 0 for blocker in blockers):
-        raise ValueError(
-            "无法生成优先级高于启用 MOD 的招募权限表："
-            + ", ".join(sorted(blockers)[:3])
-        )
-    return internal_name
 
 
 # ---------------------------------------------------------------------------
@@ -2177,78 +2170,71 @@ def _changed_table_rows(
     return rows
 
 
-def _serialize_permission_table(
-    table_name: str,
-    rows: Sequence[_PermissionRow],
-    internal_name: str | None = None,
-) -> GameDataEntry:
-    if table_name == "building_units_allowed_tables":
-        # Unlike the two historical permission tables, this table is a
-        # versioned DB file in the vanilla packs. Keep its version header so
-        # the replacement is accepted as a normal DB table by the game.
-        version = rows[0].version if rows else 4
-        header = b"\xfc\xfd\xfe\xff" + struct.pack("<i", version)
-    else:
-        header = b""
-    payload = b"".join(
-        (
-            header,
-            b"\1",
-            struct.pack("<i", len(rows)),
-            *(row.row.raw for row in rows),
-        )
-    )
-    return GameDataEntry(
-        f"db\\{table_name}\\"
-        + (
-            internal_name
-            if internal_name is not None
-            else _generated_permission_name(rows, table_name)
-        ),
-        payload,
-    )
-
-
-def _permission_replacement_names(
-    rows: Sequence[_PermissionRow],
-) -> tuple[str, ...]:
-    """Return the source DB filenames that must be overwritten.
-
-    WH3 Mod Manager removes a row by rebuilding the original DB file at the
-    same internal path.  A newly named table containing fewer rows is only an
-    additive overlay: the game's DB merge can still retain the omitted row
-    from the lower-priority source.  Reusing every source internal filename
-    keeps the generated runtime pack equivalent to those overwrite packs,
-    including mods whose permission table is not named ``data__``.
-    """
-    return tuple(
-        sorted(
-            {row.internal_name for row in rows},
-            key=cmp_to_key(_compare_internal_names),
-        )
-    )
-
-
-def _permission_source_names(
+def _permission_replacement_entries(
     sources: Sequence[Any],
     table_name: str,
-) -> tuple[str, ...]:
-    """Return every source internal filename for a permission table.
+    disabled_units: set[str],
+    game_id: str | None = None,
+) -> list[GameDataEntry]:
+    """Clone only affected source DB files, removing disabled-unit rows.
 
-    A lower-priority file may contain a row that is completely shadowed by a
-    later source and therefore does not appear in ``_collect_permission_rows``.
-    It still needs an overwrite entry: otherwise that row can reappear when
-    the game merges the original packs.
+    A same-name DB entry replaces its source file.  Rebuilding that entry must
+    therefore retain its GUID/version prefix and its own remaining rows; a
+    table-wide merged payload is neither a byte-compatible replacement nor a
+    lightweight patch.
     """
     from .game_data import _entry_table_name
 
-    names: set[str] = set()
-    for source in sources:
-        for entry in source.entries:
+    # A generated pack can contain one entry per internal path.  The existing
+    # source resolver treats the earliest source/entry as the effective one
+    # when those paths are identical, so mirror that choice here.
+    selected: dict[str, tuple[str, int, int, Any, Any]] = {}
+    for source_rank, source in enumerate(sources):
+        for entry_rank, entry in enumerate(source.entries):
             resolved = _entry_table_name(entry.name)
-            if resolved and resolved[0] == table_name:
-                names.add(resolved[1])
-    return tuple(sorted(names, key=cmp_to_key(_compare_internal_names)))
+            if not resolved or resolved[0] != table_name:
+                continue
+            internal_name = resolved[1]
+            key = internal_name.casefold()
+            if key in selected:
+                continue
+            try:
+                parsed = parse_db_table(table_name, entry.payload, game_id)
+            except ValueError as exc:
+                raise ValueError(
+                    f"读取 {source.name} 中的 {entry.name} 失败：{exc}"
+                ) from exc
+            selected[key] = (internal_name, source_rank, entry_rank, entry, parsed)
+
+    replacements: list[GameDataEntry] = []
+    ordered = sorted(
+        selected.values(),
+        key=cmp_to_key(
+            lambda first, second: _compare_internal_names(first[0], second[0])
+        ),
+    )
+    for _internal_name, _source_rank, _entry_rank, entry, parsed in ordered:
+        kept_rows = [
+            row
+            for row in parsed.rows
+            if _permission_unit_key(table_name, row.values, game_id) not in disabled_units
+        ]
+        if len(kept_rows) == len(parsed.rows):
+            continue
+
+        row_bytes = sum(len(row.raw) for row in parsed.rows)
+        count_offset = len(entry.payload) - row_bytes - 4
+        if count_offset < 1:
+            raise ValueError(f"{entry.name} 的权限表行计数位置无效")
+        payload = b"".join(
+            (
+                entry.payload[:count_offset],
+                struct.pack("<i", len(kept_rows)),
+                *(row.raw for row in kept_rows),
+            )
+        )
+        replacements.append(GameDataEntry(entry.name, payload))
+    return replacements
 
 
 def build_unit_data_entries(
@@ -2337,43 +2323,25 @@ def build_unit_data_entries(
                 )
             )
 
-    # Recruitment gating: rebuild the source permission DB files with the
-    # disabled unit rows removed.  The vanilla tables are versionless, so
-    # these overlays are serialized without a version header as well.  The
-    # ``building_units_allowed`` table's ``enabled`` column is false for all
-    # vanilla rows (it is not a reliable disable switch); removing the row is
-    # the operation that actually prevents direct building recruitment.
+    # Recruitment gating: clone only source permission files that contain a
+    # disabled unit, preserving each file's GUID/version prefix and every
+    # unrelated row.  ``building_units_allowed.enabled`` is not a reliable
+    # disable switch, so the row itself must be removed.
     disabled_units = {
         unit_key
         for unit_key, fields in normalized_edits.items()
         if fields.get("enabled") is not None and not _coerce_bool(fields["enabled"])
     }
     if disabled_units:
-        for table_name in _PERMISSION_TABLES:
-            rows = _collect_permission_rows(sources, table_name, game_id)
-            if not rows:
-                continue
-            filtered: list[_PermissionRow] = []
-            for permission in rows.values():
-                if permission.unit_key in disabled_units:
-                    continue
-                filtered.append(permission)
-
-            # Match WH3 Mod Manager's overwrite-pack behavior: write the
-            # filtered table at the original internal DB filename(s), rather
-            # than introducing a new filename whose missing rows would be
-            # merged back from the original source.
-            replacement_names = _permission_source_names(sources, table_name)
-            if not replacement_names:
-                replacement_names = _permission_replacement_names(tuple(rows.values()))
-            for internal_name in replacement_names:
-                entries.append(
-                    _serialize_permission_table(
-                        table_name,
-                        filtered,
-                        internal_name=internal_name,
-                    )
+        for table_name in _permission_tables_for_game(game_id):
+            entries.extend(
+                _permission_replacement_entries(
+                    sources,
+                    table_name,
+                    disabled_units,
+                    game_id,
                 )
+            )
 
     return GameDataBuildResult(
         tuple(entries),

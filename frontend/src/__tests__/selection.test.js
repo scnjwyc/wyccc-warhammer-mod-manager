@@ -439,6 +439,33 @@ describe('anchored mod selection', () => {
     expect(store.warningCount).toBe(0)
   })
 
+  it('allows a Workshop update warning to be ignored', async () => {
+    const store = useAppStore()
+    store.mods = [{
+      id: 'a',
+      pack_name: 'a.pack',
+      effective_name: 'A',
+      warnings: [{
+        code: 'workshop_update_available',
+        severity: 'warning',
+        message: 'MOD 有新更新',
+      }],
+      ignored_warning_codes: [],
+    }]
+    invokeMock.mockResolvedValueOnce({
+      ...store.mods[0],
+      warnings: [],
+      ignored_warning_codes: ['workshop_update_available'],
+    })
+
+    expect(store.warningItems[0]).toMatchObject({
+      code: 'workshop_update_available',
+      ignorable: true,
+    })
+    await store.setModWarningIgnored('a', 'workshop_update_available', true)
+    expect(store.warningCount).toBe(0)
+  })
+
   it('uses the explicit drop placement for reordering and cross-list insertion', () => {
     const store = useAppStore()
     store.mods = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, pack_name: `${id}.pack` }))

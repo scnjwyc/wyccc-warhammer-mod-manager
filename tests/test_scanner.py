@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -581,6 +582,63 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(result.mods[0].created_at, 1_690_000_000_000)
             self.assertEqual(result.mods[0].updated_at, 1_700_000_000_000)
 
+    def test_warns_when_workshop_update_is_newer_than_installed_mod_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "1142710"
+            pack_path = write_pack(workshop / "123" / "example.pack")
+            workshop_time = 1_700_000_000_000
+            os.utime(
+                pack_path,
+                ns=((workshop_time - 1_000) * 1_000_000,) * 2,
+            )
+
+            result = ModScanner(CachedWorkshopMetadata()).scan(
+                GamePaths(workshop_path=str(workshop)),
+                {"language": "en-US", "check_outdated_mods": False},
+            )
+
+        mod = result.mods[0]
+        self.assertLess(mod.file_updated_at, mod.workshop_updated_at)
+        self.assertEqual(mod.workshop_updated_at, workshop_time)
+        self.assertEqual(
+            [warning["code"] for warning in mod.warnings],
+            ["workshop_update_available"],
+        )
+        self.assertEqual(
+            mod.warnings[0]["file_updated_at"],
+            mod.file_updated_at,
+        )
+        self.assertEqual(
+            mod.warnings[0]["workshop_updated_at"],
+            mod.workshop_updated_at,
+        )
+
+    def test_does_not_warn_when_installed_mod_file_is_at_least_as_new_as_workshop(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workshop = root / "workshop" / "1142710"
+            pack_path = write_pack(workshop / "123" / "example.pack")
+            workshop_time = 1_700_000_000_000
+            os.utime(
+                pack_path,
+                ns=((workshop_time + 1_000) * 1_000_000,) * 2,
+            )
+
+            result = ModScanner(CachedWorkshopMetadata()).scan(
+                GamePaths(workshop_path=str(workshop)),
+                {"language": "en-US", "check_outdated_mods": False},
+            )
+
+        self.assertGreaterEqual(result.mods[0].file_updated_at, workshop_time)
+        self.assertEqual(result.mods[0].workshop_updated_at, workshop_time)
+        self.assertFalse(
+            any(
+                warning.get("code") == "workshop_update_available"
+                for warning in result.mods[0].warnings
+            )
+        )
+
     def test_reads_workshop_subscription_time_from_the_active_steam_user(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -680,8 +738,11 @@ class ScannerTests(unittest.TestCase):
             data_pack = write_pack(data / "same_name.pack")
             workshop_pack = write_pack(workshop / "123" / "same_name.pack")
             (workshop_pack.parent / "preview.jpg").write_bytes(b"preview fixture")
+            workshop_time = 1_700_000_000_000
+            os.utime(data_pack, ns=((workshop_time - 2_000) * 1_000_000,) * 2)
+            os.utime(workshop_pack, ns=((workshop_time + 1_000) * 1_000_000,) * 2)
 
-            result = ModScanner(OfflineWorkshopMetadata()).scan(
+            result = ModScanner(CachedWorkshopMetadata()).scan(
                 GamePaths(
                     game_path=str(game),
                     data_path=str(data),
@@ -708,6 +769,9 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(merged.preview_path, str((workshop_pack.parent / "preview.jpg").resolve()))
             self.assertIn("steam:123:same_name.pack", merged.alternate_ids)
             self.assertIn(str(workshop_pack.resolve()), merged.alternate_paths)
+            self.assertEqual(merged.file_updated_at, workshop_time - 2_000)
+            self.assertEqual(merged.workshop_updated_at, workshop_time)
+            self.assertEqual(merged.warnings[0]["code"], "workshop_update_available")
 
     def test_outdated_check_only_warns_when_mod_is_older_than_game(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

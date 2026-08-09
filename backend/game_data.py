@@ -293,6 +293,24 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
             ("exclusive", "Boolean"),
         ),
     },
+    "allied_recruitment_unit_permissions_tables": {
+        0: (("unit", "StringU8"),),
+    },
+    "units_custom_battle_permissions_tables": {
+        11: (
+            ("faction", "StringU8"),
+            ("general_unit", "Boolean"),
+            ("unit", "StringU8"),
+            ("siege_unit_attacker", "Boolean"),
+            ("siege_unit_defender", "Boolean"),
+            ("general_portrait", "OptionalStringU8"),
+            ("general_uniform", "OptionalStringU8"),
+            ("set_piece_character", "OptionalStringU8"),
+            ("campaign_exclusive", "Boolean"),
+            ("armory_item_set", "OptionalStringU8"),
+            ("supports_upgrades", "Boolean"),
+        ),
+    },
     # Race/culture resolution for the unit-data editor: unit -> exclusive
     # faction -> subculture -> culture.  Versions follow the current vanilla
     # db.pack layouts (factions v6, cultures_subcultures v6) plus the older
@@ -434,6 +452,8 @@ TABLE_ORDER = (
     "building_units_allowed_tables",
     "units_to_groupings_military_permissions_tables",
     "units_to_exclusive_faction_permissions_tables",
+    "allied_recruitment_unit_permissions_tables",
+    "units_custom_battle_permissions_tables",
     "factions_tables",
     "cultures_subcultures_tables",
     "projectiles_tables",
@@ -461,6 +481,8 @@ CURRENT_TABLE_VERSIONS = {
     "building_units_allowed_tables": 4,
     "units_to_groupings_military_permissions_tables": 1,
     "units_to_exclusive_faction_permissions_tables": 1,
+    "allied_recruitment_unit_permissions_tables": 0,
+    "units_custom_battle_permissions_tables": 11,
     "factions_tables": 6,
     "cultures_subcultures_tables": 6,
     "projectiles_tables": 53,
@@ -489,6 +511,8 @@ TABLE_KEY_FIELDS = {
     "building_units_allowed_tables": "key",
     "units_to_groupings_military_permissions_tables": "unit",
     "units_to_exclusive_faction_permissions_tables": "unit",
+    "allied_recruitment_unit_permissions_tables": "unit",
+    "units_custom_battle_permissions_tables": "unit",
     "factions_tables": "key",
     "cultures_subcultures_tables": "subculture",
     "projectiles_tables": "key",

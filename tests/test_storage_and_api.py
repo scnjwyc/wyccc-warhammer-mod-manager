@@ -12,14 +12,16 @@ from unittest.mock import patch
 from backend.api import API
 from backend.constants import (
     GAME_DATA_FEATURE_WORKSHOP_ITEMS,
+    SOURCE_DATA,
     SOURCE_WORKSHOP,
     UNIT_DATA_FEATURE_PACK_NAME,
 )
 from backend.launch_paths import LaunchPathMap
-from backend.models import GamePaths, ModAsset
+from backend.models import GamePaths, ModAsset, ScanResult
 from backend.scanner import _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
 from backend.start_options import (
+    DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
     GAME_DATA_PATCH_NAME,
     RUNTIME_PACK_NAME,
     UNIT_DATA_PATCH_NAME,
@@ -351,12 +353,16 @@ class StorageContractTests(unittest.TestCase):
                 ["outdated_mod", "missing_dependency"],
             )
             self.assertEqual(
+                repository.set_mod_warning_ignored("a", "workshop_update_available", True),
+                ["outdated_mod", "workshop_update_available", "missing_dependency"],
+            )
+            self.assertEqual(
                 repository.list_user_mod_data()["a"]["ignored_warning_codes"],
-                ["outdated_mod", "missing_dependency"],
+                ["outdated_mod", "workshop_update_available", "missing_dependency"],
             )
             self.assertEqual(
                 repository.set_mod_warning_ignored("a", "missing_dependency", False),
-                ["outdated_mod"],
+                ["outdated_mod", "workshop_update_available"],
             )
             with self.assertRaisesRegex(ValueError, "不支持忽略"):
                 repository.set_mod_warning_ignored("a", "unknown_warning", True)
@@ -891,6 +897,42 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(launched["data"]["unit_data_patch"]["status"], "zero_modification")
         self.assertEqual(launched["data"]["game_data_patch"]["status"], "unsupported")
 
+    def test_three_kingdoms_places_unit_data_patch_before_user_mods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_three_kingdoms_api(root)
+            data_path = root / "Total War THREE KINGDOMS" / "data"
+            normal = make_asset(
+                write_pack(data_path / "normal.pack"),
+                "data:normal",
+                SOURCE_DATA,
+            )
+            api._assets[normal.id] = normal
+            unit_path = write_pack(root / "state" / "runtime" / UNIT_DATA_PATCH_NAME)
+            unit_result = {
+                "status": "generated",
+                "path": str(unit_path),
+                "fingerprint": "u" * 64,
+                "entry_count": 1,
+                "stats": {},
+            }
+
+            with (
+                patch("backend.api.ensure_unit_data_patch", return_value=unit_result),
+                patch("backend.api.launch_game", return_value={"pid": 7, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call(
+                    "launch_game",
+                    [[normal.id], scan["data"]["order_token"]],
+                )
+
+        self.assertTrue(launched["ok"])
+        self.assertEqual(
+            launched["data"]["launch_plan"]["ordered_mod_ids"],
+            ["runtime:unit-data-patch", normal.id],
+        )
+
     def test_three_kingdoms_unit_data_needs_no_workshop_feature_pack(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             api, _ = self._prepare_three_kingdoms_api(Path(temporary))
@@ -1259,6 +1301,84 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(patch_target_bytes, patch_source_bytes)
         self.assertEqual(runtime_target_bytes, runtime_source_bytes)
 
+    def test_launch_places_runtime_packs_before_user_mods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api, scan = self._prepare_launch_api(root)
+            data_path = root / "Total War WARHAMMER III" / "data"
+            normal_path = write_pack(data_path / "normal.pack")
+            normal = make_asset(normal_path, "data:normal", SOURCE_DATA)
+            api._assets[normal.id] = normal
+            normal_id = normal.id
+
+            runtime_dir = root / "state" / "runtime"
+            unit_path = write_pack(runtime_dir / UNIT_DATA_PATCH_NAME)
+            game_path = write_pack(runtime_dir / GAME_DATA_PATCH_NAME)
+            dynamic_ror_path = write_pack(
+                runtime_dir / DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME
+            )
+            options_path = write_pack(runtime_dir / RUNTIME_PACK_NAME)
+            unit_result = {
+                "status": "generated",
+                "path": str(unit_path),
+                "fingerprint": "u" * 64,
+                "entry_count": 1,
+                "stats": {},
+            }
+            game_result = {
+                **self._game_data_patch_result(root),
+                "path": str(game_path),
+            }
+            dynamic_ror_result = {
+                "status": "generated",
+                "path": str(dynamic_ror_path),
+                "fingerprint": "d" * 64,
+                "entry_count": 1,
+                "stats": {},
+                "source_diagnostics": {},
+            }
+            options_result = {
+                "path": str(options_path),
+                "options": ["skip_intro_movies"],
+                "entry_count": 1,
+                "game_data": {},
+            }
+
+            with (
+                patch(
+                    "backend.api.query_workshop_subscription_status",
+                    return_value=self._feature_statuses(),
+                ),
+                patch("backend.api.ensure_unit_data_patch", return_value=unit_result),
+                patch("backend.api.ensure_game_data_patch", return_value=game_result),
+                patch(
+                    "backend.api.ensure_dynamic_ror_compatibility_patch",
+                    return_value=dynamic_ror_result,
+                ),
+                patch(
+                    "backend.api.build_runtime_options_pack",
+                    return_value=options_result,
+                ),
+                patch("backend.api.launch_game", return_value={"pid": 123, "argument": ""}),
+                patch.object(api, "set_game_running"),
+            ):
+                launched = api.call(
+                    "launch_game",
+                    [[normal_id], scan["data"]["order_token"]],
+                )
+
+        self.assertTrue(launched["ok"])
+        self.assertEqual(
+            launched["data"]["launch_plan"]["ordered_mod_ids"],
+            [
+                "runtime:unit-data-patch",
+                "runtime:game-data-patch",
+                "runtime:dynamic-ror-compatibility",
+                "runtime:start-options",
+                normal_id,
+            ],
+        )
+
     def test_launch_removes_stale_runtime_packs_from_data_when_options_are_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1494,6 +1614,194 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(
             rescanned["data"]["current_playset"]["mod_ids"],
             [],
+        )
+
+    def test_scan_ignores_workshop_update_warning_for_player_uploaded_data_mod(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+
+            api = API(root / "state")
+            configured = api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            self.assertTrue(configured["ok"])
+            asset = ModAsset(
+                id="data:own",
+                pack_name="own.pack",
+                display_name="Own",
+                path=str(data / "own.pack"),
+                directory=str(data),
+                source=SOURCE_DATA,
+                workshop_id="123",
+                sources=[SOURCE_DATA],
+                warnings=[
+                    {
+                        "code": "workshop_update_available",
+                        "severity": "warning",
+                        "message": "update available",
+                    }
+                ],
+            )
+            api.state_repository.set_published_workshop_id(asset.id, asset.workshop_id)
+            with patch.object(api.scanner, "scan", return_value=ScanResult(mods=[asset])):
+                scanned = api.call("scan_mods", [False])
+
+        self.assertTrue(scanned["ok"])
+        self.assertFalse(
+            any(
+                warning["code"] == "workshop_update_available"
+                for warning in scanned["data"]["mods"][0]["warnings"]
+            )
+        )
+
+    def test_scan_ignores_workshop_update_warning_for_player_uploaded_data_mod_with_different_scanned_workshop_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+
+            api = API(root / "state")
+            configured = api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            self.assertTrue(configured["ok"])
+            asset = ModAsset(
+                id="data:own",
+                pack_name="own.pack",
+                display_name="Own",
+                path=str(data / "own.pack"),
+                directory=str(data),
+                source=SOURCE_DATA,
+                workshop_id="999",
+                sources=[SOURCE_DATA, SOURCE_WORKSHOP],
+                warnings=[
+                    {
+                        "code": "workshop_update_available",
+                        "severity": "warning",
+                        "message": "update available",
+                    }
+                ],
+            )
+            api.state_repository.set_published_workshop_id(asset.id, "123")
+            with patch.object(api.scanner, "scan", return_value=ScanResult(mods=[asset])):
+                scanned = api.call("scan_mods", [False])
+
+        self.assertTrue(scanned["ok"])
+        self.assertFalse(
+            any(
+                warning["code"] == "workshop_update_available"
+                for warning in scanned["data"]["mods"][0]["warnings"]
+            )
+        )
+
+    def test_scan_marks_legacy_player_owned_data_mod_and_ignores_its_workshop_update_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+
+            api = API(root / "state")
+            configured = api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            self.assertTrue(configured["ok"])
+            asset = ModAsset(
+                id="data:legacy-own",
+                pack_name="legacy-own.pack",
+                display_name="Legacy own",
+                path=str(data / "legacy-own.pack"),
+                directory=str(data),
+                source=SOURCE_DATA,
+                workshop_id="123",
+                creator_id="765",
+                sources=[SOURCE_DATA, SOURCE_WORKSHOP],
+                warnings=[
+                    {
+                        "code": "workshop_update_available",
+                        "severity": "warning",
+                        "message": "update available",
+                    }
+                ],
+            )
+            with (
+                patch("backend.api.get_current_user", return_value={"steam_id": "765", "name": "Owner"}) as current_user,
+                patch.object(api.scanner, "scan", return_value=ScanResult(mods=[asset])),
+            ):
+                scanned = api.call("scan_mods", [False])
+
+            recorded_workshop_id = str(
+                api.state_repository.list_user_mod_data()
+                .get(asset.id, {})
+                .get("published_workshop_id")
+                or ""
+            )
+
+        self.assertTrue(scanned["ok"])
+        self.assertEqual(recorded_workshop_id, "123")
+        self.assertFalse(
+            any(
+                warning["code"] == "workshop_update_available"
+                for warning in scanned["data"]["mods"][0]["warnings"]
+            )
+        )
+        current_user.assert_called_once_with(app_id=1142710)
+
+    def test_scan_keeps_workshop_update_warning_for_workshop_only_mod(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+
+            api = API(root / "state")
+            configured = api.call(
+                "save_settings",
+                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+            )
+            self.assertTrue(configured["ok"])
+            asset = ModAsset(
+                id="workshop:own",
+                pack_name="own.pack",
+                display_name="Own",
+                path=str(root / "workshop" / "own.pack"),
+                directory=str(root / "workshop"),
+                source=SOURCE_WORKSHOP,
+                workshop_id="123",
+                sources=[SOURCE_WORKSHOP],
+                warnings=[
+                    {
+                        "code": "workshop_update_available",
+                        "severity": "warning",
+                        "message": "update available",
+                    }
+                ],
+            )
+            api.state_repository.set_published_workshop_id(asset.id, asset.workshop_id)
+            with patch.object(api.scanner, "scan", return_value=ScanResult(mods=[asset])):
+                scanned = api.call("scan_mods", [False])
+
+        self.assertTrue(scanned["ok"])
+        self.assertTrue(
+            any(
+                warning["code"] == "workshop_update_available"
+                for warning in scanned["data"]["mods"][0]["warnings"]
+            )
         )
 
     def test_game_data_settings_rpc_only_updates_supported_values(self) -> None:

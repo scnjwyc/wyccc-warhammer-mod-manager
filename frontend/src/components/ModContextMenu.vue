@@ -254,6 +254,17 @@ const run = (action, value = null, close = true) => {
             type="button"
             class="context-menu-item"
             role="menuitemcheckbox"
+            :aria-checked="ignoredWarningCodes.has('workshop_update_available')"
+            :class="{ checked: ignoredWarningCodes.has('workshop_update_available') }"
+            @click.stop="run('toggle-warning-ignore', 'workshop_update_available', false)"
+          >
+            <span class="context-menu-check">{{ ignoredWarningCodes.has('workshop_update_available') ? '✓' : '' }}</span>
+            <span>{{ batchLabel(t('context.ignoreWorkshopUpdate')) }}</span>
+          </button>
+          <button
+            type="button"
+            class="context-menu-item"
+            role="menuitemcheckbox"
             :aria-checked="ignoredWarningCodes.has('missing_dependency')"
             :class="{ checked: ignoredWarningCodes.has('missing_dependency') }"
             @click.stop="run('toggle-warning-ignore', 'missing_dependency', false)"
