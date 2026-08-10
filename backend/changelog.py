@@ -9,6 +9,31 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.7",
+        "date": "2026-08-10",
+        "entries": (
+            (
+                "v107_added_title",
+                (
+                    ("feature", "v107_update_outdated_mods"),
+                    ("feature", "v107_warning_button_filter"),
+                ),
+            ),
+            (
+                "v107_adjusted_title",
+                (("improvement", "v107_unit_data_anti_bonuses"),),
+            ),
+            (
+                "v107_fixed_title",
+                (
+                    ("fix", "v107_force_update_reliable"),
+                    ("fix", "v107_ror_patch_generation"),
+                    ("fix", "v107_artillery_missile_damage"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "1.0.6",
         "date": "2026-08-09",
         "entries": (
@@ -521,6 +546,15 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+    "v107_added_title": "新增",
+    "v107_update_outdated_mods": "警告界面可以更新过期MOD，也可以一键更新所有MOD",
+    "v107_warning_button_filter": "警告按钮现在可以右键让MOD列表只显示存在问题的MOD",
+    "v107_adjusted_title": "调整",
+        "v107_unit_data_anti_bonuses": "单位数据修改允许修改反大和反步加成",
+        "v107_fixed_title": "修复",
+        "v107_force_update_reliable": "强制更新功能现在采用更强力的方式进行更新，以避免steam经常更新失败的问题",
+        "v107_ror_patch_generation": "修复 Nanu's Dynamic RORs 兼容补丁生成可能会失败的问题",
+        "v107_artillery_missile_damage": "修复修改炮兵远程伤害无法成功的问题",
         "v106_added_title": "新增",
         "v106_workshop_update_warning": "MOD更新检测，如果创意工坊的版本比玩家本地更高，则会进行警告提醒",
         "v106_fixed_title": "修复",
@@ -716,6 +750,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+    "v107_added_title": "Added",
+    "v107_update_outdated_mods": "The warning window can now update outdated MODs, and update all MODs with one click.",
+    "v107_warning_button_filter": "Right-clicking the warning button now filters the MOD lists to only show problematic MODs.",
+    "v107_adjusted_title": "Adjusted",
+        "v107_unit_data_anti_bonuses": "Unit Data Modification now supports editing anti-large and anti-infantry bonuses.",
+        "v107_fixed_title": "Fixed",
+        "v107_force_update_reliable": "Force Update now uses a more forceful method to avoid the frequent Steam update failures.",
+        "v107_ror_patch_generation": "Fixed an issue where generating the Nanu's Dynamic RORs compatibility patch could fail.",
+        "v107_artillery_missile_damage": "Fixed an issue where artillery ranged damage edits could not be applied.",
         "v106_added_title": "Added",
         "v106_workshop_update_warning": "MOD update detection now warns when the Steam Workshop version is newer than the player's local version.",
         "v106_fixed_title": "Fixed",
@@ -911,6 +954,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+    "v107_added_title": "추가",
+    "v107_update_outdated_mods": "경고 창에서 오래된 MOD를 업데이트하고 모든 MOD를 한 번에 업데이트할 수 있습니다.",
+    "v107_warning_button_filter": "이제 경고 버튼을 마우스 오른쪽 버튼으로 클릭하면 문제가 있는 MOD만 목록에 표시됩니다.",
+    "v107_adjusted_title": "조정",
+        "v107_unit_data_anti_bonuses": "유닛 데이터 변경에서 대형 보너스와 보병 보너스를 수정할 수 있습니다.",
+        "v107_fixed_title": "수정",
+        "v107_force_update_reliable": "강제 업데이트가 더 강력한 방식으로 수행되어 Steam 업데이트 실패 문제를 줄였습니다.",
+        "v107_ror_patch_generation": "Nanu's Dynamic RORs 호환 패치 생성이 실패할 수 있는 문제를 수정했습니다.",
+        "v107_artillery_missile_damage": "포병 원거리 피해 수정이 적용되지 않던 문제를 수정했습니다.",
         "v106_added_title": "추가",
         "v106_workshop_update_warning": "MOD 업데이트 감지: Steam Workshop 버전이 플레이어의 로컬 버전보다 최신이면 경고를 표시합니다.",
         "v106_fixed_title": "수정",
@@ -1106,6 +1158,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+    "v107_added_title": "Добавлено",
+    "v107_update_outdated_mods": "В окне предупреждений можно обновить устаревшие MOD, а также обновить все MOD одной кнопкой.",
+    "v107_warning_button_filter": "Теперь правый клик по кнопке предупреждений показывает в списках только проблемные MOD.",
+    "v107_adjusted_title": "Изменено",
+        "v107_unit_data_anti_bonuses": "Изменение данных юнитов теперь позволяет править бонусы против крупных целей и против пехоты.",
+        "v107_fixed_title": "Исправлено",
+        "v107_force_update_reliable": "Принудительное обновление теперь выполняется более надёжным способом, чтобы избежать частых ошибок обновления Steam.",
+        "v107_ror_patch_generation": "Исправлена проблема, из-за которой генерация совместимого патча Nanu's Dynamic RORs могла завершаться ошибкой.",
+        "v107_artillery_missile_damage": "Исправлена проблема, из-за которой изменение дальнего урона артиллерии не могло быть применено.",
         "v106_added_title": "Добавлено",
         "v106_workshop_update_warning": "Добавлено обнаружение обновлений MOD: если версия в Steam Workshop новее локальной версии игрока, отображается предупреждение.",
         "v106_fixed_title": "Исправлено",
@@ -1301,6 +1362,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+    "v107_added_title": "追加",
+    "v107_update_outdated_mods": "警告画面で期限切れの MOD を更新でき、すべての MOD をワンクリックで更新できるようになりました。",
+    "v107_warning_button_filter": "警告ボタンを右クリックすると、問題のある MOD だけが一覧に表示されるようになりました。",
+    "v107_adjusted_title": "調整",
+        "v107_unit_data_anti_bonuses": "ユニットデータ変更で大型へのボーナスと歩兵へのボーナスを変更できるようになりました。",
+        "v107_fixed_title": "修正",
+        "v107_force_update_reliable": "強制更新がより強力な方法で行われるようになり、Steam の更新失敗が頻発する問題を回避します。",
+        "v107_ror_patch_generation": "Nanu's Dynamic RORs 互換パッチの生成に失敗することがある問題を修正しました。",
+        "v107_artillery_missile_damage": "砲兵の遠隔ダメージの変更が適用されない問題を修正しました。",
         "v106_added_title": "追加",
         "v106_workshop_update_warning": "MOD更新検出を追加しました。Steam Workshop版がプレイヤーのローカル版より新しい場合、警告を表示します。",
         "v106_fixed_title": "修正",
@@ -1496,6 +1566,15 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+    "v107_added_title": "Añadido",
+    "v107_update_outdated_mods": "La ventana de advertencias ahora puede actualizar MODs desactualizados y actualizar todos los MODs con un solo clic.",
+    "v107_warning_button_filter": "Al hacer clic derecho en el botón de advertencias, las listas de MOD solo muestran los MOD con problemas.",
+    "v107_adjusted_title": "Ajustado",
+        "v107_unit_data_anti_bonuses": "La modificación de datos de unidades ahora permite editar las bonificaciones contra grandes y contra infantería.",
+        "v107_fixed_title": "Corregido",
+        "v107_force_update_reliable": "La actualización forzada ahora usa un método más potente para evitar los frecuentes fallos de actualización de Steam.",
+        "v107_ror_patch_generation": "Se corrigió un problema por el que la generación del parche de compatibilidad de Nanu's Dynamic RORs podía fallar.",
+        "v107_artillery_missile_damage": "Se corrigió un problema por el que no se podía aplicar el cambio de daño a distancia de la artillería.",
         "v106_added_title": "Añadido",
         "v106_workshop_update_warning": "Se añadió la detección de actualizaciones de MOD: se muestra una advertencia si la versión de Steam Workshop es más reciente que la versión local del jugador.",
         "v106_fixed_title": "Corregido",

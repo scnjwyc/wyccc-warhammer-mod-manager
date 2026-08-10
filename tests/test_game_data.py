@@ -13,6 +13,7 @@ from backend.game_data import (
     _compare_internal_names,
     build_game_data_entries,
     parse_db_table,
+    patch_db_row_value,
 )
 
 
@@ -1696,6 +1697,78 @@ class GameDataPatchTests(unittest.TestCase):
         rules = _decode_kv_rules(entries[0].payload)
         self.assertAlmostEqual(rules["unit_max_drag_width"], 126.0)
         self.assertEqual(result.stats["unit_max_drag_width_changed"], 1)
+
+
+class DbStringEncodingTests(unittest.TestCase):
+    def _armour_row_payload(self, raw: bytes) -> bytes:
+        return b"".join(
+            (
+                b"\xfc\xfd\xfe\xff",
+                struct.pack("<i", 6),
+                b"\1",
+                struct.pack("<i", 1),
+                raw,
+            )
+        )
+
+    def test_patch_db_row_value_preserves_utf8_string_bytes(self) -> None:
+        text = "魔法伤害".encode("utf-8")
+        original_raw = (
+            struct.pack("<i", 35)
+            + struct.pack("<H", len(text))
+            + text
+            + b"\1"
+            + struct.pack("<H", len(text))
+            + text
+        )
+        row = parse_db_table(
+            "unit_armour_types_tables",
+            self._armour_row_payload(original_raw),
+        ).rows[0]
+
+        patched = patch_db_row_value(row, "armour_value", 42)
+
+        self.assertEqual(patched.values["armour_value"], 42)
+        self.assertEqual(patched.values["key"], "魔法伤害")
+        self.assertEqual(patched.values["audio_type"], "魔法伤害")
+        expected_raw = (
+            struct.pack("<i", 42)
+            + struct.pack("<H", len(text))
+            + text
+            + b"\1"
+            + struct.pack("<H", len(text))
+            + text
+        )
+        self.assertEqual(patched.raw, expected_raw)
+
+    def test_patch_db_row_value_round_trips_non_utf8_string_bytes(self) -> None:
+        raw_text = b"\xE9\x41\x5A"
+        original_raw = (
+            struct.pack("<i", 7)
+            + struct.pack("<H", len(raw_text))
+            + raw_text
+            + b"\1"
+            + struct.pack("<H", len(raw_text))
+            + raw_text
+        )
+        row = parse_db_table(
+            "unit_armour_types_tables",
+            self._armour_row_payload(original_raw),
+        ).rows[0]
+
+        patched = patch_db_row_value(row, "key", "replacement")
+
+        self.assertEqual(patched.values["key"], "replacement")
+        self.assertEqual(patched.values["audio_type"], "\xe9AZ")
+        expected_raw = (
+            struct.pack("<i", 7)
+            + struct.pack("<H", len(b"replacement"))
+            + b"replacement"
+            + b"\1"
+            + struct.pack("<H", len(raw_text))
+            + raw_text
+        )
+        self.assertEqual(patched.raw, expected_raw)
 
 
 if __name__ == "__main__":

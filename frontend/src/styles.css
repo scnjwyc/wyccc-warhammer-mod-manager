@@ -1306,6 +1306,13 @@ textarea {
   color: #ffc0a3;
 }
 
+.panel-warning-button.active {
+  border-color: #d98b6f;
+  background: rgba(143, 48, 38, 0.78);
+  color: #ffe1d0;
+  box-shadow: 0 0 0 1px rgba(217, 139, 111, 0.35);
+}
+
 .count-badge {
   min-width: 30px;
   height: 24px;
@@ -2181,6 +2188,54 @@ button.context-menu-item {
 .warning-subscribe-button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.warning-update-button {
+  min-width: 62px;
+  min-height: 31px;
+  border: 1px solid #3f7d4e;
+  border-radius: 4px;
+  background: rgba(39, 94, 53, 0.42);
+  color: #a5e0b2;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.warning-update-button:hover:not(:disabled) {
+  border-color: #58a96c;
+  background: rgba(46, 118, 64, 0.62);
+  color: #d2f5da;
+}
+
+.warning-update-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.warning-update-all-button {
+  min-width: 92px;
+  min-height: 31px;
+  margin-right: auto;
+  padding: 0 12px;
+  border: 1px solid #3f7d4e;
+  border-radius: 4px;
+  background: rgba(39, 94, 53, 0.42);
+  color: #a5e0b2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.warning-update-all-button:hover:not(:disabled) {
+  border-color: #58a96c;
+  background: rgba(46, 118, 64, 0.62);
+  color: #d2f5da;
+}
+
+.warning-update-all-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .settings-modal .modal-body {

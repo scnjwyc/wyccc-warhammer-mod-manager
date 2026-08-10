@@ -89,4 +89,55 @@ describe('WarningModal', () => {
       modId: 'mod-a',
     })
   })
+
+  it('offers a per-MOD update button only for Workshop update-available warnings', async () => {
+    const updateItem = {
+      id: 'mod-a:workshop_update_available',
+      modId: 'mod-a',
+      modName: '测试 MOD',
+      code: 'workshop_update_available',
+      severity: 'warning',
+      message: 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新',
+      ignorable: true,
+    }
+    const outdatedItem = {
+      id: 'mod-b:outdated_mod',
+      modId: 'mod-b',
+      modName: '过期 MOD',
+      code: 'outdated_mod',
+      severity: 'warning',
+      message: '该 MOD 在游戏本体更新后尚未更新',
+      ignorable: true,
+    }
+    const wrapper = mount(WarningModal, {
+      props: { open: true, items: [updateItem, outdatedItem, dependencyRefresh] },
+    })
+
+    expect(wrapper.findAll('.warning-update-button')).toHaveLength(1)
+    await wrapper.get('.warning-update-button').trigger('click')
+    expect(wrapper.emitted('update')[0][0]).toEqual(updateItem)
+  })
+
+  it('enables the bottom-left update-all button only when a Workshop update is available', async () => {
+    const updateItem = {
+      id: 'mod-a:workshop_update_available',
+      modId: 'mod-a',
+      modName: '测试 MOD',
+      code: 'workshop_update_available',
+      severity: 'warning',
+      message: 'Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新',
+      ignorable: true,
+    }
+    const withoutUpdates = mount(WarningModal, {
+      props: { open: true, items: [missingDependency, dependencyRefresh] },
+    })
+    expect(withoutUpdates.get('.warning-update-all-button').element.disabled).toBe(true)
+
+    const wrapper = mount(WarningModal, {
+      props: { open: true, items: [missingDependency, updateItem] },
+    })
+    expect(wrapper.get('.warning-update-all-button').element.disabled).toBe(false)
+    await wrapper.get('.warning-update-all-button').trigger('click')
+    expect(wrapper.emitted('update-all')).toHaveLength(1)
+  })
 })

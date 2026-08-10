@@ -799,6 +799,82 @@ class ApiContractTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("未完成", result["error"]["message"])
 
+    def test_force_update_translates_a_steam_request_that_never_starts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / 'state')
+            asset = ModAsset(
+                id='steam:123:missing.pack',
+                pack_name='missing.pack',
+                display_name='Missing Workshop MOD',
+                path=str(Path(temporary) / 'missing.pack'),
+                directory=temporary,
+                source=SOURCE_WORKSHOP,
+                workshop_id='123',
+            )
+            api._assets = {asset.id: asset}
+
+            with patch(
+                'backend.api.perform_workshop_operation',
+                side_effect=SteamworksBridgeError(
+                    'Steam did not start downloading Workshop item 123 (state=5, downloaded=0/0)'
+                ),
+            ):
+                result = api.call('force_update_workshop_mod', [asset.id])
+
+        self.assertFalse(result['ok'])
+        self.assertIn('未开始下载', result['error']['message'])
+
+    def test_force_update_translates_a_stalled_steam_download(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / 'state')
+            asset = ModAsset(
+                id='steam:123:missing.pack',
+                pack_name='missing.pack',
+                display_name='Missing Workshop MOD',
+                path=str(Path(temporary) / 'missing.pack'),
+                directory=temporary,
+                source=SOURCE_WORKSHOP,
+                workshop_id='123',
+            )
+            api._assets = {asset.id: asset}
+
+            with patch(
+                'backend.api.perform_workshop_operation',
+                side_effect=SteamworksBridgeError(
+                    'Steam download for Workshop item 123 stalled (state=5, downloaded=0/0)'
+                ),
+            ):
+                result = api.call('force_update_workshop_mod', [asset.id])
+
+        self.assertFalse(result['ok'])
+        self.assertIn('已恢复原有文件', result['error']['message'])
+
+    def test_force_update_translates_an_unrecognized_workshop_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            api = API(Path(temporary) / 'state')
+            asset = ModAsset(
+                id='steam:123:missing.pack',
+                pack_name='missing.pack',
+                display_name='Missing Workshop MOD',
+                path=str(Path(temporary) / 'missing.pack'),
+                directory=temporary,
+                source=SOURCE_WORKSHOP,
+                workshop_id='123',
+            )
+            api._assets = {asset.id: asset}
+
+            with patch(
+                'backend.api.perform_workshop_operation',
+                side_effect=SteamworksBridgeError(
+                    'Refusing to wipe C:/somewhere: it is not a Workshop content directory '
+                    '(expected .../workshop/content/1142710/123)'
+                ),
+            ):
+                result = api.call('force_update_workshop_mod', [asset.id])
+
+        self.assertFalse(result['ok'])
+        self.assertIn('无法识别该 MOD 的工坊安装目录', result['error']['message'])
+
     def test_game_data_feature_status_uses_fixed_workshop_subscriptions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / "state")
@@ -2498,6 +2574,59 @@ class ApiContractTests(unittest.TestCase):
             )
 
             self.assertFalse(rejected["ok"])
+
+    def test_workshop_publish_logs_bridge_failure_before_masking(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / 'Total War WARHAMMER III'
+            data = game / 'data'
+            data.mkdir(parents=True)
+            (game / 'Warhammer3.exe').write_bytes(b'')
+            (data / 'manifest.txt').write_text('data.pack\t0\n', encoding='utf-8')
+            write_pack(data / 'data.pack')
+            write_pack(data / 'my_own_mod.pack')
+            (data / 'my_own_mod.png').write_bytes(b'cover')
+
+            api = API(root / 'state')
+            self.assertTrue(
+                api.call(
+                    'save_settings',
+                    [
+                        {
+                            'game_path': str(game),
+                            'workshop_path': '',
+                            'scan_data': True,
+                            'scan_modding': False,
+                            'scan_workshop': False,
+                            'scan_merged': False,
+                            'fetch_workshop_metadata': False,
+                        }
+                    ],
+                )['ok']
+            )
+            mod = api.call('scan_mods', [False])['data']['mods'][0]
+
+            payload = {
+                'mode': 'upload',
+                'title': 'My Own Mod',
+                'language': 'en-US',
+                'category': 'units',
+                'visibility': 0,
+            }
+            with (
+                patch(
+                    'backend.api.publish_workshop_item',
+                    side_effect=SteamworksBridgeError('Steam upload timed out'),
+                ),
+                self.assertLogs('backend.api', level='WARNING') as captured,
+            ):
+                rejected = api.call('publish_workshop_item', [mod['id'], payload])
+
+            self.assertFalse(rejected['ok'])
+            self.assertEqual(rejected['error']['message'], 'Steam upload timed out')
+            self.assertTrue(
+                any('Steam upload timed out' in line for line in captured.output)
+            )
 
     def test_context_menu_file_and_steam_operations_use_the_selected_pack(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

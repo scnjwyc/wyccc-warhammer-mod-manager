@@ -58,6 +58,7 @@ EDITABLE_FIELDS = frozenset(
         "melee_ap_damage",
         "melee_bonus_v_cavalry",
         "melee_bonus_v_infantry",
+        "melee_bonus_v_large",
         "missile_damage",
         "missile_ap_damage",
         "missile_bonus_v_cavalry",
@@ -869,6 +870,28 @@ def _armour_key_for_value(
     return current_key
 
 
+def _unit_missile_weapon(
+    effective: Mapping[str, Mapping[str, Any]],
+    land_values: Mapping[str, Any],
+) -> Any:
+    """Resolve the missile weapon row for a land unit.
+
+    Most ranged units reference it through land_units.primary_missile_weapon,
+    but artillery/warmachines leave that field empty and carry the weapon on
+    their engine row instead (battlefield_engines.missile_weapon).
+    """
+    key = str(land_values.get("primary_missile_weapon") or "")
+    if not key:
+        engine_key = str(land_values.get("engine") or "")
+        if engine_key:
+            engine = effective.get("battlefield_engines_tables", {}).get(engine_key)
+            if engine is not None:
+                key = str(engine.row.values.get("missile_weapon") or "")
+    if not key:
+        return None
+    return effective.get("missile_weapons_tables", {}).get(key)
+
+
 def _unit_edits_for(
     edits: Mapping[str, Mapping[str, Any]],
     unit_key: str,
@@ -1061,9 +1084,7 @@ def build_unit_table_snapshot(
             melee_attack_speed_locked = (
                 melee is None or "melee_attack_interval" not in melee.row.fields
             )
-        missile_weapon = effective["missile_weapons_tables"].get(
-            str(land_values.get("primary_missile_weapon") or "")
-        )
+        missile_weapon = _unit_missile_weapon(effective, land_values)
         projectile = None
         projectile_values: dict[str, Any] = {}
         explosion_values: dict[str, Any] = {}
@@ -1120,6 +1141,7 @@ def build_unit_table_snapshot(
             "melee_ap_damage": _clamp_int(melee_values.get("ap_damage")),
             "melee_bonus_v_cavalry": _clamp_int(melee_values.get("bonus_v_cavalry")),
             "melee_bonus_v_infantry": _clamp_int(melee_values.get("bonus_v_infantry")),
+            "melee_bonus_v_large": _clamp_int(melee_values.get("bonus_v_large")),
             "missile_damage": _clamp_int(projectile_values.get("damage")),
             "missile_ap_damage": _clamp_int(projectile_values.get("ap_damage")),
             "missile_bonus_v_cavalry": _clamp_int(
@@ -1308,6 +1330,9 @@ def build_unit_table_snapshot(
                 ),
                 "melee_bonus_v_infantry": merged(
                     "melee_bonus_v_infantry", melee_values.get("bonus_v_infantry")
+                ),
+                "melee_bonus_v_large": merged(
+                    "melee_bonus_v_large", melee_values.get("bonus_v_large")
                 ),
                 "missile_damage": merged(
                     "missile_damage", projectile_values.get("damage")
@@ -1728,6 +1753,7 @@ def _build_three_kingdoms_patched_rows(
             "melee_ap_damage",
             "melee_bonus_v_cavalry",
             "melee_bonus_v_infantry",
+            "melee_bonus_v_large",
         } & set(fields):
             source_key = str(melee.row.values.get("key") or "")
             clone_key = _unit_clone_key("melee", unit_key, source_key)
@@ -1758,6 +1784,12 @@ def _build_three_kingdoms_patched_rows(
                     "bonus_v_infantry",
                     fields["melee_bonus_v_infantry"],
                 )
+            if "melee_bonus_v_large" in fields:
+                clone = _write_i32(
+                    clone,
+                    "bonus_v_large",
+                    fields["melee_bonus_v_large"],
+                )
             added["melee_weapons_tables"][clone_key] = (melee.version, clone)
             land_row = patch_db_row_value(land_row, "primary_melee_weapon", clone_key)
 
@@ -1771,9 +1803,7 @@ def _build_three_kingdoms_patched_rows(
             "explosion_damage",
             "explosion_ap_damage",
         }
-        missile_weapon = effective["missile_weapons_tables"].get(
-            str(land_values.get("primary_missile_weapon") or "")
-        )
+        missile_weapon = _unit_missile_weapon(effective, land_values)
         if missile_weapon is not None and projectile_fields & set(fields):
             projectile = effective["projectiles_tables"].get(
                 str(missile_weapon.row.values.get("default_projectile") or "")
@@ -2065,11 +2095,21 @@ def _build_patched_rows(
                 melee_row = _write_i32(melee_row, "damage", fields["melee_damage"])
             if "melee_ap_damage" in fields:
                 melee_row = _write_i32(melee_row, "ap_damage", fields["melee_ap_damage"])
+            if "melee_bonus_v_infantry" in fields:
+                melee_row = _write_i32(
+                    melee_row,
+                    "bonus_v_infantry",
+                    fields["melee_bonus_v_infantry"],
+                )
+            if "melee_bonus_v_large" in fields:
+                melee_row = _write_i32(
+                    melee_row,
+                    "bonus_v_large",
+                    fields["melee_bonus_v_large"],
+                )
             patched["melee_weapons_tables"][melee.row.values["key"]] = melee_row
 
-        missile_weapon = effective["missile_weapons_tables"].get(
-            str(land_values.get("primary_missile_weapon") or "")
-        )
+        missile_weapon = _unit_missile_weapon(effective, land_values)
         projectile = None
         if missile_weapon is not None:
             projectile = effective["projectiles_tables"].get(
@@ -2096,13 +2136,13 @@ def _build_patched_rows(
             if explosion is not None:
                 explosion_row = explosion.row
                 if "explosion_damage" in fields:
-                    explosion_row = _write_i32(
+                    explosion_row = _write_f32(
                         explosion_row,
                         "detonation_damage",
                         fields["explosion_damage"],
                     )
                 if "explosion_ap_damage" in fields:
-                    explosion_row = _write_i32(
+                    explosion_row = _write_f32(
                         explosion_row,
                         "detonation_damage_ap",
                         fields["explosion_ap_damage"],

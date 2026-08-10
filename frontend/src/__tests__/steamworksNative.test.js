@@ -46,15 +46,17 @@ describe('bundled Steamworks native bridge', () => {
     expect(capabilities).toBe('function,function')
   })
 
-  it('waits for missing Workshop content to be restored before reporting force-update completion', () => {
-    const root = mkdtempSync(join(tmpdir(), 'wmm-force-update-'))
+  it('wipes stale Workshop content and re-downloads before reporting force-update completion', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wmm-force-update-wipe-'))
     const bridge = join(root, 'workshop_bridge.js')
     const steamworks = join(root, 'steamworks')
-    const content = join(root, 'content')
-    const pack = join(content, 'missing.pack')
+    const content = join(root, 'steamapps', 'workshop', 'content', '1142710', '123')
+    const backup = join(content + '.wmm-force-update-backup')
+    const stalePack = join(content, 'stale.pack')
+    const pack = join(content, 'new.pack')
     mkdirSync(steamworks)
-    mkdirSync(content)
-    writeFileSync(join(content, 'preview.png'), Buffer.alloc(3))
+    mkdirSync(content, { recursive: true })
+    writeFileSync(stalePack, Buffer.alloc(3))
     copyFileSync(resolve(process.cwd(), '../steam_runtime/workshop_bridge.js'), bridge)
     writeFileSync(
       join(steamworks, 'index.js'),
@@ -67,7 +69,8 @@ describe('bundled Steamworks native bridge', () => {
             download: (_itemId, highPriority) => {
               if (!highPriority) throw new Error("force update was not high priority");
               setTimeout(() => {
-                fs.writeFileSync(path.join(process.env.WMM_TEST_CONTENT, "missing.pack"), Buffer.alloc(7));
+                fs.mkdirSync(process.env.WMM_TEST_CONTENT, { recursive: true });
+                fs.writeFileSync(path.join(process.env.WMM_TEST_CONTENT, "new.pack"), Buffer.alloc(10));
               }, 40);
               return true;
             },
@@ -101,7 +104,190 @@ describe('bundled Steamworks native bridge', () => {
 
       expect(payload.result.completed).toBe(true)
       expect(payload.result.actual_size_on_disk).toBe('10')
-      expect(existsSync(pack)).toBe(true)
+      expect(readFileSync(pack).length).toBe(10)
+      expect(existsSync(stalePack)).toBe(false)
+      expect(existsSync(backup)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not report force-update completion when Steam accepts but never starts a download', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wmm-force-update-stall-'))
+    const bridge = join(root, 'workshop_bridge.js')
+    const steamworks = join(root, 'steamworks')
+    const content = join(root, 'steamapps', 'workshop', 'content', '1142710', '123')
+    mkdirSync(steamworks)
+    mkdirSync(content, { recursive: true })
+    writeFileSync(join(content, 'existing.pack'), Buffer.alloc(10))
+    copyFileSync(resolve(process.cwd(), '../steam_runtime/workshop_bridge.js'), bridge)
+    writeFileSync(
+      join(steamworks, 'index.js'),
+      `
+        "use strict";
+        module.exports.init = () => ({
+          workshop: {
+            download: () => true,
+            state: () => 5,
+            installInfo: () => ({
+              folder: process.env.WMM_TEST_CONTENT,
+              sizeOnDisk: 10n,
+              timestamp: 123,
+            }),
+            downloadInfo: () => ({ current: 0n, total: 10n }),
+          },
+        });
+      `,
+      'utf8',
+    )
+
+    try {
+      let output = ''
+      try {
+        output = execFileSync(
+          process.execPath,
+          [bridge],
+          {
+            input: JSON.stringify({ operation: 'force_update', appId: 1142710, id: '123' }),
+            encoding: 'utf8',
+            timeout: 2_000,
+            env: {
+              ...process.env,
+              WMM_TEST_CONTENT: content,
+              WMM_FORCE_UPDATE_GRACE_MS: '300',
+            },
+          },
+        )
+      } catch (error) {
+        output = String(error?.stdout || '')
+      }
+      const resultLine = output.split('\n').find(line => line.startsWith('WMM_WORKSHOP_RESULT='))
+      expect(resultLine).toBeTruthy()
+      const payload = JSON.parse(resultLine.slice(20))
+      expect(payload.ok).toBe(false)
+      expect(String(payload.error || '')).toContain('did not start downloading')
+      expect(readFileSync(join(content, 'existing.pack')).length).toBe(10)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fails and restores the original files when Steam flashes a download but delivers nothing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wmm-force-update-flash-'))
+    const bridge = join(root, 'workshop_bridge.js')
+    const steamworks = join(root, 'steamworks')
+    const content = join(root, 'steamapps', 'workshop', 'content', '1142710', '123')
+    const pack = join(content, 'existing.pack')
+    mkdirSync(steamworks)
+    mkdirSync(content, { recursive: true })
+    writeFileSync(pack, Buffer.alloc(10))
+    copyFileSync(resolve(process.cwd(), '../steam_runtime/workshop_bridge.js'), bridge)
+    writeFileSync(
+      join(steamworks, 'index.js'),
+      `
+        "use strict";
+        let busyPolls = 0;
+        module.exports.init = () => ({
+          workshop: {
+            download: () => true,
+            state: () => {
+              busyPolls += 1;
+              return busyPolls <= 3 ? 21 : 5;
+            },
+            installInfo: () => ({
+              folder: process.env.WMM_TEST_CONTENT,
+              sizeOnDisk: 10n,
+              timestamp: 123,
+            }),
+            downloadInfo: () => ({ current: 0n, total: 10n }),
+          },
+        });
+      `,
+      'utf8',
+    )
+
+    try {
+      let output = ''
+      try {
+        output = execFileSync(
+          process.execPath,
+          [bridge],
+          {
+            input: JSON.stringify({ operation: 'force_update', appId: 1142710, id: '123' }),
+            encoding: 'utf8',
+            timeout: 2_000,
+            env: {
+              ...process.env,
+              WMM_TEST_CONTENT: content,
+              WMM_FORCE_UPDATE_GRACE_MS: '300',
+              WMM_FORCE_UPDATE_STALL_MS: '300',
+            },
+          },
+        )
+      } catch (error) {
+        output = String(error?.stdout || '')
+      }
+      const resultLine = output.split('\n').find(line => line.startsWith('WMM_WORKSHOP_RESULT='))
+      expect(resultLine).toBeTruthy()
+      const payload = JSON.parse(resultLine.slice(20))
+      expect(payload.ok).toBe(false)
+      expect(String(payload.error || '')).toContain('stalled')
+      expect(readFileSync(pack).length).toBe(10)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to wipe a folder that does not belong to the Workshop item', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wmm-force-update-guard-'))
+    const bridge = join(root, 'workshop_bridge.js')
+    const steamworks = join(root, 'steamworks')
+    mkdirSync(steamworks)
+    const sentinel = join(root, 'sentinel.txt')
+    writeFileSync(sentinel, 'keep')
+    copyFileSync(resolve(process.cwd(), '../steam_runtime/workshop_bridge.js'), bridge)
+    writeFileSync(
+      join(steamworks, 'index.js'),
+      `
+        "use strict";
+        module.exports.init = () => ({
+          workshop: {
+            download: () => true,
+            state: () => 5,
+            installInfo: () => ({
+              folder: process.env.WMM_TEST_ROOT,
+              sizeOnDisk: 10n,
+              timestamp: 123,
+            }),
+            downloadInfo: () => ({ current: 0n, total: 10n }),
+          },
+        });
+      `,
+      'utf8',
+    )
+
+    try {
+      let output = ''
+      try {
+        output = execFileSync(
+          process.execPath,
+          [bridge],
+          {
+            input: JSON.stringify({ operation: 'force_update', appId: 1142710, id: '123' }),
+            encoding: 'utf8',
+            timeout: 2_000,
+            env: { ...process.env, WMM_TEST_ROOT: root },
+          },
+        )
+      } catch (error) {
+        output = String(error?.stdout || '')
+      }
+      const resultLine = output.split('\n').find(line => line.startsWith('WMM_WORKSHOP_RESULT='))
+      expect(resultLine).toBeTruthy()
+      const payload = JSON.parse(resultLine.slice(20))
+      expect(payload.ok).toBe(false)
+      expect(String(payload.error || '')).toContain('Refusing to wipe')
+      expect(readFileSync(sentinel, 'utf8')).toBe('keep')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

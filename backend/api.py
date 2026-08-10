@@ -2317,7 +2317,16 @@ class API:
 
     def _force_update_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_workshop_asset(mod_id)
-        result = self._run_workshop_operation("force_update", asset.workshop_id)
+        try:
+            result = self._run_workshop_operation("force_update", asset.workshop_id)
+        except ValueError as exc:
+            if "did not start downloading" in str(exc):
+                raise ValueError("Steam 未开始下载该 MOD 的新文件，请确认 Steam 在线且已订阅该 MOD 后重试") from exc
+            if "stalled" in str(exc):
+                raise ValueError("Steam 下载该 MOD 时停滞，已恢复原有文件，请稍后重试") from exc
+            if "Refusing to wipe" in str(exc):
+                raise ValueError("无法识别该 MOD 的工坊安装目录，已取消强制更新（未删除任何文件）") from exc
+            raise
         if not result.get("accepted"):
             raise ValueError("Steam 未接受强制更新请求")
         if not result.get("completed"):
@@ -2466,6 +2475,7 @@ class API:
                     app_id=int(self._active_game().app_id),
                 )
         except SteamworksBridgeError as exc:
+            logger.warning("Workshop publish failed: %s", exc)
             raise ValueError(str(exc)) from exc
 
         published_id = str(result.get("workshop_id") or "")
@@ -2498,6 +2508,7 @@ class API:
                 app_id=int(self._active_game().app_id),
             )
         except SteamworksBridgeError as exc:
+            logger.warning("Workshop operation %s failed: %s", operation, exc)
             raise ValueError(str(exc)) from exc
 
     def _open_mod_in_rpfm(self, mod_id: str) -> dict[str, Any]:

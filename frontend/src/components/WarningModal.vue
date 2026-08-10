@@ -8,9 +8,11 @@ const props = defineProps({
   busy: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'select', 'ignore', 'subscribe-enable'])
+const emit = defineEmits(['close', 'select', 'ignore', 'subscribe-enable', 'update', 'update-all'])
 
 const ignorableCount = computed(() => props.items.filter(item => item.ignorable).length)
+const canUpdate = item => item.code === 'workshop_update_available' && !!item.modId
+const updatableCount = computed(() => props.items.filter(canUpdate).length)
 
 const typeLabel = item => ({
   outdated_mod: t('app.warningOutdated'),
@@ -78,6 +80,15 @@ const canSubscribeAndEnable = item => (
               {{ t('warnings.subscribeEnableDependencies') }}
             </button>
             <button
+              v-if="canUpdate(item)"
+              type="button"
+              class="warning-update-button"
+              :disabled="!!busy"
+              @click="emit('update', item)"
+            >
+              {{ t('warnings.update') }}
+            </button>
+            <button
               v-if="item.ignorable"
               type="button"
               class="warning-ignore-button"
@@ -97,6 +108,14 @@ const canSubscribeAndEnable = item => (
       </div>
 
       <footer class="modal-footer">
+        <button
+          type="button"
+          class="warning-update-all-button"
+          :disabled="!!busy || !updatableCount"
+          @click="emit('update-all')"
+        >
+          {{ t('warnings.updateAll') }}
+        </button>
         <button type="button" class="secondary-button" @click="emit('close')">{{ t('common.close') }}</button>
       </footer>
     </section>

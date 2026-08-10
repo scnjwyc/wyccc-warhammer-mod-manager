@@ -529,3 +529,66 @@ describe('anchored mod selection', () => {
     expect(result.pending).toEqual(['pending:steam:30:'])
   })
 })
+
+describe('warnings-only list filtering', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    invokeMock.mockReset()
+    invokeMock.mockResolvedValue({ url: '' })
+  })
+
+  const modsWithWarnings = () => [
+    {
+      id: 'active-warn',
+      pack_name: 'active-warn.pack',
+      warnings: [{ code: 'outdated_mod', message: '需要检查兼容性' }],
+    },
+    {
+      id: 'active-clean',
+      pack_name: 'active-clean.pack',
+      warnings: [],
+    },
+    {
+      id: 'inactive-warn',
+      pack_name: 'inactive-warn.pack',
+      warnings: [{ code: 'workshop_update_available', message: '有新更新' }],
+    },
+    {
+      id: 'inactive-missing',
+      pack_name: 'inactive-missing.pack',
+      warnings: [{ code: 'missing_dependency', severity: 'error', message: '缺少依赖' }],
+    },
+    {
+      id: 'inactive-clean',
+      pack_name: 'inactive-clean.pack',
+      warnings: [],
+    },
+  ]
+
+  it('filters both lists to warning mods when the global toggle is on', () => {
+    const store = useAppStore()
+    store.mods = modsWithWarnings()
+    store.activeIds = ['active-warn', 'active-clean']
+
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-warn', 'active-clean'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual([
+      'inactive-warn',
+      'inactive-missing',
+      'inactive-clean',
+    ])
+
+    store.toggleWarningsOnly()
+    expect(store.warningsOnly).toBe(true)
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-warn'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual(['inactive-warn'])
+
+    store.toggleWarningsOnly()
+    expect(store.warningsOnly).toBe(false)
+    expect(store.activeMods.map(mod => mod.id)).toEqual(['active-warn', 'active-clean'])
+    expect(store.inactiveMods.map(mod => mod.id)).toEqual([
+      'inactive-warn',
+      'inactive-missing',
+      'inactive-clean',
+    ])
+  })
+})

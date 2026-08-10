@@ -296,6 +296,14 @@ describe('built-in interface languages', () => {
     expect(message).toBe('A notice occurred while scanning: 扫描器自定义提示：example detail')
   })
 
+  it('keeps the original English detail when a Chinese interface cannot localize a backend message', () => {
+    applyInterfaceLanguage('zh-CN')
+    const source = 'The current Steam account does not own this Workshop item'
+    const message = localizeBackendMessage(source)
+    expect(message).toContain(source)
+    expect(message).toContain(t('common.backendFailure'))
+  })
+
   it('keeps each static interface catalog free of unrelated writing systems', () => {
     const forbiddenByLanguage = {
       'zh-CN': /[\u3040-\u30ff\uac00-\ud7af\u0400-\u04ff]/u,

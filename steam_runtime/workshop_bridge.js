@@ -10,6 +10,12 @@ const WORKSHOP_ITEM_INSTALLED = 4;
 const WORKSHOP_ITEM_DOWNLOAD_BUSY = 8 | 16 | 32;
 const FORCE_UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
 const FORCE_UPDATE_POLL_INTERVAL_MS = 100;
+const FORCE_UPDATE_REQUEST_GRACE_MS = Number(
+  process.env.WMM_FORCE_UPDATE_GRACE_MS || 8000,
+);
+const FORCE_UPDATE_STALL_MS = Number(
+  process.env.WMM_FORCE_UPDATE_STALL_MS || 5 * 60 * 1000,
+);
 
 const writeResultAndExit = (payload, exitCode) => {
   const line = `${RESULT_PREFIX}${JSON.stringify(payload)}\n`;
@@ -64,21 +70,99 @@ const workshopDownloadStatus = (workshop, itemId) => {
     installPath,
     expectedSize,
     actualSize,
+    installTimestamp: String(installInfo?.timestamp ?? ""),
     downloadedBytes: BigInt(downloadInfo?.current || 0),
     totalBytes: BigInt(downloadInfo?.total || 0),
   };
 };
 
+const assertWorkshopContentDirectory = (workshop, appId, itemId) => {
+  const installInfo = workshop.installInfo(itemId);
+  const installPath = String(installInfo?.folder || "");
+  if (!installPath) throw new Error(`Workshop item ${itemId.toString()} has no install path`);
+  const normalized = path.resolve(installPath).replace(/[\\/]+$/, "");
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  const contentIndex = parts.indexOf("content");
+  const valid = contentIndex > 0
+    && parts[contentIndex - 1] === "workshop"
+    && parts[contentIndex + 1] === appId.toString()
+    && parts[parts.length - 1] === itemId.toString();
+  if (!valid) {
+    throw new Error(
+      `Refusing to wipe ${installPath}: it is not a Workshop content directory `
+      + `(expected .../workshop/content/${appId.toString()}/${itemId.toString()})`,
+    );
+  }
+  return normalized;
+};
+
+const prepareForceUpdateContent = (workshop, appId, itemId) => {
+  const installPath = assertWorkshopContentDirectory(workshop, appId, itemId);
+  const backupPath = `${installPath}.wmm-force-update-backup`;
+  const partialPath = `${installPath}.wmm-force-update-partial`;
+  if (fs.existsSync(partialPath)) {
+    fs.rmSync(partialPath, { recursive: true, force: true });
+  }
+  if (fs.existsSync(backupPath)) {
+    if (fs.existsSync(installPath)) {
+      fs.rmSync(backupPath, { recursive: true, force: true });
+    } else {
+      fs.renameSync(backupPath, installPath);
+    }
+  }
+  if (fs.existsSync(installPath)) {
+    fs.renameSync(installPath, backupPath);
+  }
+  return { installPath, backupPath };
+};
+
+const restoreForceUpdateContent = (installPath, backupPath) => {
+  if (!backupPath || !fs.existsSync(backupPath)) return;
+  if (fs.existsSync(installPath)) {
+    try {
+      fs.rmSync(installPath, { recursive: true, force: true });
+    } catch {
+      const partialPath = `${installPath}.wmm-force-update-partial`;
+      if (fs.existsSync(partialPath)) fs.rmSync(partialPath, { recursive: true, force: true });
+      fs.renameSync(installPath, partialPath);
+    }
+  }
+  fs.renameSync(backupPath, installPath);
+};
+
 const waitForWorkshopDownload = async (workshop, itemId) => {
   const startedAt = Date.now();
   let status;
+  let sawDownloadActivity = false;
+  let lastActivityAt = 0;
+  let previousDiskSignature = "";
+  let previousDownloadedBytes = 0n;
   while (Date.now() - startedAt <= FORCE_UPDATE_TIMEOUT_MS) {
     status = workshopDownloadStatus(workshop, itemId);
     const installed = (status.state & WORKSHOP_ITEM_INSTALLED) !== 0;
     const busy = (status.state & WORKSHOP_ITEM_DOWNLOAD_BUSY) !== 0;
-    const diskComplete = Boolean(status.installPath)
-      && fs.existsSync(status.installPath)
+    const installPresent = Boolean(status.installPath) && fs.existsSync(status.installPath);
+    const diskComplete = installPresent
       && (status.expectedSize === 0n || status.actualSize >= status.expectedSize);
+    const diskSignature = `${status.installPath}|${installPresent ? "present" : "missing"}|${status.actualSize}|${status.installTimestamp}`;
+    const downloadedIncreased = status.downloadedBytes > previousDownloadedBytes;
+    const elapsed = Date.now() - startedAt;
+    if (
+      busy
+      || downloadedIncreased
+      || (previousDiskSignature !== "" && diskSignature !== previousDiskSignature)
+    ) {
+      sawDownloadActivity = true;
+      lastActivityAt = elapsed;
+    }
+    previousDownloadedBytes = status.downloadedBytes;
+    previousDiskSignature = diskSignature;
+    if (!sawDownloadActivity && !installPresent && elapsed >= FORCE_UPDATE_REQUEST_GRACE_MS) {
+      throw new Error(
+        `Steam did not start downloading Workshop item ${itemId.toString()} `
+        + `(state=${status.state}, downloaded=${status.downloadedBytes}/${status.totalBytes})`,
+      );
+    }
     if (installed && !busy && diskComplete) {
       return {
         completed: true,
@@ -89,6 +173,12 @@ const waitForWorkshopDownload = async (workshop, itemId) => {
         downloaded_bytes: status.downloadedBytes.toString(),
         total_bytes: status.totalBytes.toString(),
       };
+    }
+    if (sawDownloadActivity && elapsed - lastActivityAt >= FORCE_UPDATE_STALL_MS) {
+      throw new Error(
+        `Steam download for Workshop item ${itemId.toString()} stalled `
+        + `(state=${status.state}, downloaded=${status.downloadedBytes}/${status.totalBytes})`,
+      );
     }
     await wait(FORCE_UPDATE_POLL_INTERVAL_MS);
   }
@@ -338,18 +428,31 @@ const main = async () => {
       }, 0);
       return;
     }
-    const accepted = client.workshop.download(itemId, true);
-    if (!accepted) throw new Error(`Steam rejected the update request for Workshop item ${workshopId}`);
-    const completion = await waitForWorkshopDownload(client.workshop, itemId);
-    writeResultAndExit({
-      ok: true,
-      result: {
-        operation,
-        workshop_id: workshopId,
-        accepted: true,
-        ...completion,
-      },
-    }, 0);
+    const { installPath, backupPath } = prepareForceUpdateContent(client.workshop, appId, itemId);
+    try {
+      const accepted = client.workshop.download(itemId, true);
+      if (!accepted) throw new Error(`Steam rejected the update request for Workshop item ${workshopId}`);
+      const completion = await waitForWorkshopDownload(client.workshop, itemId);
+      if (fs.existsSync(backupPath)) {
+        try {
+          fs.rmSync(backupPath, { recursive: true, force: true });
+        } catch {
+          // Backup cleanup is best-effort; the new files are already downloaded.
+        }
+      }
+      writeResultAndExit({
+        ok: true,
+        result: {
+          operation,
+          workshop_id: workshopId,
+          accepted: true,
+          ...completion,
+        },
+      }, 0);
+    } catch (error) {
+      restoreForceUpdateContent(installPath, backupPath);
+      throw error;
+    }
     return;
   }
   if (operation === "query_dependencies") {

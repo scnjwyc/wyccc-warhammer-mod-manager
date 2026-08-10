@@ -73,6 +73,8 @@ const COLUMNS = Object.freeze([
   { field: 'ward_save', labelKey: 'unitData.wardSave', width: 110.88, kind: 'number', helpKey: 'unitData.help.wardSave', excludeGames: ['three_kingdoms'] },
   { field: 'melee_damage', labelKey: 'unitData.meleeDamage', width: 126.36, kind: 'number', helpKey: 'unitData.help.meleeDamage' },
   { field: 'melee_ap_damage', labelKey: 'unitData.meleeApDamage', width: 136.89, kind: 'number', helpKey: 'unitData.help.meleeApDamage' },
+  { field: 'melee_bonus_v_infantry', labelKey: 'unitData.meleeBonusVInfantryWh3', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVInfantryWh3', excludeGames: ['three_kingdoms'] },
+  { field: 'melee_bonus_v_large', labelKey: 'unitData.meleeBonusVLarge', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVLarge', excludeGames: ['three_kingdoms'] },
   { field: 'melee_attack_speed', labelKey: 'unitData.meleeAttackSpeed', width: 126.36, kind: 'number', step: 0.1, helpKey: 'unitData.help.meleeAttackSpeed', onlyGames: ['three_kingdoms'] },
   { field: 'melee_bonus_v_cavalry', labelKey: 'unitData.meleeBonusVCavalry', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVCavalry', onlyGames: ['three_kingdoms'] },
   { field: 'melee_bonus_v_infantry', labelKey: 'unitData.meleeBonusVInfantry', width: 147.42, kind: 'number', helpKey: 'unitData.help.meleeBonusVInfantry', onlyGames: ['three_kingdoms'] },

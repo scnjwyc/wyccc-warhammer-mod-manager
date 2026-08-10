@@ -15,6 +15,7 @@ const props = defineProps({
   typeMap: { type: Object, default: () => ({}) },
   visualSorted: { type: Boolean, default: false },
   warningCount: { type: Number, default: 0 },
+  warningsOnly: { type: Boolean, default: false },
   searchTokens: { type: Array, default: () => [] },
   searchLogic: { type: String, default: 'AND' },
   searchSuggestionMods: { type: Array, default: () => [] },
@@ -41,6 +42,7 @@ const emit = defineEmits([
   'move',
   'context-menu',
   'show-warnings',
+  'toggle-warnings-only',
   'select-all',
   'toggle-active',
   'update:search-tokens',
@@ -241,8 +243,13 @@ watch(
           v-if="active && warningCount"
           type="button"
           class="panel-warning-button"
+          :class="{ active: warningsOnly }"
           data-testid="panel-warning-button"
+          :title="t('warnings.buttonHelp')"
+          :aria-label="t('warnings.buttonHelp')"
+          :aria-pressed="warningsOnly"
           @click="emit('show-warnings')"
+          @contextmenu.prevent="emit('toggle-warnings-only')"
         >
           <span aria-hidden="true">!</span>
           {{ t('common.warningCount', { count: warningCount }) }}

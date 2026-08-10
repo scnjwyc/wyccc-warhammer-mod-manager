@@ -758,6 +758,41 @@ const subscribeAndEnableDependencies = async item => {
   }
 }
 
+const updateWarningMod = async item => {
+  if (!item?.modId) return
+  try {
+    await store.forceUpdateWorkshop(item.modId)
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
+const updateAllWarningMods = async () => {
+  const targets = store.warningItems.filter(item => (
+    item.code === 'workshop_update_available' && !!item.modId
+  ))
+  if (!targets.length) return
+  let completed = 0
+  let failed = 0
+  for (const item of targets) {
+    try {
+      await store.forceUpdateWorkshop(item.modId)
+      completed += 1
+    } catch {
+      failed += 1
+    }
+  }
+  try {
+    await store.scan(false)
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+  store.notify(
+    t('toast.warningUpdateAllCompleted', { completed, failed }),
+    failed ? 'warning' : 'success',
+  )
+}
+
 const openSaveGames = async () => {
   showSaveGames.value = true
   try { await store.loadSaveGames() } catch { /* shared toast */ }
@@ -979,6 +1014,7 @@ onBeforeUnmount(() => {
         :search-match-ids="store.activeSearchMatchIds"
         :search-focus-id="activeSearchFocusId"
         :warning-count="store.warningCount"
+        :warnings-only="store.warningsOnly"
         :drag-source="modDragSource"
         :unit-data-mod-ids="unitDataModIds"
         @select="store.selectMod"
@@ -992,6 +1028,7 @@ onBeforeUnmount(() => {
         @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
         @show-warnings="showWarnings = true"
+        @toggle-warnings-only="store.toggleWarningsOnly"
         @update:search-tokens="store.setActiveSearchTokens"
         @update:search-logic="store.setActiveSearchLogic"
         @toggle-search-highlight="toggleSearchHighlight('active')"
@@ -1175,6 +1212,8 @@ onBeforeUnmount(() => {
       @select="selectWarning"
       @ignore="ignoreWarning"
       @subscribe-enable="subscribeAndEnableDependencies"
+      @update="updateWarningMod"
+      @update-all="updateAllWarningMods"
     />
 
     <ShareModal

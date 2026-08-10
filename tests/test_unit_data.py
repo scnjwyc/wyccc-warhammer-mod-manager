@@ -419,6 +419,145 @@ def _fixture_source() -> DbSource:
     )
 
 
+def _engine_artillery_source() -> DbSource:
+    """A Warhammer war machine whose missile weapon lives on its engine row.
+
+    Real artillery leaves ``land_units.primary_missile_weapon`` empty and
+    carries the weapon on ``battlefield_engines.missile_weapon`` instead, so
+    any resolution that only follows ``primary_missile_weapon`` sees no
+    projectile and reports zero ranged/explosion damage.
+    """
+    return DbSource(
+        "artillery.pack",
+        (
+            GameDataEntry(
+                "db\\main_units_tables\\data__",
+                _table_payload(
+                    "main_units_tables",
+                    7,
+                    [
+                        {
+                            "unit": "art_great_cannon",
+                            "caste": "warmachine",
+                            "land_unit": "land_art_great_cannon",
+                            "num_men": 24,
+                        }
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\land_units_tables\\data__",
+                _table_payload(
+                    "land_units_tables",
+                    54,
+                    [
+                        {
+                            "key": "land_art_great_cannon",
+                            "man_entity": "man_artillery_crew",
+                            "engine": "engine_great_cannon",
+                            "primary_ammo": 8,
+                            "reload": 10,
+                            "accuracy": 30,
+                            "num_engines": 4,
+                            "rank_depth": 1,
+                            "category": "artillery",
+                            "spacing": "artillery",
+                        }
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\battlefield_engines_tables\\data__",
+                _table_payload(
+                    "battlefield_engines_tables",
+                    23,
+                    [
+                        {
+                            "key": "engine_great_cannon",
+                            "engine_type": "artillery",
+                            "gun_animation_table": "anim",
+                            "model": "model",
+                            "battle_entity": "engine_great_cannon_entity",
+                            "missile_weapon": "weap_great_cannon",
+                            "riders_shoot_behaviour": "none",
+                            "scale": 1.0,
+                        }
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\battle_entities_tables\\data__",
+                _table_payload(
+                    "battle_entities_tables",
+                    39,
+                    [
+                        {
+                            "key": "man_artillery_crew",
+                            "hit_points": 50,
+                            "run_speed": 3.0,
+                        },
+                        {
+                            "key": "engine_great_cannon_entity",
+                            "hit_points": 120,
+                            "run_speed": 2.0,
+                        },
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\missile_weapons_tables\\data__",
+                _table_payload(
+                    "missile_weapons_tables",
+                    11,
+                    [
+                        {
+                            "key": "weap_great_cannon",
+                            "precursor": False,
+                            "default_projectile": "proj_great_cannon",
+                            "audio_type": None,
+                            "use_secondary_ammo_pool": False,
+                        }
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\projectiles_tables\\data__",
+                _table_payload(
+                    "projectiles_tables",
+                    53,
+                    [
+                        {
+                            "key": "proj_great_cannon",
+                            "category": "artillery",
+                            "shot_type": "cannon",
+                            "explosion_type": "expl_great_cannon",
+                            "effective_range": 500,
+                            "damage": 100,
+                            "ap_damage": 250,
+                        }
+                    ],
+                ),
+            ),
+            GameDataEntry(
+                "db\\projectiles_explosions_tables\\data__",
+                _table_payload(
+                    "projectiles_explosions_tables",
+                    19,
+                    [
+                        {
+                            "key": "expl_great_cannon",
+                            "detonator_type": "contact",
+                            "detonation_type": "standard",
+                            "detonation_damage": 30,
+                            "detonation_damage_ap": 70,
+                        }
+                    ],
+                ),
+            ),
+        ),
+    )
+
+
 def _rows_by_key(result: Any, table_name: str) -> dict[str, dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
     for entry in result.entries:
@@ -455,10 +594,13 @@ class UnitDataSnapshotTests(unittest.TestCase):
         self.assertEqual(swordsmen["melee_defence"], 32)
         self.assertEqual(swordsmen["melee_damage"], 25)
         self.assertEqual(swordsmen["melee_ap_damage"], 8)
+        self.assertEqual(swordsmen["melee_bonus_v_infantry"], 0)
+        self.assertEqual(swordsmen["melee_bonus_v_large"], 0)
         self.assertEqual(swordsmen["armour_value"], 10)
         self.assertEqual(swordsmen["armour_options"], [10, 20, 100])
         self.assertEqual(swordsmen["original_values"]["campaign_cap"], 4)
         self.assertEqual(swordsmen["original_values"]["melee_damage"], 25)
+        self.assertEqual(swordsmen["original_values"]["melee_bonus_v_large"], 0)
         self.assertEqual(swordsmen["original_values"]["model_count"], 90)
 
     def test_chariot_and_war_machine_use_real_entity_counts(self) -> None:
@@ -476,6 +618,18 @@ class UnitDataSnapshotTests(unittest.TestCase):
         # war machines must resolve land_units.engine rather than man_entity.
         self.assertAlmostEqual(rows["art_ballista"]["movement_speed"], 20.0, places=5)
         self.assertFalse(rows["art_ballista"]["movement_speed_locked"])
+
+    def test_engine_artillery_reads_missile_and_explosion_damage(self) -> None:
+        snapshot = build_unit_table_snapshot([_engine_artillery_source()], {})
+        rows = {row["key"]: row for row in snapshot["units"]}
+        self.assertIn("art_great_cannon", rows)
+        cannon = rows["art_great_cannon"]
+        self.assertEqual(cannon["missile_damage"], 100)
+        self.assertEqual(cannon["missile_ap_damage"], 250)
+        self.assertEqual(cannon["explosion_damage"], 30)
+        self.assertEqual(cannon["explosion_ap_damage"], 70)
+        self.assertEqual(cannon["range"], 500)
+        self.assertEqual(cannon["ammo"], 8)
 
     def test_warhammer_movement_edit_is_already_a_game_display_value(self) -> None:
         snapshot = build_unit_table_snapshot(
@@ -706,6 +860,8 @@ class UnitDataPatchTests(unittest.TestCase):
                 "missile_resistance": 25,
                 "melee_damage": 40,
                 "melee_ap_damage": 12,
+                "melee_bonus_v_infantry": 6,
+                "melee_bonus_v_large": 18,
             }
         }
         result = build_unit_data_entries([source], {"unit_model_multiplier": 1}, edits)
@@ -723,6 +879,33 @@ class UnitDataPatchTests(unittest.TestCase):
         melee = _rows_by_key(result, "melee_weapons_tables")
         self.assertEqual(melee["weap_sword"]["damage"], 40)
         self.assertEqual(melee["weap_sword"]["ap_damage"], 12)
+        self.assertEqual(melee["weap_sword"]["bonus_v_infantry"], 6)
+        self.assertEqual(melee["weap_sword"]["bonus_v_large"], 18)
+
+    def test_engine_artillery_missile_and_explosion_edits_are_written(self) -> None:
+        source = _engine_artillery_source()
+        result = build_unit_data_entries(
+            [source],
+            {},
+            {
+                "art_great_cannon": {
+                    "missile_damage": 120,
+                    "explosion_damage": 45,
+                    "explosion_ap_damage": 95,
+                }
+            },
+        )
+        projectiles = _rows_by_key(result, "projectiles_tables")
+        self.assertEqual(projectiles["proj_great_cannon"]["damage"], 120)
+        self.assertEqual(projectiles["proj_great_cannon"]["ap_damage"], 250)
+        self.assertEqual(projectiles["proj_great_cannon"]["effective_range"], 500)
+        explosions = _rows_by_key(result, "projectiles_explosions_tables")
+        self.assertEqual(explosions["expl_great_cannon"]["detonation_damage"], 45)
+        self.assertEqual(explosions["expl_great_cannon"]["detonation_damage_ap"], 95)
+        # The land row keeps its engine reference untouched: artillery carries
+        # the weapon through battlefield_engines.missile_weapon, and the engine
+        # still points at the same projectile keys, now overlaid with edits.
+        self.assertEqual(_rows_by_key(result, "land_units_tables"), {})
 
     def test_disabled_unit_is_removed_from_recruitment_tables(self) -> None:
         source = _fixture_source()

@@ -633,6 +633,32 @@ def _require(payload: bytes, cursor: int, size: int, context: str) -> None:
         raise ValueError(f"DB 表数据越界：{context}")
 
 
+def _decode_db_string8(raw: bytes) -> str:
+    """Decode a DB StringU8 field without losing non-ASCII bytes.
+
+    Most mods store plain ASCII keys, but some store UTF-8 text or raw
+    single-byte characters.  UTF-8 is preferred for readability, with a
+    latin-1 fallback so every byte can round-trip back unchanged.
+    """
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
+
+
+def _encode_db_string8(value: Any) -> bytes:
+    """Encode a DB StringU8 value back to bytes without crashing on non-ASCII.
+
+    latin-1 comes first so single-byte content is preserved byte-for-byte;
+    UTF-8 is the fallback for genuine multi-byte text such as Chinese keys.
+    """
+    text = str(value or "")
+    try:
+        return text.encode("latin-1")
+    except UnicodeEncodeError:
+        return text.encode("utf-8", errors="replace")
+
+
 def _parse_field(payload: bytes, cursor: int, field_type: str, context: str) -> tuple[Any, int]:
     if field_type == "Boolean":
         _require(payload, cursor, 1, context)
@@ -660,7 +686,7 @@ def _parse_field(payload: bytes, cursor: int, field_type: str, context: str) -> 
         length = struct.unpack_from("<H", payload, cursor)[0]
         cursor += 2
         _require(payload, cursor, length, context)
-        return payload[cursor : cursor + length].decode("ascii", errors="replace"), cursor + length
+        return _decode_db_string8(payload[cursor : cursor + length]), cursor + length
     if field_type == "OptionalStringU8":
         _require(payload, cursor, 1, context)
         exists = payload[cursor]
@@ -781,12 +807,20 @@ def patch_db_row_value(row: ParsedDbRow, field_name: str, value: Any) -> ParsedD
     field = row.fields.get(field_name)
     if field is None:
         return row
-    values = row.values
+    values = dict(row.values)
     values[field_name] = value
     encoded_fields: dict[str, FieldSpan] = {}
     chunks: list[bytes] = []
     cursor = 0
     for name, original in row.fields.items():
+        if name != field_name:
+            raw = row.raw[original.start : original.end]
+            chunks.append(raw)
+            encoded_fields[name] = FieldSpan(
+                original.field_type, cursor, cursor + len(raw), original.value
+            )
+            cursor += len(raw)
+            continue
         current = values[name]
         if original.field_type == "Boolean":
             encoded = bytes([1 if bool(current) else 0])
@@ -813,17 +847,17 @@ def patch_db_row_value(row: ParsedDbRow, field_name: str, value: Any) -> ParsedD
             encoded = struct.pack("<d", numeric)
             current = numeric
         elif original.field_type == "StringU8":
-            raw = str(current or "").encode("ascii")
+            raw = _encode_db_string8(current)
             encoded = struct.pack("<H", len(raw)) + raw
-            current = raw.decode("ascii")
+            current = _decode_db_string8(raw)
         elif original.field_type == "OptionalStringU8":
             if current is None or current == "":
                 encoded = b"\0"
                 current = None
             else:
-                raw = str(current).encode("ascii")
+                raw = _encode_db_string8(current)
                 encoded = b"\1" + struct.pack("<H", len(raw)) + raw
-                current = raw.decode("ascii")
+                current = _decode_db_string8(raw)
         elif original.field_type == "StringU16":
             current = str(current or "")
             encoded = struct.pack("<H", len(current)) + current.encode("utf-16le")

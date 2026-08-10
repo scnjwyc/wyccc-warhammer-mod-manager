@@ -235,6 +235,45 @@ describe('ModList previews and source collisions', () => {
     expect(wrapper.emitted('show-warnings')).toHaveLength(1)
   })
 
+  it('toggles the warnings-only filter from the heading button with the right mouse button', async () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: '已启用 MOD',
+        active: true,
+        mods: [{
+          ...duplicateMod,
+          warnings: [{ code: 'outdated_mod', message: '需要检查兼容性' }],
+        }],
+        warningCount: 1,
+        warningsOnly: true,
+      },
+    })
+
+    const warningButton = wrapper.get('[data-testid="panel-warning-button"]')
+    expect(warningButton.classes()).toContain('active')
+    expect(warningButton.attributes('aria-pressed')).toBe('true')
+    expect(warningButton.attributes('title')).toContain('右键只显示有问题的 MOD')
+    await warningButton.trigger('contextmenu')
+    expect(wrapper.emitted('toggle-warnings-only')).toHaveLength(1)
+    expect(wrapper.emitted('show-warnings')).toBeUndefined()
+  })
+
+  it('keeps the warning entry out of the inactive-list heading even when that list has warnings', () => {
+    const wrapper = mount(ModList, {
+      props: {
+        title: '未启用 MOD',
+        active: false,
+        mods: [{
+          ...duplicateMod,
+          warnings: [{ code: 'workshop_update_available', message: '有新更新' }],
+        }],
+        warningCount: 1,
+      },
+    })
+
+    expect(wrapper.find('[data-testid="panel-warning-button"]').exists()).toBe(false)
+  })
+
   it('drags selected inactive mods together in their temporary order', async () => {
     const mods = ['b', 'c', 'd', 'e'].map(id => ({
       ...duplicateMod,

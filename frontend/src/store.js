@@ -78,7 +78,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.0.6',
+    appVersion: '1.0.7',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -114,6 +114,7 @@ export const useAppStore = defineStore('app', {
     collectionImportSync: null,
     warnings: [],
     ignoredScanWarningCodes: [],
+    warningsOnly: false,
     gameUpdatedAt: 0,
     missingEnabledIds: [],
     runtime: { running: false, mod_revision: 0 },
@@ -248,19 +249,32 @@ export const useAppStore = defineStore('app', {
         .map(mod => mod.id)
     },
     activeMods() {
-      if (this.activeSearchHighlightActive) return this.activeDisplayMods
-      return this.activeDisplayMods.filter(mod => (
+      let mods = this.activeDisplayMods
+      if (this.activeSearchHighlightActive) return mods
+      mods = mods.filter(mod => (
         matchesSearchTokens(mod, this.activeSearchTokens, this.activeSearchLogic, this.modTypeMap)
       ))
+      if (this.warningsOnly) {
+        mods = mods.filter(mod => (mod.warnings || []).length > 0)
+      }
+      return mods
     },
     inactiveMods() {
-      if (this.inactiveSearchHighlightActive) return this.inactiveDisplayMods
-      return this.inactiveDisplayMods.filter(mod => (
+      let mods = this.inactiveDisplayMods
+      if (this.inactiveSearchHighlightActive) return mods
+      mods = mods.filter(mod => (
         matchesSearchTokens(mod, this.inactiveSearchTokens, this.inactiveSearchLogic, this.modTypeMap)
       ))
+      if (this.warningsOnly) {
+        mods = mods.filter(mod => (mod.warnings || []).some(warning => warning?.code !== 'missing_dependency'))
+      }
+      return mods
     },
   },
   actions: {
+    toggleWarningsOnly() {
+      this.warningsOnly = !this.warningsOnly
+    },
     listUndoHistoryKey(playsetId = this.currentPlaysetId) {
       const gameId = String(this.settings?.selected_game || 'warhammer3')
       return playsetId ? `${gameId}:${playsetId}` : ''

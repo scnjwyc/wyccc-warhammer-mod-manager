@@ -295,11 +295,14 @@ const entries = {
   'warnings.none': ['当前没有未忽略的问题', 'There are no unignored issues', '무시되지 않은 문제가 없습니다', 'Нет проблем, не добавленных в игнорирование', '未無視の問題はありません'],
   'warnings.genericScan': ['扫描过程中出现提示', 'A notice occurred while scanning', '검색 중 알림이 발생했습니다', 'Во время сканирования появилось сообщение', 'スキャン中に通知が発生しました'],
   'warnings.subscribeEnableDependencies': ['订阅并启用缺失依赖', 'Subscribe and enable missing dependencies', '누락된 종속성 구독 및 활성화', 'Подписать и включить недостающие зависимости', '不足している依存関係を購読して有効化'],
+  'warnings.update': ['更新', 'Update', '업데이트', 'Обновить', '更新'],
+  'warnings.updateAll': ['全部更新', 'Update all', '모두 업데이트', 'Обновить все', 'すべて更新'],
   'warnings.workshopDependencyTitle': ['工坊依赖状态', 'Workshop dependency status', '창작마당 종속성 상태', 'Состояние зависимостей Мастерской', 'ワークショップ依存関係の状態'],
   'warnings.workshopDependencyMessage': ['Steam 暂时无法读取部分工坊依赖，已使用已有缓存；缺失依赖结果可能不是最新状态', 'Steam cannot currently read some Workshop dependencies, so cached data is being used; missing-dependency results may not be current.', 'Steam에서 일부 창작마당 종속성을 현재 읽을 수 없어 기존 캐시를 사용합니다. 누락 종속성 결과가 최신이 아닐 수 있습니다.', 'Steam временно не может прочитать часть зависимостей Мастерской, поэтому используются данные из кеша; результаты проверки могут быть неактуальны.', 'Steam が一部のワークショップ依存関係を一時的に取得できないため、既存のキャッシュを使用しています。依存関係不足の結果は最新でない可能性があります。'],
   'warnings.outdatedMessage': ['该 MOD 在游戏本体更新后尚未更新，不代表该 MOD 无法使用', 'This MOD has not been updated since the game was updated; this does not mean the MOD is unusable.', '이 MOD는 게임 본체 업데이트 후 갱신되지 않았지만, 사용할 수 없다는 뜻은 아닙니다.', 'Этот MOD не обновлялся после обновления игры, но это не означает, что его нельзя использовать.', 'この MOD はゲーム本体の更新後に更新されていませんが、使用できないという意味ではありません。'],
   'warnings.workshopUpdateMessage': ['Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新', 'Steam Workshop reports that this MOD has a newer update available; check the Workshop to update it.', 'Steam 창작마당에 이 MOD의 새 업데이트가 있습니다. 창작마당에서 확인하고 업데이트하세요.', 'Steam Workshop сообщает о доступном обновлении этого MOD; проверьте и обновите его в Мастерской.', 'Steam ワークショップにこの MOD の新しい更新があります。ワークショップで確認して更新してください。'],
   'warnings.missingMessage': ['缺少依赖：{names}', 'Missing dependencies: {names}', '누락된 종속성: {names}', 'Отсутствуют зависимости: {names}', '不足している依存関係：{names}'],
+  'warnings.buttonHelp': ['左键查看警告详情；右键只显示有问题的 MOD', 'Left-click to view warning details; right-click to show only problematic MODs', '왼쪽 클릭: 경고 상세 보기 / 오른쪽 클릭: 문제 있는 MOD만 표시', 'ЛКМ — подробности предупреждений; ПКМ — показывать только MOD с проблемами', '左クリック：警告の詳細を表示／右クリック：問題のあるMODのみ表示'],
 
   'update.unknownSize': ['未知大小', 'Unknown size', '알 수 없는 크기', 'Неизвестный размер', 'サイズ不明'],
   'update.typeFeature': ['新增', 'Added', '추가', 'Добавлено', '追加'],
@@ -571,6 +574,8 @@ const entries = {
   'unitData.meleeAttackSpeed': ['近战攻速', 'Melee attack speed', '근접 공격 속도', 'Скорость атаки в ближнем бою', '近接攻撃速度'],
   'unitData.meleeBonusVCavalry': ['近战对抗骑兵加成', 'Melee bonus vs cavalry', '근접 대기병 보너스', 'Бонус ближнего боя против кавалерии', '近接対騎兵ボーナス'],
   'unitData.meleeBonusVInfantry': ['近战对抗步兵加成', 'Melee bonus vs infantry', '근접 대보병 보너스', 'Бонус ближнего боя против пехоты', '近接対歩兵ボーナス'],
+  'unitData.meleeBonusVInfantryWh3': ['反步兵加成', 'Melee bonus vs infantry', '근접 대보병 보너스', 'Бонус ближнего боя против пехоты', '近接対歩兵ボーナス'],
+  'unitData.meleeBonusVLarge': ['反大型加成', 'Melee bonus vs large', '근접 대형 보너스', 'Бонус ближнего боя против крупных', '近接対大型ボーナス'],
   'unitData.missileDamage': ['远程基础伤害', 'Missile damage', '원거리 기본 피해', 'Урон стрельбы', '射撃ダメージ'],
   'unitData.missileApDamage': ['远程破甲伤害', 'Missile AP damage', '원거리 관통 피해', 'Бронебойный урон стрельбы', '射撃APダメージ'],
   'unitData.missileBonusVCavalry': ['远程对抗骑兵加成', 'Missile bonus vs cavalry', '원거리 대기병 보너스', 'Бонус снаряда против кавалерии', '遠隔対騎兵ボーナス'],
@@ -619,6 +624,8 @@ const entries = {
   'unitData.help.meleeAttackSpeed': ['近战攻速；三国读取 melee_weapons_tables.melee_attack_interval（数值越小，攻击越快），战锤读取单位的攻击间隔修正。', 'Melee attack speed; Three Kingdoms uses melee_weapons_tables.melee_attack_interval (lower is faster), while Warhammer uses the unit attack-interval modifier.', '근접 공격 속도; Three Kingdoms는 melee_weapons_tables.melee_attack_interval(값이 낮을수록 빠름)을 사용하고, Warhammer는 유닛 공격 간격 보정을 사용합니다.', 'Скорость атаки в ближнем бою: Three Kingdoms использует melee_weapons_tables.melee_attack_interval (меньше — быстрее), а Warhammer — модификатор интервала отряда.', '近接攻撃速度：Three Kingdoms は melee_weapons_tables.melee_attack_interval（小さいほど速い）、Warhammer はユニットの攻撃間隔補正を使用します。'],
   'unitData.help.meleeBonusVCavalry': ['近战对抗骑兵加成，melee_weapons_tables.bonus_v_cavalry；修改时会复制武器。', 'Melee bonus vs cavalry, melee_weapons_tables.bonus_v_cavalry; the weapon is cloned for this unit.', '근접 대기병 보너스, melee_weapons_tables.bonus_v_cavalry; 이 유닛용 무기를 복제합니다.', 'Бонус ближнего боя против кавалерии, melee_weapons_tables.bonus_v_cavalry; оружие копируется для этого отряда.', '近接対騎兵ボーナス、melee_weapons_tables.bonus_v_cavalry。ユニット用に武器を複製します。'],
   'unitData.help.meleeBonusVInfantry': ['近战对抗步兵加成，melee_weapons_tables.bonus_v_infantry；修改时会复制武器。', 'Melee bonus vs infantry, melee_weapons_tables.bonus_v_infantry; the weapon is cloned for this unit.', '근접 대보병 보너스, melee_weapons_tables.bonus_v_infantry; 이 유닛용 무기를 복제합니다.', 'Бонус ближнего боя против пехоты, melee_weapons_tables.bonus_v_infantry; оружие копируется для этого отряда.', '近接対歩兵ボーナス、melee_weapons_tables.bonus_v_infantry。ユニット用に武器を複製します。'],
+  'unitData.help.meleeBonusVInfantryWh3': ['反步兵加成，melee_weapons_tables.bonus_v_infantry。', 'Melee bonus vs infantry, melee_weapons_tables.bonus_v_infantry.', '근접 대보병 보너스, melee_weapons_tables.bonus_v_infantry.', 'Бонус ближнего боя против пехоты, melee_weapons_tables.bonus_v_infantry.', '近接対歩兵ボーナス、melee_weapons_tables.bonus_v_infantry。'],
+  'unitData.help.meleeBonusVLarge': ['反大型加成，melee_weapons_tables.bonus_v_large。', 'Melee bonus vs large, melee_weapons_tables.bonus_v_large.', '근접 대형 보너스, melee_weapons_tables.bonus_v_large.', 'Бонус ближнего боя против крупных, melee_weapons_tables.bonus_v_large.', '近接対大型ボーナス、melee_weapons_tables.bonus_v_large。'],
   'unitData.help.missileDamage': ['远程基础伤害，projectiles_tables.damage（经 missile_weapons 链）。', 'Missile damage, projectiles_tables.damage (via missile_weapons).', '원거리 기본 피해, projectiles_tables.damage(missile_weapons 경유).', 'Урон стрельбы, projectiles_tables.damage (через missile_weapons).', '射撃ダメージ、projectiles_tables.damage（missile_weapons経由）。'],
   'unitData.help.missileApDamage': ['远程破甲伤害，projectiles_tables.ap_damage。', 'Missile AP damage, projectiles_tables.ap_damage.', '원거리 관통 피해, projectiles_tables.ap_damage.', 'Бронебойный урон стрельбы, projectiles_tables.ap_damage.', '射撃APダメージ、projectiles_tables.ap_damage。'],
   'unitData.help.missileBonusVCavalry': ['远程对抗骑兵加成，projectiles_tables.bonus_v_cavalry；修改时会复制弹丸。', 'Missile bonus vs cavalry, projectiles_tables.bonus_v_cavalry; the projectile is cloned for this unit.', '원거리 대기병 보너스, projectiles_tables.bonus_v_cavalry; 이 유닛용 투사체를 복제합니다.', 'Бонус снаряда против кавалерии, projectiles_tables.bonus_v_cavalry; снаряд копируется для этого отряда.', '遠隔対騎兵ボーナス、projectiles_tables.bonus_v_cavalry。ユニット用に投射物を複製します。'],
@@ -743,6 +750,7 @@ const entries = {
   'toast.playsetUpdated': ['已更新当前播放集“{name}”', 'Updated current playset “{name}”', '현재 플레이 세트 “{name}” 업데이트됨', 'Текущий набор «{name}» обновлён', '現在のプレイセット「{name}」を更新しました'],
   'toast.unsubscribeAccepted': ['Steam 已接受取消订阅请求', 'Steam accepted the unsubscribe request', 'Steam에서 구독 취소 요청을 수락함', 'Steam принял запрос на отмену подписки', 'Steam が購読解除要求を受け付けました'],
   'toast.forceUpdateCompleted': ['Steam 创意工坊 MOD 更新已完成', 'Steam Workshop MOD update completed', 'Steam 창작마당 MOD 업데이트 완료', 'Обновление MOD из Мастерской Steam завершено', 'Steam ワークショップ MOD の更新が完了しました'],
+  'toast.warningUpdateAllCompleted': ['全部更新完成：{completed} 个成功，{failed} 个失败', 'Update all completed: {completed} succeeded, {failed} failed', '전체 업데이트 완료: {completed}개 성공, {failed}개 실패', 'Обновление завершено: успешно {completed}, не удалось {failed}', 'すべて更新完了：{completed}件成功、{failed}件失敗'],
   'toast.publishCopyFailed': ['读取创意工坊多语言简介失败', 'Failed to read multilingual Workshop content', '창작마당 다국어 콘텐츠 읽기 실패', 'Не удалось получить многоязычное описание Мастерской', 'ワークショップの多言語内容を読み込めませんでした'],
   'toast.agreementNeeded': ['；还需在 Steam 创意工坊接受创作者协议', '; the Steam Workshop contributor agreement must also be accepted', '; Steam 창작마당 기여자 계약에 동의해야 함', '; также требуется принять соглашение автора Мастерской Steam', '；Steam ワークショップの投稿者契約への同意も必要です'],
   'toast.workshopUploaded': ['工坊项目已创建并上传（ID {id}）{agreement}', 'Workshop item created and uploaded (ID {id}){agreement}', '창작마당 항목 생성 및 업로드 완료(ID {id}){agreement}', 'Объект Мастерской создан и загружен (ID {id}){agreement}', 'ワークショップ項目を作成してアップロードしました（ID {id}）{agreement}'],
@@ -1031,11 +1039,14 @@ const spanishEntries = {
   "warnings.none": "No hay problemas no ignorados",
   "warnings.genericScan": "Se produjo un aviso durante el escaneo.",
   "warnings.subscribeEnableDependencies": "Suscribirse y activar las dependencias faltantes",
+  "warnings.update": "Actualizar",
+  "warnings.updateAll": "Actualizar todo",
   "warnings.workshopDependencyTitle": "Estado de dependencia del taller",
   "warnings.workshopDependencyMessage": "Steam actualmente no puede leer algunas dependencias de Workshop, por lo que se están utilizando datos almacenados en caché; Es posible que los resultados de dependencias faltantes no estén actualizados.",
   "warnings.outdatedMessage": "Este MOD no se ha actualizado desde que se actualizó el juego; Esto no significa que MOD sea inutilizable.",
   "warnings.workshopUpdateMessage": "Steam Workshop informa de que hay una actualización más reciente para este MOD; compruébala y actualízala en el Taller.",
   "warnings.missingMessage": "Dependencias faltantes: {names}",
+  "warnings.buttonHelp": "Clic izquierdo: ver los detalles de las advertencias; clic derecho: mostrar solo los MOD con problemas",
   "update.unknownSize": "Tamaño desconocido",
   "update.typeFeature": "Añadido",
   "update.typeFix": "Corregido",
@@ -1267,6 +1278,8 @@ const spanishEntries = {
   "unitData.meleeAttackSpeed": "Vel. ataque C.C.",
   "unitData.meleeBonusVCavalry": "Bon. C.C. vs caballería",
   "unitData.meleeBonusVInfantry": "Bon. C.C. vs infantería",
+  "unitData.meleeBonusVInfantryWh3": "Bon. C.C. vs infantería",
+  "unitData.meleeBonusVLarge": "Bon. C.C. vs grandes",
   "unitData.missileDamage": "Daño proyectil",
   "unitData.missileApDamage": "Daño AP proyectil",
   "unitData.missileBonusVCavalry": "Bon. proyectil vs caballería",
@@ -1316,6 +1329,8 @@ const spanishEntries = {
   "unitData.help.meleeAttackSpeed": "Velocidad de ataque cuerpo a cuerpo, land_units_tables.melee_attack_interval_reduction_percentage; un porcentaje mayor reduce el intervalo de ataque.",
   "unitData.help.meleeBonusVCavalry": "Bonificación cuerpo a cuerpo contra caballería, melee_weapons_tables.bonus_v_cavalry; se clona el arma para esta unidad.",
   "unitData.help.meleeBonusVInfantry": "Bonificación cuerpo a cuerpo contra infantería, melee_weapons_tables.bonus_v_infantry; se clona el arma para esta unidad.",
+  "unitData.help.meleeBonusVInfantryWh3": "Bonificación cuerpo a cuerpo contra infantería, melee_weapons_tables.bonus_v_infantry.",
+  "unitData.help.meleeBonusVLarge": "Bonificación cuerpo a cuerpo contra grandes, melee_weapons_tables.bonus_v_large.",
   "unitData.help.missileDamage": "Daño de proyectil, projectiles_tables.damage (vía missile_weapons).",
   "unitData.help.missileApDamage": "Daño AP de proyectil, projectiles_tables.ap_damage.",
   "unitData.help.missileBonusVCavalry": "Bonificación de proyectil contra caballería, projectiles_tables.bonus_v_cavalry; se clona el proyectil para esta unidad.",
@@ -1435,6 +1450,7 @@ const spanishEntries = {
   "toast.playsetUpdated": "Conjunto de juego actual actualizado “{name}”",
   "toast.unsubscribeAccepted": "Steam aceptó la solicitud de baja",
   "toast.forceUpdateCompleted": "Steam Taller MOD actualización completada",
+  "toast.warningUpdateAllCompleted": "Actualización completa: {completed} correctas, {failed} fallidas",
   "toast.publishCopyFailed": "No se pudo leer el contenido del taller multilingüe",
   "toast.agreementNeeded": "; También se debe aceptar el Steam Acuerdo de colaborador del taller.",
   "toast.workshopUploaded": "Elemento de taller creado y subido (ID {id}){agreement}",
@@ -1812,7 +1828,7 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   if (!value) return t(fallbackKey)
   if (!hanPattern.test(value)) {
     if (language === 'en-US') return value
-    return t(fallbackKey)
+    return `${t(fallbackKey)}：${value}`
   }
   if (language === 'zh-CN') return value
   if (value.startsWith('缺少依赖：')) {
