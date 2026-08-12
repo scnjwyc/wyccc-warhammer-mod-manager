@@ -30,6 +30,8 @@ const sampleUnits = [
     melee_defence: 32,
     missile_block_chance: 0,
     movement_speed: 0,
+    body_size: 'small',
+    mass: 100,
     melee_attack_speed: 0,
     ammo: 0,
     missile_resistance: 0,
@@ -74,6 +76,8 @@ const sampleUnits = [
     melee_defence: 25,
     missile_block_chance: 0,
     movement_speed: 0,
+    body_size: 'large',
+    mass: 1000,
     melee_attack_speed: 0,
     ammo: 0,
     missile_resistance: 0,
@@ -144,16 +148,20 @@ describe('unit data modification modal', () => {
       .toBe(headers.indexOf('unit-data-header-fire_resistance') - 1)
   })
 
-  it('shows movement speed after leadership for Warhammer', async () => {
+  it('shows body size and mass in the former movement-speed position for Warhammer', async () => {
     const wrapper = mount(UnitDataModificationModal, { props: { open: false, gameId: 'warhammer3' } })
     await wrapper.setProps({ open: true })
     await new Promise(resolve => setTimeout(resolve, 0))
     await wrapper.vm.$nextTick()
 
     const headers = wrapper.findAll('th').map(header => header.attributes('data-testid'))
-    expect(headers).toContain('unit-data-header-movement_speed')
-    expect(headers.indexOf('unit-data-header-movement_speed'))
+    expect(headers).not.toContain('unit-data-header-movement_speed')
+    expect(headers.indexOf('unit-data-header-body_size'))
       .toBe(headers.indexOf('unit-data-header-morale') + 1)
+    expect(headers.indexOf('unit-data-header-mass'))
+      .toBe(headers.indexOf('unit-data-header-body_size') + 1)
+    expect(headers.indexOf('unit-data-header-armour'))
+      .toBe(headers.indexOf('unit-data-header-mass') + 1)
   })
 
   it('uses Three Kingdoms labels and fields without resistance or reload columns', async () => {
@@ -173,6 +181,8 @@ describe('unit data modification modal', () => {
       .toBe(headers.indexOf('unit-data-header-armour') - 1)
     expect(headers).toContain('unit-data-header-missile_block_chance')
     expect(headers).toContain('unit-data-header-movement_speed')
+    expect(headers).not.toContain('unit-data-header-body_size')
+    expect(headers).not.toContain('unit-data-header-mass')
     expect(headers).toContain('unit-data-header-melee_attack_speed')
     expect(headers).toContain('unit-data-header-ranged_attack_speed')
     expect(headers).toContain('unit-data-header-melee_bonus_v_cavalry')
@@ -202,9 +212,9 @@ describe('unit data modification modal', () => {
     expect(input.attributes('step')).toBe('0.1')
   })
 
-  it('rounds Warhammer movement speed to one decimal place', async () => {
+  it('uses a three-value body-size dropdown and saves mass for Warhammer', async () => {
     vi.mocked(invoke).mockResolvedValue({
-      units: [{ ...sampleUnits[0], movement_speed: 35.26 }],
+      units: [{ ...sampleUnits[0], body_size: 'small', mass: 125 }],
       stats: { unit_count: 1, edited_unit_count: 0 },
     })
     const wrapper = mount(UnitDataModificationModal, {
@@ -214,9 +224,20 @@ describe('unit data modification modal', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     await wrapper.vm.$nextTick()
 
-    const input = wrapper.get('[data-testid="unit-movement_speed-inf_swordsmen"]')
-    expect(input.element.value).toBe('35.3')
-    expect(input.attributes('step')).toBe('0.1')
+    const size = wrapper.get('[data-testid="unit-body_size-inf_swordsmen"]')
+    expect(size.element.value).toBe('small')
+    expect(size.findAll('option').map(option => option.element.value)).toEqual([
+      'small', 'medium', 'large',
+    ])
+    const mass = wrapper.get('[data-testid="unit-mass-inf_swordsmen"]')
+    expect(mass.element.value).toBe('125')
+
+    await size.setValue('large')
+    await mass.setValue(250.5)
+    await wrapper.get('[data-testid="unit-data-save"]').trigger('click')
+    expect(wrapper.emitted('save')[0][0]).toEqual({
+      inf_swordsmen: { body_size: 'large', mass: 250.5 },
+    })
   })
 
   it('rounds Three Kingdoms melee attack speed to one decimal place', async () => {
@@ -348,7 +369,7 @@ describe('unit data modification modal', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     await wrapper.vm.$nextTick()
 
-    const select = wrapper.find('.unit-data-select')
+    const select = wrapper.get('[data-testid="unit-armour-inf_swordsmen"]')
     expect(select.element.value).toBe('10')
     await select.setValue('100')
     await wrapper.get('[data-testid="unit-data-save"]').trigger('click')

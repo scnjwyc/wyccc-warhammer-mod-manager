@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.8",
+        "date": "2026-08-12",
+        "entries": (
+            (
+                "v108_adjusted_title",
+                (("improvement", "v108_unit_data_physical_fields"),),
+            ),
+        ),
+    },
+    {
         "version": "1.0.7",
         "date": "2026-08-10",
         "entries": (
@@ -546,6 +556,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v108_adjusted_title": "调整",
+        "v108_unit_data_physical_fields": "单位数据修改，移除不稳定的移速修改，添加体型与质量修改",
     "v107_added_title": "新增",
     "v107_update_outdated_mods": "警告界面可以更新过期MOD，也可以一键更新所有MOD",
     "v107_warning_button_filter": "警告按钮现在可以右键让MOD列表只显示存在问题的MOD",
@@ -750,6 +762,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v108_adjusted_title": "Adjusted",
+        "v108_unit_data_physical_fields": "Unit Data Modification removed the unstable movement-speed edit and added body-size and mass edits.",
     "v107_added_title": "Added",
     "v107_update_outdated_mods": "The warning window can now update outdated MODs, and update all MODs with one click.",
     "v107_warning_button_filter": "Right-clicking the warning button now filters the MOD lists to only show problematic MODs.",
@@ -954,6 +968,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v108_adjusted_title": "조정",
+        "v108_unit_data_physical_fields": "유닛 데이터 변경에서 불안정한 이동 속도 수정을 제거하고 크기와 질량 수정을 추가했습니다.",
     "v107_added_title": "추가",
     "v107_update_outdated_mods": "경고 창에서 오래된 MOD를 업데이트하고 모든 MOD를 한 번에 업데이트할 수 있습니다.",
     "v107_warning_button_filter": "이제 경고 버튼을 마우스 오른쪽 버튼으로 클릭하면 문제가 있는 MOD만 목록에 표시됩니다.",
@@ -1158,6 +1174,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v108_adjusted_title": "Изменено",
+        "v108_unit_data_physical_fields": "В изменении данных отрядов удалено нестабильное изменение скорости передвижения и добавлены изменения размера и массы.",
     "v107_added_title": "Добавлено",
     "v107_update_outdated_mods": "В окне предупреждений можно обновить устаревшие MOD, а также обновить все MOD одной кнопкой.",
     "v107_warning_button_filter": "Теперь правый клик по кнопке предупреждений показывает в списках только проблемные MOD.",
@@ -1362,6 +1380,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v108_adjusted_title": "調整",
+        "v108_unit_data_physical_fields": "ユニットデータ変更から不安定な移動速度の変更を削除し、体格と質量の変更を追加しました。",
     "v107_added_title": "追加",
     "v107_update_outdated_mods": "警告画面で期限切れの MOD を更新でき、すべての MOD をワンクリックで更新できるようになりました。",
     "v107_warning_button_filter": "警告ボタンを右クリックすると、問題のある MOD だけが一覧に表示されるようになりました。",
@@ -1566,6 +1586,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v108_adjusted_title": "Ajustado",
+        "v108_unit_data_physical_fields": "La modificación de datos de unidades eliminó el cambio inestable de velocidad de movimiento y añadió cambios de tamaño corporal y masa.",
     "v107_added_title": "Añadido",
     "v107_update_outdated_mods": "La ventana de advertencias ahora puede actualizar MODs desactualizados y actualizar todos los MODs con un solo clic.",
     "v107_warning_button_filter": "Al hacer clic derecho en el botón de advertencias, las listas de MOD solo muestran los MOD con problemas.",

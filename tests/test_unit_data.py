@@ -314,12 +314,12 @@ def _fixture_source() -> DbSource:
                     "battle_entities_tables",
                     39,
                     [
-                        {"key": "man_swordsmen", "hit_points": 60, "run_speed": 2.8},
-                        {"key": "man_chariot_crew", "hit_points": 55, "run_speed": 0.0},
-                        {"key": "mount_chariot_entity", "hit_points": 55, "run_speed": 6.4},
-                        {"key": "art_chariot_entity", "hit_points": 55, "run_speed": 6.4},
-                        {"key": "man_ballista_crew", "hit_points": 50, "run_speed": 3.0},
-                        {"key": "engine_ballista_entity", "hit_points": 100, "run_speed": 2.0},
+                        {"key": "man_swordsmen", "hit_points": 60, "run_speed": 2.8, "size": "small", "mass": 100.0},
+                        {"key": "man_chariot_crew", "hit_points": 55, "run_speed": 0.0, "size": "small", "mass": 100.0},
+                        {"key": "mount_chariot_entity", "hit_points": 55, "run_speed": 6.4, "size": "large", "mass": 1000.0},
+                        {"key": "art_chariot_entity", "hit_points": 55, "run_speed": 6.4, "size": "large", "mass": 1000.0},
+                        {"key": "man_ballista_crew", "hit_points": 50, "run_speed": 3.0, "size": "small", "mass": 100.0},
+                        {"key": "engine_ballista_entity", "hit_points": 100, "run_speed": 2.0, "size": "large", "mass": 2000.0},
                     ],
                 ),
             ),
@@ -609,15 +609,18 @@ class UnitDataSnapshotTests(unittest.TestCase):
         self.assertEqual(rows["veh_chariot"]["model_count"], 12)
         self.assertEqual(rows["art_ballista"]["model_count"], 4)
 
-    def test_warhammer_movement_uses_entity_speed_times_ten(self) -> None:
+    def test_warhammer_physical_values_resolve_from_unit_entities(self) -> None:
         snapshot = build_unit_table_snapshot([_fixture_source()], {})
         rows = {row["key"]: row for row in snapshot["units"]}
-        self.assertAlmostEqual(rows["inf_swordsmen"]["movement_speed"], 28.0, places=5)
-        self.assertAlmostEqual(rows["veh_chariot"]["movement_speed"], 64.0, places=5)
-        # The engine speed is intentionally different from the crew speed;
-        # war machines must resolve land_units.engine rather than man_entity.
-        self.assertAlmostEqual(rows["art_ballista"]["movement_speed"], 20.0, places=5)
-        self.assertFalse(rows["art_ballista"]["movement_speed_locked"])
+        self.assertEqual(rows["inf_swordsmen"]["body_size"], "small")
+        self.assertEqual(rows["inf_swordsmen"]["mass"], 100.0)
+        self.assertEqual(rows["veh_chariot"]["body_size"], "large")
+        self.assertEqual(rows["veh_chariot"]["mass"], 1000.0)
+        # War machines must resolve land_units.engine rather than the crew.
+        self.assertEqual(rows["art_ballista"]["body_size"], "large")
+        self.assertEqual(rows["art_ballista"]["mass"], 2000.0)
+        self.assertFalse(rows["art_ballista"]["body_size_locked"])
+        self.assertFalse(rows["art_ballista"]["mass_locked"])
 
     def test_engine_artillery_reads_missile_and_explosion_damage(self) -> None:
         snapshot = build_unit_table_snapshot([_engine_artillery_source()], {})
@@ -631,13 +634,25 @@ class UnitDataSnapshotTests(unittest.TestCase):
         self.assertEqual(cannon["range"], 500)
         self.assertEqual(cannon["ammo"], 8)
 
-    def test_warhammer_movement_edit_is_already_a_game_display_value(self) -> None:
+    def test_warhammer_body_size_and_mass_edits_overlay_snapshot_values(self) -> None:
+        snapshot = build_unit_table_snapshot(
+            [_fixture_source()],
+            {"inf_swordsmen": {"body_size": "large", "mass": 250.5}},
+        )
+        row = next(item for item in snapshot["units"] if item["key"] == "inf_swordsmen")
+        self.assertEqual(row["body_size"], "large")
+        self.assertEqual(row["mass"], 250.5)
+        self.assertEqual(row["original_values"]["body_size"], "small")
+        self.assertEqual(row["original_values"]["mass"], 100.0)
+
+    def test_legacy_warhammer_movement_edit_is_ignored_in_snapshot(self) -> None:
         snapshot = build_unit_table_snapshot(
             [_fixture_source()],
             {"inf_swordsmen": {"movement_speed": 33.3}},
         )
         row = next(item for item in snapshot["units"] if item["key"] == "inf_swordsmen")
-        self.assertEqual(row["movement_speed"], 33.3)
+        self.assertEqual(row["edited"], {})
+        self.assertEqual(snapshot["stats"]["edited_unit_count"], 0)
 
     def test_display_uses_base_values_without_game_data_multipliers(self) -> None:
         snapshot = build_unit_table_snapshot(
@@ -939,26 +954,30 @@ class UnitDataPatchTests(unittest.TestCase):
         # it by the multiplier on top.
         self.assertEqual(main["inf_swordsmen"]["num_men"], 100)
 
-    def test_movement_edit_clones_entity_and_writes_internal_tenth(self) -> None:
+    def test_body_size_and_mass_edit_clone_entity_without_changing_speed(self) -> None:
         source = _fixture_source()
         result = build_unit_data_entries(
             [source],
             {},
-            {"inf_swordsmen": {"movement_speed": 35.0}},
+            {"inf_swordsmen": {"body_size": "large", "mass": 250.5}},
         )
         land = _rows_by_key(result, "land_units_tables")
         entities = _rows_by_key(result, "battle_entities_tables")
         clone_keys = [key for key in entities if key.startswith("wyccc_wh3_battle_entity_")]
         self.assertEqual(len(clone_keys), 1)
         self.assertEqual(land["land_inf_swordsmen"]["man_entity"], clone_keys[0])
-        self.assertAlmostEqual(entities[clone_keys[0]]["run_speed"], 3.5, places=5)
+        self.assertEqual(entities[clone_keys[0]]["size"], "large")
+        self.assertAlmostEqual(entities[clone_keys[0]]["mass"], 250.5, places=5)
+        self.assertAlmostEqual(entities[clone_keys[0]]["run_speed"], 2.8, places=5)
+        self.assertEqual(entities["man_swordsmen"]["size"], "small")
+        self.assertAlmostEqual(entities["man_swordsmen"]["mass"], 100.0, places=5)
         self.assertAlmostEqual(entities["man_swordsmen"]["run_speed"], 2.8, places=5)
 
-    def test_war_machine_movement_edit_clones_engine_not_crew_entity(self) -> None:
+    def test_war_machine_physical_edit_clones_engine_not_crew_entity(self) -> None:
         result = build_unit_data_entries(
             [_fixture_source()],
             {},
-            {"art_ballista": {"movement_speed": 27.0}},
+            {"art_ballista": {"body_size": "medium", "mass": 1500.0}},
         )
         land = _rows_by_key(result, "land_units_tables")
         engines = _rows_by_key(result, "battlefield_engines_tables")
@@ -978,14 +997,17 @@ class UnitDataPatchTests(unittest.TestCase):
             engines[engine_clone_keys[0]]["battle_entity"], entity_clone_keys[0]
         )
         self.assertEqual(land["land_art_ballista"]["man_entity"], "man_ballista_crew")
-        self.assertAlmostEqual(entities[entity_clone_keys[0]]["run_speed"], 2.7, places=5)
+        self.assertEqual(entities[entity_clone_keys[0]]["size"], "medium")
+        self.assertAlmostEqual(entities[entity_clone_keys[0]]["mass"], 1500.0, places=5)
+        self.assertAlmostEqual(entities[entity_clone_keys[0]]["run_speed"], 2.0, places=5)
+        self.assertEqual(entities["engine_ballista_entity"]["size"], "large")
         self.assertAlmostEqual(entities["man_ballista_crew"]["run_speed"], 3.0, places=5)
 
-    def test_chariot_movement_uses_mount_and_articulated_entities(self) -> None:
+    def test_chariot_physical_edit_clones_mount_and_articulated_entities(self) -> None:
         result = build_unit_data_entries(
             [_fixture_source()],
             {},
-            {"veh_chariot": {"movement_speed": 72.0}},
+            {"veh_chariot": {"body_size": "medium", "mass": 750.0}},
         )
         land = _rows_by_key(result, "land_units_tables")
         mounts = _rows_by_key(result, "mounts_tables")
@@ -1006,7 +1028,18 @@ class UnitDataPatchTests(unittest.TestCase):
         self.assertIn(mounts[mount_clone_key]["entity"], entity_clone_keys)
         self.assertIn(articulated[articulated_clone_key]["articulated_entity"], entity_clone_keys)
         for entity_key in entity_clone_keys:
-            self.assertAlmostEqual(entities[entity_key]["run_speed"], 7.2, places=5)
+            self.assertEqual(entities[entity_key]["size"], "medium")
+            self.assertAlmostEqual(entities[entity_key]["mass"], 750.0, places=5)
+            self.assertAlmostEqual(entities[entity_key]["run_speed"], 6.4, places=5)
+
+    def test_legacy_warhammer_movement_edit_produces_no_entries(self) -> None:
+        result = build_unit_data_entries(
+            [_fixture_source()],
+            {},
+            {"inf_swordsmen": {"movement_speed": 35.0}},
+        )
+        self.assertEqual(result.entries, ())
+        self.assertEqual(result.stats["edited_unit_count"], 0)
 
 
 class UnitDataHelpersTests(unittest.TestCase):
@@ -1019,6 +1052,15 @@ class UnitDataHelpersTests(unittest.TestCase):
             }
         )
         self.assertEqual(cleaned, {"unit_a": {"campaign_cap": 3, "enabled": False}})
+
+    def test_sanitize_edits_normalizes_body_size_to_supported_dropdown_values(self) -> None:
+        cleaned = _sanitize_edits(
+            {
+                "unit_a": {"body_size": "VERY_LARGE", "mass": 100.0},
+                "unit_b": {"body_size": "colossal"},
+            }
+        )
+        self.assertEqual(cleaned, {"unit_a": {"body_size": "large", "mass": 100.0}})
 
     def test_armour_key_rebuild_keeps_prefix_and_audio(self) -> None:
         from backend.game_data import _collect_effective_rows

@@ -52,6 +52,8 @@ EDITABLE_FIELDS = frozenset(
         "ward_save",
         "missile_block_chance",
         "movement_speed",
+        "body_size",
+        "mass",
         "melee_attack_speed",
         "ranged_attack_speed",
         "melee_damage",
@@ -70,6 +72,11 @@ EDITABLE_FIELDS = frozenset(
 )
 
 _ARMOUR_SUFFIX_RE = re.compile(r"^(?P<prefix>.*)_(?P<value>\d+)$")
+_BODY_SIZE_VALUES = frozenset({"small", "medium", "large"})
+_BODY_SIZE_ALIASES = {
+    "very_small": "small",
+    "very_large": "large",
+}
 
 
 @dataclass(frozen=True)
@@ -99,14 +106,27 @@ def _sanitize_edits(raw_edits: Mapping[str, Any] | None) -> dict[str, dict[str, 
     for unit_key, fields in raw_edits.items():
         if not isinstance(fields, Mapping):
             continue
-        cleaned = {
-            str(field): value
-            for field, value in fields.items()
-            if field in EDITABLE_FIELDS and value is not None and value != ""
-        }
+        cleaned: dict[str, Any] = {}
+        for raw_field, value in fields.items():
+            field = str(raw_field)
+            if field not in EDITABLE_FIELDS or value is None or value == "":
+                continue
+            if field == "body_size":
+                normalized_size = _normalize_body_size(value)
+                if not normalized_size:
+                    continue
+                cleaned[field] = normalized_size
+                continue
+            cleaned[field] = value
         if cleaned:
             normalized[str(unit_key)] = cleaned
     return normalized
+
+
+def _normalize_body_size(value: Any) -> str:
+    normalized = str(value or "").strip().casefold()
+    normalized = _BODY_SIZE_ALIASES.get(normalized, normalized)
+    return normalized if normalized in _BODY_SIZE_VALUES else ""
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -532,6 +552,8 @@ def _unit_join_tables(game_id: str | None) -> tuple[str, ...]:
 
 _THREE_KINGDOMS_HIDDEN_FIELDS = frozenset(
     {
+        "body_size",
+        "mass",
         "missile_resistance",
         "fire_resistance",
         "magic_resistance",
@@ -539,6 +561,28 @@ _THREE_KINGDOMS_HIDDEN_FIELDS = frozenset(
         "ward_save",
     }
 )
+_WARHAMMER_HIDDEN_FIELDS = frozenset({"movement_speed"})
+
+
+def _edits_for_game(
+    raw_edits: Mapping[str, Any] | None,
+    game_id: str | None,
+) -> dict[str, dict[str, Any]]:
+    """Return only the editor fields supported by the selected game."""
+    hidden_fields = (
+        _THREE_KINGDOMS_HIDDEN_FIELDS
+        if is_three_kingdoms_game(game_id)
+        else _WARHAMMER_HIDDEN_FIELDS
+    )
+    return {
+        unit_key: {
+            field: value
+            for field, value in fields.items()
+            if field not in hidden_fields
+        }
+        for unit_key, fields in _sanitize_edits(raw_edits).items()
+        if any(field not in hidden_fields for field in fields)
+    }
 
 _THREE_KINGDOMS_ENTITY_REFERENCE_TABLES = {
     "man": ("mens_tables", "battle_entity"),
@@ -715,20 +759,19 @@ def _three_kingdoms_movement_shape(
     }
 
 
-def _warhammer_movement_shape(
+def _warhammer_entity_shape(
     effective: Mapping[str, Mapping[str, Any]],
     land_values: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Resolve all WH3 battle entities that can constrain unit movement.
+    """Resolve all WH3 battle entities that represent a unit's physical body.
 
     ``land_units`` stores references to component records rather than always
     pointing directly at ``battle_entities``: mounts use ``mounts.entity``,
     engines use ``battlefield_engines.battle_entity``, and articulated
-    vehicles use ``land_unit_articulated_vehicles.articulated_entity``.
-    Chariots can have all three components and the slowest one is the actual
-    movement limit.  A plain unit with none of those components uses its
-    ``man_entity``.  Entity ``run_speed`` is stored at one tenth of the game
-    display value.
+    vehicles use ``land_unit_articulated_vehicles.articulated_entity``.  A
+    plain unit with none of those components uses its ``man_entity``.  The
+    same component chain is used for display and cloning, so size/mass edits
+    are isolated to one unit instead of changing an entity shared by MODs.
     """
     components: list[dict[str, Any]] = []
 
@@ -737,7 +780,7 @@ def _warhammer_movement_shape(
         if not entity_key:
             return
         entity = effective.get("battle_entities_tables", {}).get(entity_key)
-        if entity is None or "run_speed" not in entity.row.fields:
+        if entity is None:
             return
         components.append(
             {
@@ -769,7 +812,7 @@ def _warhammer_movement_shape(
             return
         entity_key = str(reference.row.values.get(entity_field) or "")
         entity = effective.get("battle_entities_tables", {}).get(entity_key)
-        if entity is None or "run_speed" not in entity.row.fields:
+        if entity is None:
             add_direct(role, land_field)
             return
         components.append(
@@ -806,17 +849,31 @@ def _warhammer_movement_shape(
     if not components:
         return {
             "components": (),
-            "movement_speed": 0.0,
-            "movement_speed_locked": True,
+            "body_size": "",
+            "body_size_locked": True,
+            "mass": 0.0,
+            "mass_locked": True,
         }
-    speeds = [
-        _clamp_float(component["entity"].row.values.get("run_speed"), minimum=0)
+    body_sizes = [
+        _normalize_body_size(component["entity"].row.values.get("size"))
         for component in components
     ]
+    masses = [
+        _clamp_float(component["entity"].row.values.get("mass"), minimum=0)
+        for component in components
+    ]
+    body_size_consistent = bool(body_sizes) and all(
+        value and value == body_sizes[0] for value in body_sizes
+    )
+    mass_consistent = bool(masses) and all(
+        math.isclose(value, masses[0], abs_tol=1e-6) for value in masses
+    )
     return {
         "components": tuple(components),
-        "movement_speed": min(speeds) * 10.0,
-        "movement_speed_locked": False,
+        "body_size": body_sizes[0] if body_size_consistent else "",
+        "body_size_locked": not body_size_consistent,
+        "mass": masses[0] if mass_consistent else 0.0,
+        "mass_locked": not mass_consistent,
     }
 
 
@@ -907,6 +964,12 @@ def _unit_edits_for(
             for field, value in fields.items()
             if field not in _THREE_KINGDOMS_HIDDEN_FIELDS
         }
+    else:
+        fields = {
+            field: value
+            for field, value in fields.items()
+            if field not in _WARHAMMER_HIDDEN_FIELDS
+        }
     return fields
 
 
@@ -939,9 +1002,9 @@ def build_unit_table_snapshot(
     all_candidates: dict[str, dict[str, list[Any]]] = {}
     unit_tables = set(_unit_join_tables(game_id)) | set(RACE_TABLES)
     if not is_three_kingdoms_game(game_id):
-        # WH3 movement is owned by a shared battle entity.  Keep that table
-        # out of the flattened editor row, but collect its effective rows so
-        # the entity can be resolved and cloned safely when speed is edited.
+        # WH3 physical size and mass are owned by a shared battle entity.
+        # Keep that table out of the flattened editor row, but collect its
+        # effective rows so edited entities can be cloned safely.
         unit_tables.add("battle_entities_tables")
     effective = _collect_effective_rows(
         sources,
@@ -1018,6 +1081,7 @@ def build_unit_table_snapshot(
             return best, cultures.get(best, best)
         return "", ""
 
+    visible_edits = _edits_for_game(edits, game_id)
     rows: list[dict[str, Any]] = []
     missing_land: list[str] = []
     for unit_key, candidate in effective["main_units_tables"].items():
@@ -1069,9 +1133,13 @@ def build_unit_table_snapshot(
             model_count_locked = False
             hit_points_locked = False
             total_hp = _clamped_i32(bonus_hit_points * model_count)
-            movement_shape = _warhammer_movement_shape(effective, land_values)
-            movement_speed = float(movement_shape["movement_speed"])
-            movement_speed_locked = bool(movement_shape["movement_speed_locked"])
+            physical_shape = _warhammer_entity_shape(effective, land_values)
+            movement_speed = 0.0
+            movement_speed_locked = True
+            body_size = str(physical_shape["body_size"])
+            body_size_locked = bool(physical_shape["body_size_locked"])
+            mass = float(physical_shape["mass"])
+            mass_locked = bool(physical_shape["mass_locked"])
             missile_block_chance = 0
             missile_block_chance_locked = True
             melee_attack_speed_locked = True
@@ -1101,7 +1169,12 @@ def build_unit_table_snapshot(
                     explosion_values = explosion.row.values
 
         armour = _armour_info(land_values.get("armour"), armour_rows)
-        unit_edits = _unit_edits_for(edits, unit_key, game_id)
+        if is_three_kingdoms_game(game_id):
+            body_size = ""
+            body_size_locked = True
+            mass = 0.0
+            mass_locked = True
+        unit_edits = _unit_edits_for(visible_edits, unit_key, game_id)
         original_model_count = model_count
 
         original_values = {
@@ -1124,6 +1197,8 @@ def build_unit_table_snapshot(
             "ward_save": _clamp_int(land_values.get("damage_mod_all")),
             "missile_block_chance": missile_block_chance,
             "movement_speed": movement_speed,
+            "body_size": body_size,
+            "mass": mass,
             "melee_attack_speed": (
                 _round_float(
                     melee_values.get("melee_attack_interval"),
@@ -1304,6 +1379,18 @@ def build_unit_table_snapshot(
                     else movement_speed
                 ),
                 "movement_speed_locked": movement_speed_locked,
+                "body_size": (
+                    _normalize_body_size(unit_edits["body_size"])
+                    if "body_size" in unit_edits and not body_size_locked
+                    else body_size
+                ),
+                "body_size_locked": body_size_locked,
+                "mass": (
+                    _clamp_float(unit_edits["mass"], minimum=0)
+                    if "mass" in unit_edits and not mass_locked
+                    else mass
+                ),
+                "mass_locked": mass_locked,
                 "melee_attack_speed": (
                     merged_float(
                         "melee_attack_speed",
@@ -1366,7 +1453,7 @@ def build_unit_table_snapshot(
             "unit_count": len(rows),
             "skipped_missing_land": len(missing_land),
             "edited_unit_count": len(
-                {key for key, fields in edits.items() if fields}
+                {key for key, fields in visible_edits.items() if fields}
             ),
         },
     }
@@ -2016,13 +2103,20 @@ def _build_patched_rows(
             if edit_field in fields:
                 land_row = _write_i32(land_row, land_field, fields[edit_field])
 
-        if "movement_speed" in fields:
-            movement_shape = _warhammer_movement_shape(effective, land_values)
-            if not movement_shape["movement_speed_locked"]:
-                speed = _clamp_float(fields["movement_speed"], minimum=0.01) / 10.0
+        requested_physical_fields = {
+            field for field in ("body_size", "mass") if field in fields
+        }
+        if requested_physical_fields:
+            physical_shape = _warhammer_entity_shape(effective, land_values)
+            writable_physical_fields = {
+                field
+                for field in requested_physical_fields
+                if not bool(physical_shape[f"{field}_locked"])
+            }
+            if writable_physical_fields:
                 entity_clones: dict[str, str] = {}
                 reference_clones: dict[tuple[str, str], str] = {}
-                for component in movement_shape["components"]:
+                for component in physical_shape["components"]:
                     entity = component["entity"]
                     source_entity_key = str(entity.row.values.get("key") or "")
                     clone_key = entity_clones.get(source_entity_key)
@@ -2034,8 +2128,18 @@ def _build_patched_rows(
                             namespace="wh3",
                         )
                         clone = patch_db_row_value(entity.row, "key", clone_key)
-                        # WH3 stores entity movement at one tenth of the game value.
-                        clone = _write_f32(clone, "run_speed", speed)
+                        if "body_size" in writable_physical_fields:
+                            clone = patch_db_row_value(
+                                clone,
+                                "size",
+                                _normalize_body_size(fields["body_size"]),
+                            )
+                        if "mass" in writable_physical_fields:
+                            clone = _write_f32(
+                                clone,
+                                "mass",
+                                _clamp_float(fields["mass"], minimum=0),
+                            )
                         added["battle_entities_tables"][clone_key] = (
                             entity.version,
                             clone,
@@ -2284,21 +2388,7 @@ def build_unit_data_entries(
     game_id: str | None = None,
 ) -> GameDataBuildResult:
     """Build the unit-data patch entries from effective rows plus edits."""
-    normalized_edits = _sanitize_edits(edits)
-    if is_three_kingdoms_game(game_id):
-        normalized_edits = {
-            unit_key: {
-                field: value
-                for field, value in fields.items()
-                if field not in _THREE_KINGDOMS_HIDDEN_FIELDS
-            }
-            for unit_key, fields in normalized_edits.items()
-        }
-        normalized_edits = {
-            unit_key: fields
-            for unit_key, fields in normalized_edits.items()
-            if fields
-        }
+    normalized_edits = _edits_for_game(edits, game_id)
     if not normalized_edits:
         return GameDataBuildResult((), {"edited_unit_count": 0, "entry_count": 0})
 

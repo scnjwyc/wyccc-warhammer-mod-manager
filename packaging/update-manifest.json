@@ -1,55 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.0.7",
-  "published_at": "2026-08-10",
+  "version": "1.0.8",
+  "published_at": "2026-08-12",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.7/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.7/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.7/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "2f7cd8f7026ee782c907d4a2cf4fb510baa95f022186a74d1c43b6248eaab7e6",
-    "size": 62610414
+    "sha256": "f168762b609919669bab155241cd7e18bfc7d47f480b98fec051cd0e3d8ca586",
+    "size": 62615020
   },
   "changelog": [
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "警告界面可以更新过期MOD，也可以一键更新所有MOD"
-        },
-        {
-          "type": "feature",
-          "text": "警告按钮现在可以右键让MOD列表只显示存在问题的MOD"
-        }
-      ]
-    },
     {
       "title": "调整",
       "changes": [
         {
           "type": "improvement",
-          "text": "单位数据修改允许修改反大和反步加成"
-        }
-      ]
-    },
-    {
-      "title": "修复",
-      "changes": [
-        {
-          "type": "fix",
-          "text": "强制更新功能现在采用更强力的方式进行更新，以避免steam经常更新失败的问题"
-        },
-        {
-          "type": "fix",
-          "text": "修复 Nanu's Dynamic RORs 兼容补丁生成可能会失败的问题"
-        },
-        {
-          "type": "fix",
-          "text": "修复修改炮兵远程伤害无法成功的问题"
+          "text": "单位数据修改，移除不稳定的移速修改，添加体型与质量修改"
         }
       ]
     }

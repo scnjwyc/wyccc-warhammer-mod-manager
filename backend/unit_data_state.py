@@ -14,7 +14,7 @@ from .start_options import (
     build_unit_data_patch,
     collect_game_data_source_snapshot,
 )
-from .unit_data import _sanitize_edits
+from .unit_data import _edits_for_game
 
 
 UNIT_DATA_PATCH_MANIFEST_NAME = "!!!!wyccc_unit_data_patch.json"
@@ -39,16 +39,20 @@ def _manifest_store(output_dir: Path) -> AtomicJsonStore:
     )
 
 
-def load_unit_data_edits(output_dir: str | Path) -> dict[str, dict[str, Any]]:
+def load_unit_data_edits(
+    output_dir: str | Path,
+    game_id: str | None = None,
+) -> dict[str, dict[str, Any]]:
     stored = _edits_store(Path(output_dir)).load()
-    return _sanitize_edits(stored if isinstance(stored, Mapping) else {})
+    return _edits_for_game(stored if isinstance(stored, Mapping) else {}, game_id)
 
 
 def save_unit_data_edits(
     output_dir: str | Path,
     edits: Mapping[str, Any],
+    game_id: str | None = None,
 ) -> dict[str, Any]:
-    sanitized = _sanitize_edits(edits)
+    sanitized = _edits_for_game(edits, game_id)
     _edits_store(Path(output_dir)).save(
         {key: dict(fields) for key, fields in sorted(sanitized.items())}
     )
@@ -92,7 +96,8 @@ def build_unit_data_inputs(
     # database Pack merely to produce the stable zero-modification result.
     # This also keeps an untouched Three Kingdoms launch independent of the
     # unit-data DB reader.
-    if snapshot is None and _sanitize_edits(edits):
+    normalized_edits = _edits_for_game(edits, game_id)
+    if snapshot is None and normalized_edits:
         snapshot = collect_game_data_source_snapshot(
             data_path,
             assets,
@@ -145,7 +150,7 @@ def build_unit_data_inputs(
         },
         "edits": {
             str(unit_key): dict(fields)
-            for unit_key, fields in sorted(_sanitize_edits(edits).items())
+            for unit_key, fields in sorted(normalized_edits.items())
         },
         "sources": sources,
     }
@@ -226,7 +231,7 @@ def ensure_unit_data_patch(
 ) -> dict[str, Any]:
     """Build the unit-data patch when edits exist; reuse a valid cached result."""
     output_dir = Path(output_dir)
-    edits = load_unit_data_edits(output_dir)
+    edits = load_unit_data_edits(output_dir, game_id)
     snapshot = (
         collect_game_data_source_snapshot(
             data_path,

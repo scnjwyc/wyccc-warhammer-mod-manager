@@ -660,7 +660,7 @@ class API:
             active_ids,
             game_id=paths.game_id,
         )
-        edits = load_unit_data_edits(self.data_dir / "runtime")
+        edits = load_unit_data_edits(self.data_dir / "runtime", paths.game_id)
         mod_loc_files = [
             Path(self._assets[mod_id].path)
             for mod_id in active_ids
@@ -698,7 +698,11 @@ class API:
         paths = self.settings_service.resolve_game_paths()
         active_ids = self._unit_data_source_ids()
         settings = self.settings_service.get()
-        saved = save_unit_data_edits(self.data_dir / "runtime", edits)
+        saved = save_unit_data_edits(
+            self.data_dir / "runtime",
+            edits,
+            self._active_game().id,
+        )
         patch = ensure_unit_data_patch(
             output_dir=self.data_dir / "runtime",
             data_path=paths.data_path,

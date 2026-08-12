@@ -57,7 +57,9 @@ const COLUMNS = Object.freeze([
   { field: 'upkeep_cost', labelKey: 'unitData.upkeepCost', width: 105, kind: 'number', helpKey: 'unitData.help.upkeepCost' },
   { field: 'model_count', labelKey: 'unitData.modelCount', width: 105, kind: 'number', helpKey: 'unitData.help.modelCount' },
   { field: 'morale', labelKey: 'unitData.leadership', threeKingdomsLabelKey: 'unitData.morale', width: 105, kind: 'number', helpKey: 'unitData.help.leadership', threeKingdomsHelpKey: 'unitData.help.morale' },
-  { field: 'movement_speed', labelKey: 'unitData.movementSpeed', width: 110.88, kind: 'number', step: 0.1, helpKey: 'unitData.help.movementSpeed' },
+  { field: 'movement_speed', labelKey: 'unitData.movementSpeed', width: 110.88, kind: 'number', step: 0.1, helpKey: 'unitData.help.movementSpeed', onlyGames: ['three_kingdoms'] },
+  { field: 'body_size', labelKey: 'unitData.bodySize', width: 110.88, kind: 'body_size', helpKey: 'unitData.help.bodySize', excludeGames: ['three_kingdoms'] },
+  { field: 'mass', labelKey: 'unitData.mass', width: 110.88, kind: 'number', helpKey: 'unitData.help.mass', excludeGames: ['three_kingdoms'] },
   { field: 'armour', labelKey: 'unitData.armour', width: 98, kind: 'armour', helpKey: 'unitData.help.armour' },
   { field: 'missile_block_chance', labelKey: 'unitData.missileBlockChance', width: 110.88, kind: 'number', helpKey: 'unitData.help.missileBlockChance', onlyGames: ['three_kingdoms'] },
   { field: 'hit_points', labelKey: 'unitData.hitPoints', width: 126, kind: 'number', helpKey: 'unitData.help.hitPoints' },
@@ -90,7 +92,8 @@ const COLUMNS = Object.freeze([
   { field: 'accuracy', labelKey: 'unitData.accuracy', width: 110.88, kind: 'number', helpKey: 'unitData.help.accuracy' },
 ])
 
-const EDITABLE_COLUMN_KINDS = new Set(['bool', 'armour', 'number'])
+const BODY_SIZE_OPTIONS = Object.freeze(['small', 'medium', 'large'])
+const EDITABLE_COLUMN_KINDS = new Set(['bool', 'armour', 'body_size', 'number'])
 const isEditableColumn = column => EDITABLE_COLUMN_KINDS.has(column.kind)
 const isThreeKingdoms = computed(() => props.gameId === 'three_kingdoms')
 const visibleColumns = computed(() => COLUMNS.filter(column => (
@@ -255,12 +258,19 @@ const armourValue = row => {
   return draft && 'armour' in draft ? draft.armour : row.armour_value
 }
 
+const bodySizeValue = row => {
+  const draft = draftEdits[row.key]
+  return draft && 'body_size' in draft ? draft.body_size : row.body_size
+}
+
 const fieldLocked = (row, field) => {
   if (field === 'model_count') return Boolean(row.model_count_locked)
   if (field === 'hit_points') return Boolean(row.hit_points_locked)
   if (field === 'enabled') return Boolean(row.enabled_locked)
   if (field === 'missile_block_chance') return Boolean(row.missile_block_chance_locked)
   if (field === 'movement_speed') return Boolean(row.movement_speed_locked)
+  if (field === 'body_size') return Boolean(row.body_size_locked)
+  if (field === 'mass') return Boolean(row.mass_locked)
   if (field === 'melee_attack_speed') return Boolean(row.melee_attack_speed_locked)
   if (field === 'ranged_attack_speed') return Boolean(row.ranged_attack_speed_locked)
   return false
@@ -559,6 +569,7 @@ const submit = () => {
                       :value="armourValue(row)"
                       :disabled="!!busy || !(row.armour_options && row.armour_options.length)"
                       :aria-label="t('unitData.armour')"
+                      :data-testid="`unit-armour-${row.key}`"
                       @mouseenter="showOriginalValueTooltip($event, row, column)"
                       @mouseleave="hideHoverTooltip"
                       @change="setCell(row, 'armour', Number($event.target.value))"
@@ -569,6 +580,39 @@ const submit = () => {
                         :value="option"
                       >
                         {{ option }}
+                      </option>
+                    </select>
+                    <button
+                      v-if="isFieldEdited(row, column.field)"
+                      type="button"
+                      class="unit-data-field-remove"
+                      :aria-label="t('unitData.removeFieldTitle')"
+                      :data-testid="`unit-field-remove-${column.field}-${row.key}`"
+                      @click.stop="removeFieldEdit(row, column.field)"
+                      @mouseenter="showHoverTooltip($event, { title: t('unitData.removeFieldTitle'), body: t('unitData.removeFieldHelp') })"
+                      @mouseleave="hideHoverTooltip"
+                      @focus="showHoverTooltip($event, { title: t('unitData.removeFieldTitle'), body: t('unitData.removeFieldHelp') })"
+                      @blur="hideHoverTooltip"
+                    >×</button>
+                  </span>
+                  <span v-else-if="column.kind === 'body_size'" class="unit-data-editable-content">
+                    <select
+                      class="unit-data-select"
+                      :class="{ 'unit-data-edited-control': isFieldEdited(row, column.field) }"
+                      :value="bodySizeValue(row)"
+                      :disabled="!!busy || fieldLocked(row, column.field)"
+                      :aria-label="t('unitData.bodySize')"
+                      :data-testid="`unit-body_size-${row.key}`"
+                      @mouseenter="showOriginalValueTooltip($event, row, column)"
+                      @mouseleave="hideHoverTooltip"
+                      @change="setCell(row, 'body_size', $event.target.value)"
+                    >
+                      <option
+                        v-for="option in BODY_SIZE_OPTIONS"
+                        :key="option"
+                        :value="option"
+                      >
+                        {{ t(`unitData.bodySize.${option}`) }}
                       </option>
                     </select>
                     <button

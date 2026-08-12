@@ -54,7 +54,7 @@ class UpdateServiceTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "app": "Wyccc's Mod Manager",
-                        "version": "1.0.8",
+                        "version": "1.0.9",
                         "published_at": "2026-07-15",
                         "download": {
                             "url": executable.name,
@@ -81,12 +81,12 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["entries"][0]["changes"][0]["type"], "feature")
             self.assertGreater(settings.get()["last_update_check_at"], 0)
 
-            downloaded = service.download("1.0.8")
+            downloaded = service.download("1.0.9")
             self.assertEqual(downloaded["status"], "ready")
             self.assertTrue(Path(downloaded["local_path"]).is_file())
             self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
 
-            service.ignore("1.0.8")
+            service.ignore("1.0.9")
             ignored = service.check(manual=False)
             self.assertFalse(ignored["has_update"])
             self.assertTrue(ignored["ignored"])
@@ -102,7 +102,7 @@ class UpdateServiceTests(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "version": "1.0.8",
+                        "version": "1.0.9",
                         "download_url": executable.name,
                         "sha256": "0" * 64,
                         "size": executable.stat().st_size,
@@ -119,6 +119,62 @@ class UpdateServiceTests(unittest.TestCase):
                 service.download()
 
             self.assertFalse(any((root / "state" / "updates").glob("*.part")))
+
+    def test_download_falls_back_to_alternate_mirror_when_preferred_url_fails(self) -> None:
+        import http.server
+        import threading
+
+        data = b"MZ" + b"fallback-fixture" * 20
+        digest = hashlib.sha256(data).hexdigest()
+        served: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                served.append(self.path)
+                if self.path.startswith("/broken/"):
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = f"http://127.0.0.1:{server.server_address[1]}"
+            manifest = self._manifest("1.0.9")
+            manifest["download"]["url"] = f"{base}/broken/main.exe"
+            manifest["download"]["mirrors"] = {
+                "github": f"{base}/broken/github.exe",
+                "gitee": f"{base}/ok/gitee.exe",
+            }
+            manifest["download"]["sha256"] = digest
+            manifest["download"]["size"] = len(data)
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                settings = SettingsService(root / "state")
+                service = UpdateService(root / "state", settings)
+                manifest_file = root / "update-manifest.json"
+                manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+                service.preferred_repository_sources = lambda _language: (("fixture", manifest_file.as_uri()),)
+
+                checked = service.check(manual=True)
+                self.assertTrue(checked["has_update"])
+                downloaded = service.download("1.0.9")
+                self.assertEqual(downloaded["status"], "ready")
+                self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
+                self.assertIn("/broken/github.exe", served)
+                self.assertIn("/ok/gitee.exe", served)
+                self.assertTrue(service._last_info["download_url"].endswith("/ok/gitee.exe"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
 
     def test_automatic_check_respects_toggle_and_daily_interval(self) -> None:
         settings = {
@@ -159,7 +215,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 calls.append(url)
-                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "1.0.8"
+                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "1.0.9"
                 return self._manifest(version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
@@ -167,7 +223,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertEqual(calls, [GITHUB_UPDATE_MANIFEST_URL, GITEE_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(checked["version"], "1.0.8")
+            self.assertEqual(checked["version"], "1.0.9")
             self.assertTrue(service._last_info["download_url"].startswith("https://github.com/"))
             self.assertTrue(checked["has_update"])
 
@@ -191,7 +247,7 @@ class UpdateServiceTests(unittest.TestCase):
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 if url == GITEE_UPDATE_MANIFEST_URL:
                     raise OSError("Gitee unavailable")
-                return self._manifest("1.0.8"), url
+                return self._manifest("1.0.9"), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
                 checked = service.check(manual=True)

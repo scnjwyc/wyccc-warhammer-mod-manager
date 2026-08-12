@@ -180,6 +180,26 @@ class UnitDataStateTests(_TempGame):
         self.assertEqual(cleared["status"], "zero_modification")
         self.assertFalse((self.runtime / UNIT_DATA_PATCH_NAME).exists())
 
+    def test_legacy_warhammer_movement_edit_is_removed_before_patch_build(self) -> None:
+        save_unit_data_edits(
+            self.runtime,
+            {"inf_swordsmen": {"movement_speed": 35.0}},
+            game_id="three_kingdoms",
+        )
+        self.assertEqual(load_unit_data_edits(self.runtime, "warhammer3"), {})
+
+        result = ensure_unit_data_patch(
+            self.runtime,
+            self.data,
+            self.assets,
+            [],
+            "default",
+            {"unit_model_multiplier": 1},
+            game_id="warhammer3",
+        )
+        self.assertEqual(result["status"], "zero_modification")
+        self.assertFalse((self.runtime / UNIT_DATA_PATCH_NAME).exists())
+
     def test_fingerprint_changes_with_edits_and_sources(self) -> None:
         self._build_db_pack()
         base = {

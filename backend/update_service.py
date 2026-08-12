@@ -218,48 +218,68 @@ class UpdateService:
             self.update_dir.mkdir(parents=True, exist_ok=True)
             target = self._update_path(info["version"])
             partial = target.with_suffix(".exe.part")
-            digest = hashlib.sha256()
-            total = 0
-            try:
-                http_request = request.Request(
-                    info["download_url"],
-                    headers={"User-Agent": f"{APP_SLUG}/{APP_VERSION}"},
-                )
-                with request.urlopen(http_request, timeout=120) as response, partial.open("wb") as stream:
-                    final_url = str(response.geturl() or info["download_url"])
-                    _validate_url(final_url, allow_file=parse.urlparse(info["download_url"]).scheme == "file")
-                    content_length = int(response.headers.get("Content-Length") or 0)
-                    if content_length > MAX_UPDATE_BYTES:
-                        raise ValueError("更新文件超过允许的最大大小")
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        total += len(chunk)
-                        if total > MAX_UPDATE_BYTES:
+
+            # 按候选顺序逐个尝试镜像；某个镜像失效（如资源名不一致/文件下架）时自动回退到下一个。
+            download_urls = [
+                url for url in (info.get("download_urls") or [info.get("download_url") or ""])
+                if str(url or "").strip()
+            ]
+            if not download_urls:
+                raise ValueError("更新清单缺少下载地址")
+            failures: list[tuple[str, Exception]] = []
+            last_error: Exception | None = None
+            for download_url in download_urls:
+                partial.unlink(missing_ok=True)
+                digest = hashlib.sha256()
+                total = 0
+                try:
+                    http_request = request.Request(
+                        download_url,
+                        headers={"User-Agent": f"{APP_SLUG}/{APP_VERSION}"},
+                    )
+                    with request.urlopen(http_request, timeout=120) as response, partial.open("wb") as stream:
+                        final_url = str(response.geturl() or download_url)
+                        _validate_url(final_url, allow_file=parse.urlparse(download_url).scheme == "file")
+                        content_length = int(response.headers.get("Content-Length") or 0)
+                        if content_length > MAX_UPDATE_BYTES:
                             raise ValueError("更新文件超过允许的最大大小")
-                        digest.update(chunk)
-                        stream.write(chunk)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                expected_size = int(info.get("size") or 0)
-                if expected_size and total != expected_size:
-                    raise ValueError(f"更新文件大小校验失败：期望 {expected_size}，实际 {total}")
-                if digest.hexdigest().casefold() != info["sha256"].casefold():
-                    raise ValueError("更新文件 SHA-256 校验失败，已取消安装")
-                with partial.open("rb") as stream:
-                    if stream.read(2) != b"MZ":
-                        raise ValueError("更新文件不是有效的 Windows 可执行文件")
+                        while True:
+                            chunk = response.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > MAX_UPDATE_BYTES:
+                                raise ValueError("更新文件超过允许的最大大小")
+                            digest.update(chunk)
+                            stream.write(chunk)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    expected_size = int(info.get("size") or 0)
+                    if expected_size and total != expected_size:
+                        raise ValueError(f"更新文件大小校验失败：期望 {expected_size}，实际 {total}")
+                    if digest.hexdigest().casefold() != info["sha256"].casefold():
+                        raise ValueError("更新文件 SHA-256 校验失败，已取消安装")
+                    with partial.open("rb") as stream:
+                        if stream.read(2) != b"MZ":
+                            raise ValueError("更新文件不是有效的 Windows 可执行文件")
+                except Exception as exc:
+                    partial.unlink(missing_ok=True)
+                    last_error = exc
+                    failures.append((download_url, exc))
+                    continue
+
                 os.replace(partial, target)
                 self._write_cached_metadata(info, target)
-            except Exception:
-                partial.unlink(missing_ok=True)
-                raise
+                info["download_url"] = download_url
+                info["status"] = "ready"
+                info["local_path"] = str(target)
+                info["downloaded_size"] = total
+                return self._public_info(info)
 
-            info["status"] = "ready"
-            info["local_path"] = str(target)
-            info["downloaded_size"] = total
-            return self._public_info(info)
+            if last_error is not None:
+                detail = "；".join(f"{url}: {exc}" for url, exc in failures)
+                raise ValueError(f"更新文件下载失败（已尝试 {len(download_urls)} 个镜像）：{detail}") from last_error
+            raise ValueError("更新文件下载失败：没有可用的下载地址")
 
     def ignore(self, version: str) -> dict[str, Any]:
         normalized = str(version or "").strip()
@@ -358,13 +378,38 @@ class UpdateService:
         mirrors = download.get("mirrors")
         if mirrors is not None and not isinstance(mirrors, dict):
             raise ValueError("更新清单的镜像下载地址必须是对象")
-        if preferred_download_source and isinstance(mirrors, dict):
-            raw_url = str(mirrors.get(preferred_download_source) or raw_url).strip()
-        if not raw_url:
+
+        # 收集全部候选下载地址：首选源排最前，其余镜像按清单声明顺序，最后兜底原始地址。
+        candidate_raw: list[str] = []
+        preferred_url = ""
+        if isinstance(mirrors, dict):
+            if preferred_download_source:
+                preferred_url = str(mirrors.get(preferred_download_source) or "").strip()
+            candidate_raw = [
+                str(value).strip()
+                for value in mirrors.values()
+                if str(value or "").strip()
+            ]
+        if preferred_url:
+            candidate_raw = [preferred_url, *[url for url in candidate_raw if url != preferred_url]]
+        if raw_url and raw_url not in candidate_raw:
+            candidate_raw.append(raw_url)
+        if not candidate_raw:
             raise ValueError("更新清单缺少下载地址")
-        download_url = parse.urljoin(manifest_url, raw_url)
+
         allow_file = parse.urlparse(manifest_url).scheme == "file"
-        _validate_url(download_url, allow_file=allow_file)
+        download_urls: list[str] = []
+        for raw in candidate_raw:
+            try:
+                resolved = parse.urljoin(manifest_url, raw)
+                _validate_url(resolved, allow_file=allow_file)
+            except ValueError:
+                continue
+            if resolved not in download_urls:
+                download_urls.append(resolved)
+        if not download_urls:
+            raise ValueError("更新清单缺少下载地址")
+        download_url = download_urls[0]
         if preferred_download_source == "gitee":
             hostname = (parse.urlparse(download_url).hostname or "").casefold()
             if hostname != "gitee.com" and not hostname.endswith(".gitee.com"):
@@ -383,6 +428,7 @@ class UpdateService:
             "published_at": str(payload.get("published_at") or payload.get("date") or "").strip(),
             "entries": _normalize_entries(payload.get("changelog", payload.get("entries", []))),
             "download_url": download_url,
+            "download_urls": download_urls,
             "sha256": sha256.casefold(),
             "size": size,
             "manifest_url": manifest_url,
