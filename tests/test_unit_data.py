@@ -1319,6 +1319,70 @@ class UnitDataHelpersTests(unittest.TestCase):
             ["原版", "sfo.pack"],
         )
 
+    def test_mod_table_outranks_vanilla_regardless_of_internal_name(self) -> None:
+        base = _fixture_source()
+        vanilla = DbSource(base.name, base.entries, role="vanilla")
+        sfo = DbSource(
+            "sfo.pack",
+            (
+                GameDataEntry(
+                    "db\\main_units_tables\\zzz_sfo_data",
+                    _table_payload(
+                        "main_units_tables",
+                        7,
+                        [
+                            {
+                                "unit": "inf_swordsmen",
+                                "caste": "melee_infantry",
+                                "land_unit": "land_inf_swordsmen",
+                                "num_men": 120,
+                            }
+                        ],
+                    ),
+                ),
+            ),
+        )
+
+        snapshot = build_unit_table_snapshot([sfo, vanilla], {})
+        row = next(item for item in snapshot["units"] if item["key"] == "inf_swordsmen")
+
+        self.assertEqual(row["model_count"], 120)
+        self.assertEqual(row["source_chain"], ["原版", "sfo.pack"])
+
+    def test_permission_mod_row_outranks_vanilla_regardless_of_internal_name(self) -> None:
+        vanilla = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    "db\\units_to_exclusive_faction_permissions_tables\\!vanilla",
+                    _versionless_payload(
+                        [_exclusive_row("shared_unit", "shared_faction", False)]
+                    ),
+                ),
+            ),
+            role="vanilla",
+        )
+        mod = DbSource(
+            "sfo.pack",
+            (
+                GameDataEntry(
+                    "db\\units_to_exclusive_faction_permissions_tables\\zzz_sfo",
+                    _versionless_payload(
+                        [_exclusive_row("shared_unit", "shared_faction", True)]
+                    ),
+                ),
+            ),
+        )
+
+        rows = _collect_permission_rows(
+            [mod, vanilla],
+            "units_to_exclusive_faction_permissions_tables",
+        )
+
+        self.assertTrue(
+            rows[("shared_unit", "shared_faction")].row.values["exclusive"]
+        )
+
     def test_source_chain_follows_internal_db_priority_before_source_order(self) -> None:
         original = _fixture_source()
 

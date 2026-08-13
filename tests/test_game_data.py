@@ -185,12 +185,12 @@ class GameDataPatchTests(unittest.TestCase):
             {31, 32, 33, 34, 38, 39},
         )
 
-    def test_internal_table_file_names_outrank_pack_load_order(self) -> None:
+    def test_mod_tables_outrank_vanilla_regardless_of_internal_name(self) -> None:
         mod = DbSource(
             "sfo.pack",
             (
                 GameDataEntry(
-                    "db\\main_units_tables\\SFO_data",
+                    "db\\main_units_tables\\zzz_sfo_data",
                     _table_payload(
                         "main_units_tables",
                         7,
@@ -205,7 +205,7 @@ class GameDataPatchTests(unittest.TestCase):
                     ),
                 ),
                 GameDataEntry(
-                    "db\\land_units_tables\\SFO_data",
+                    "db\\land_units_tables\\zzz_sfo_data",
                     _table_payload(
                         "land_units_tables",
                         54,
@@ -225,7 +225,7 @@ class GameDataPatchTests(unittest.TestCase):
             "db.pack",
             (
                 GameDataEntry(
-                    "db\\main_units_tables\\data__",
+                    "db\\main_units_tables\\!vanilla_data",
                     _table_payload(
                         "main_units_tables",
                         7,
@@ -240,7 +240,7 @@ class GameDataPatchTests(unittest.TestCase):
                     ),
                 ),
                 GameDataEntry(
-                    "db\\land_units_tables\\data__",
+                    "db\\land_units_tables\\!vanilla_data",
                     _table_payload(
                         "land_units_tables",
                         54,
@@ -255,6 +255,7 @@ class GameDataPatchTests(unittest.TestCase):
                     ),
                 ),
             ),
+            role="vanilla",
         )
 
         result = build_game_data_entries(
@@ -270,9 +271,9 @@ class GameDataPatchTests(unittest.TestCase):
             row["key"]: row
             for row in _rows_for(result, "land_units_tables")
         }
-        self.assertEqual(main_rows["unit_knights"]["num_men"], 48)
-        self.assertEqual(land_rows["land_knights"]["num_mounts"], 48)
-        self.assertEqual(land_rows["land_knights"]["rank_depth"], 6)
+        self.assertEqual(main_rows["unit_knights"]["num_men"], 64)
+        self.assertEqual(land_rows["land_knights"]["num_mounts"], 64)
+        self.assertEqual(land_rows["land_knights"]["rank_depth"], 8)
 
     def test_internal_table_name_takes_priority_before_enabled_mod_order(self) -> None:
         first = DbSource(

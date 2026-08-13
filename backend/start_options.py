@@ -725,7 +725,7 @@ def _read_game_data_source_snapshot_entry(
         entries.append(GameDataEntry(entry.name, entry.payload))
     return GameDataSourceSnapshotEntry(
         spec=spec,
-        source=DbSource(source_name, tuple(entries)),
+        source=DbSource(source_name, tuple(entries), role=spec.role),
         size=after.st_size,
         mtime_ns=after.st_mtime_ns,
         content_sha256=digest.hexdigest(),

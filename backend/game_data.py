@@ -577,6 +577,10 @@ class GameDataEntry:
 class DbSource:
     name: str
     entries: Sequence[GameDataEntry]
+    # ``vanilla`` is the immutable fallback layer.  Every other source is a
+    # user-visible or generated MOD layer and must override it regardless of
+    # the DB entry's internal file name.
+    role: str = "mod"
 
 
 @dataclass(frozen=True)
@@ -616,6 +620,7 @@ class _Candidate:
     version: int
     internal_name: str
     source_rank: int
+    source_is_vanilla: bool
     entry_rank: int
     row_rank: int
 
@@ -885,6 +890,10 @@ def _compare_internal_names(first: str, second: str) -> int:
 
 
 def _compare_candidate_priority(first: _Candidate, second: _Candidate) -> int:
+    # The original database is always the fallback.  Its internal file name
+    # must never be allowed to outrank an enabled or generated MOD table.
+    if first.source_is_vanilla != second.source_is_vanilla:
+        return 1 if first.source_is_vanilla else -1
     file_order = _compare_internal_names(first.internal_name, second.internal_name)
     if file_order:
         return file_order
@@ -974,6 +983,7 @@ def _collect_effective_rows(
                     parsed.version,
                     internal_name,
                     source_rank,
+                    str(getattr(source, "role", "")).casefold() == "vanilla",
                     entry_rank,
                     row_rank,
                 )
@@ -1021,11 +1031,16 @@ def _generated_internal_name(
     version: int,
     label: str = "wyccc_game_data",
 ) -> str:
+    mod_candidates = tuple(
+        candidate
+        for candidate in candidates.values()
+        if not candidate.source_is_vanilla
+    )
     priority_markers = (
         max(
             (
                 _leading_priority_markers(candidate.internal_name)
-                for candidate in candidates.values()
+                for candidate in mod_candidates
             ),
             default=0,
         )
@@ -1035,7 +1050,7 @@ def _generated_internal_name(
     blockers = sorted(
         {
             candidate.internal_name
-            for candidate in candidates.values()
+            for candidate in mod_candidates
             if _compare_internal_names(internal_name, candidate.internal_name) >= 0
         },
         key=str.casefold,

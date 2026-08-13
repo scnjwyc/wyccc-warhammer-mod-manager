@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.0.8",
-  "published_at": "2026-08-12",
+  "version": "1.0.9",
+  "published_at": "2026-08-13",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.8/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "f168762b609919669bab155241cd7e18bfc7d47f480b98fec051cd0e3d8ca586",
-    "size": 62615020
+    "sha256": "b40036b1494d03af2a9addb1cde5e4e3040e5e0bbf4feb8be676a293c17dc538",
+    "size": 62630320
   },
   "changelog": [
     {
-      "title": "调整",
+      "title": "修复",
       "changes": [
         {
-          "type": "improvement",
-          "text": "单位数据修改，移除不稳定的移速修改，添加体型与质量修改"
+          "type": "fix",
+          "text": "修复单位数据修改识别MOD加载顺序不正确的问题"
         }
       ]
     }

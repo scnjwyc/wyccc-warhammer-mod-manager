@@ -22,7 +22,7 @@ UNIT_DATA_EDITS_NAME = "unit_data_edits.json"
 FINGERPRINT_SCHEMA_VERSION = 1
 # Bump whenever the generated DB entry layout or recruitment-gating logic
 # changes, so an old runtime patch cannot be reused after an update.
-UNIT_DATA_BUILDER_VERSION = 2
+UNIT_DATA_BUILDER_VERSION = 3
 
 
 def _edits_store(output_dir: Path) -> AtomicJsonStore:

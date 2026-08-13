@@ -85,6 +85,7 @@ class _PermissionRow:
     version: int
     internal_name: str
     source_rank: int
+    source_is_vanilla: bool
     entry_rank: int
     row_rank: int
     key: tuple[str, ...]
@@ -441,7 +442,7 @@ def _collect_permission_rows(
     table_name: str,
     game_id: str | None = None,
 ) -> dict[tuple[str, ...], _PermissionRow]:
-    """Collect permission rows using internal DB name, then source order."""
+    """Collect permission rows with MOD rows above the vanilla fallback."""
     from .game_data import _entry_table_name
 
     effective: dict[tuple[str, ...], _PermissionRow] = {}
@@ -467,6 +468,7 @@ def _collect_permission_rows(
                     parsed.version,
                     resolved[1],
                     source_rank,
+                    str(getattr(source, "role", "")).casefold() == "vanilla",
                     entry_rank,
                     row_rank,
                     key,
@@ -479,6 +481,8 @@ def _collect_permission_rows(
 
 
 def _has_permission_priority(candidate: _PermissionRow, existing: _PermissionRow) -> bool:
+    if candidate.source_is_vanilla != existing.source_is_vanilla:
+        return not candidate.source_is_vanilla
     file_order = _compare_internal_names(
         candidate.internal_name, existing.internal_name
     )

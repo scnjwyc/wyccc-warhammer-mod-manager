@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.0.9",
+        "date": "2026-08-13",
+        "entries": (
+            (
+                "v109_fixed_title",
+                (("fix", "v109_unit_data_mod_load_order"),),
+            ),
+        ),
+    },
+    {
         "version": "1.0.8",
         "date": "2026-08-12",
         "entries": (
@@ -556,6 +566,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v109_fixed_title": "修复",
+        "v109_unit_data_mod_load_order": "修复单位数据修改识别MOD加载顺序不正确的问题",
         "v108_adjusted_title": "调整",
         "v108_unit_data_physical_fields": "单位数据修改，移除不稳定的移速修改，添加体型与质量修改",
     "v107_added_title": "新增",
@@ -762,6 +774,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v109_fixed_title": "Fix",
+        "v109_unit_data_mod_load_order": "Fixed incorrect MOD load-order detection in Unit Data Modification.",
         "v108_adjusted_title": "Adjusted",
         "v108_unit_data_physical_fields": "Unit Data Modification removed the unstable movement-speed edit and added body-size and mass edits.",
     "v107_added_title": "Added",
@@ -968,6 +982,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v109_fixed_title": "수정",
+        "v109_unit_data_mod_load_order": "유닛 데이터 변경에서 MOD 로드 순서를 잘못 인식하던 문제를 수정했습니다.",
         "v108_adjusted_title": "조정",
         "v108_unit_data_physical_fields": "유닛 데이터 변경에서 불안정한 이동 속도 수정을 제거하고 크기와 질량 수정을 추가했습니다.",
     "v107_added_title": "추가",
@@ -1174,6 +1190,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v109_fixed_title": "Исправлено",
+        "v109_unit_data_mod_load_order": "Исправлено неправильное определение порядка загрузки MOD при изменении данных отрядов.",
         "v108_adjusted_title": "Изменено",
         "v108_unit_data_physical_fields": "В изменении данных отрядов удалено нестабильное изменение скорости передвижения и добавлены изменения размера и массы.",
     "v107_added_title": "Добавлено",
@@ -1380,6 +1398,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v109_fixed_title": "修正",
+        "v109_unit_data_mod_load_order": "ユニットデータ変更でMODの読み込み順序を誤って認識する問題を修正しました。",
         "v108_adjusted_title": "調整",
         "v108_unit_data_physical_fields": "ユニットデータ変更から不安定な移動速度の変更を削除し、体格と質量の変更を追加しました。",
     "v107_added_title": "追加",
@@ -1586,6 +1606,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v109_fixed_title": "Corregido",
+        "v109_unit_data_mod_load_order": "Se corrigió la detección incorrecta del orden de carga de MOD en la modificación de datos de unidades.",
         "v108_adjusted_title": "Ajustado",
         "v108_unit_data_physical_fields": "La modificación de datos de unidades eliminó el cambio inestable de velocidad de movimiento y añadió cambios de tamaño corporal y masa.",
     "v107_added_title": "Añadido",
