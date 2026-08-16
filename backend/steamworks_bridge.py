@@ -24,26 +24,65 @@ def runtime_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _node_is_supported(candidate: Path) -> bool:
+NODE_PROBE_TIMEOUT_SECONDS = 10
+_node_probe_reasons: dict[str, str] = {}
+_resolved_node_cache: dict[str, Path] = {}
+
+
+def _probe_node_once(candidate: Path) -> str | None:
     try:
         completed = subprocess.run(
             [str(candidate), "-p", "process.versions.node.split('.')[0]"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=5,
+            timeout=NODE_PROBE_TIMEOUT_SECONDS,
             check=False,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        return completed.returncode == 0 and int(completed.stdout.strip()) >= 22
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return False
+    except subprocess.TimeoutExpired:
+        return f"probe timed out after {NODE_PROBE_TIMEOUT_SECONDS}s"
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"probe could not run: {exc}"
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()[-200:]
+        return f"probe exited {completed.returncode}: {detail or 'no output'}"
+    try:
+        major = int(completed.stdout.strip())
+    except ValueError:
+        return f"unexpected probe output: {completed.stdout.strip()[:80]!r}"
+    if major < 22:
+        return f"unsupported Node.js major version {major} (need 22+)"
+    return None
+
+
+def _node_probe_failure(candidate: Path) -> str | None:
+    reason = _probe_node_once(candidate)
+    if reason is not None and "timed out" in reason:
+        # Cold-starting a freshly extracted 92MB node.exe under antivirus
+        # scanning can exceed the probe budget once; retry before giving up.
+        reason = _probe_node_once(candidate)
+    return reason
+
+
+def _node_is_supported(candidate: Path) -> bool:
+    key = str(candidate)
+    reason = _node_probe_failure(candidate)
+    if reason is None:
+        _node_probe_reasons.pop(key, None)
+        return True
+    _node_probe_reasons[key] = reason
+    return False
 
 
 def find_node_executable(root: Path | None = None) -> Path | None:
     base = Path(root or runtime_root())
     candidates: list[Path] = [base / "steam_runtime" / "node.exe"]
+    cached = _resolved_node_cache.get(str(base))
+    if cached is not None:
+        candidates.insert(0, cached)
 
     for environment_name in (
         "WMM_STEAMWORKS_NODE",
@@ -81,13 +120,26 @@ def find_node_executable(root: Path | None = None) -> Path | None:
         )
 
     seen: set[str] = set()
+    failures: list[str] = []
     for candidate in candidates:
         normalized = str(candidate.resolve(strict=False)).casefold()
         if normalized in seen:
             continue
         seen.add(normalized)
-        if candidate.is_file() and _node_is_supported(candidate):
-            return candidate.resolve(strict=False)
+        if not candidate.is_file():
+            failures.append(f"{candidate}: file missing")
+            continue
+        if _node_is_supported(candidate):
+            resolved = candidate.resolve(strict=False)
+            _resolved_node_cache[str(base)] = resolved
+            return resolved
+        reason = _node_probe_reasons.get(str(candidate), "probe rejected the runtime")
+        failures.append(f"{candidate}: {reason}")
+    logger.warning(
+        "No usable Node.js runtime found under %s; candidates checked: %s",
+        base,
+        "; ".join(failures) or "none",
+    )
     return None
 
 
