@@ -527,6 +527,11 @@ const entries = {
   'compatibilityPatch.requiredPacksMissing': ['需要启用或订阅以下 MOD 才能开启此选项：{mods}', 'Enable or subscribe to the following MODs to use this option: {mods}', '이 옵션을 사용하려면 다음 MOD를 활성화하거나 구독해야 합니다: {mods}', 'Чтобы включить эту опцию, включите или оформите подписку на MOD: {mods}', 'このオプションを使用するには、以下の MOD を有効にするか購読する必要があります: {mods}'],
   'compatibilityPatch.runtimeNote': ['不会修改原始 Pack；勾选后，通过本管理器启动游戏时会根据当前启用的 MOD 自动校验并生成补丁。', 'Original Packs are never modified. When enabled, the patch is validated and generated on game launch through this manager.', '원본 Pack은 수정하지 않습니다. 활성화하면 이 관리자로 게임을 실행할 때 현재 활성 MOD를 기준으로 패치를 자동 검증하고 생성합니다.', 'Исходные Pack не изменяются. При включении патч проверяется и создаётся при запуске игры через этот менеджер.', '元の Pack は変更されません。有効にすると、このマネージャーからゲームを起動した際に現在有効な MOD に基づいてパッチを自動検証・生成します。'],
 
+  'compatibilityPatch.variantSelectorTitle': Array(5).fill('Dynamic Variant Selector Patch'),
+  'compatibilityPatch.variantSelectorDescription': ['为原版和已启用 MOD 中尚未适配的角色添加外观选择器，只有一套外观的角色也支持。保留已有角色适配。', 'Add appearance selectors to vanilla and enabled MOD characters without an existing adaptation, including characters with one appearance. Preserve existing adaptations.', '기존 연동이 없는 기본 게임 및 활성 MOD 캐릭터에 외형 선택기를 추가합니다. 외형이 하나인 캐릭터도 지원하며 기존 연동은 유지합니다.', 'Добавляет выбор внешности персонажам основной игры и включённых MOD без готовой адаптации, даже с одним обликом. Сохраняет существующие адаптации.', '未対応のバニラおよび有効な MOD のキャラクターに外見セレクターを追加します。外見が一種類でも対応し、既存の対応設定を維持します。'],
+  'compatibilityPatch.variantSelectorRequired': ['功能暂未生效，需要订阅补丁并启用 Variant Selector。当前缺少：{mods}', 'This feature is inactive. Subscribe to the patch and enable Variant Selector. Missing: {mods}', '기능이 비활성 상태입니다. 패치를 구독하고 Variant Selector를 활성화하세요. 누락: {mods}', 'Функция неактивна. Подпишитесь на патч и включите Variant Selector. Отсутствует: {mods}', '機能は無効です。パッチを購読し、Variant Selector を有効にしてください。不足: {mods}'],
+  'compatibilityPatch.variantSelectorRuntimeNote': ['订阅后默认开启，补丁不显示在 MOD 列表中。通过本管理器启动游戏时，自动适配当前启用的 MOD。', 'Enabled by default after subscribing. The patch stays hidden from the MOD list and adapts to your enabled MODs when launching through this manager.', '구독 후 기본 활성화됩니다. 패치는 MOD 목록에 표시되지 않으며 이 관리자로 게임을 실행할 때 활성 MOD에 자동으로 맞춰집니다.', 'По умолчанию включён после подписки. Патч скрыт в списке MOD и учитывает включённые MOD при запуске игры через этот менеджер.', '購読後は初期状態で有効になります。パッチは MOD 一覧に表示されず、このマネージャーから起動する際に有効な MOD に自動対応します。'],
+
   'unitData.aria': ['单位数据修改', 'Unit data modification', '유닛 데이터 수정', 'Изменение данных отрядов', 'ユニットデータ変更'],
   'unitData.eyebrow': ['单位数据补丁', 'UNIT DATA PATCH', '유닛 데이터 패치', 'ПАТЧ ДАННЫХ ОТРЯДОВ', 'ユニットデータパッチ'],
   'unitData.title': ['单位数据修改', 'Unit data modification', '유닛 데이터 수정', 'Изменение данных отрядов', 'ユニットデータ変更'],
@@ -1239,6 +1244,10 @@ const spanishEntries = {
   "compatibilityPatch.dynamicRorDescription": "Genera un parche para todos los MOD según los MOD habilitados actualmente.",
   "compatibilityPatch.requiredPacksMissing": "Habilita o suscríbete a los siguientes MOD para usar esta opción: {mods}",
   "compatibilityPatch.runtimeNote": "Los Packs originales nunca se modifican. Al activarlo, el parche se valida y genera al iniciar el juego mediante este gestor según los MOD habilitados.",
+  "compatibilityPatch.variantSelectorTitle": "Dynamic Variant Selector Patch",
+  "compatibilityPatch.variantSelectorDescription": "Añade selectores de apariencia a personajes del juego base y de MOD activos sin adaptación, incluso con una sola apariencia. Conserva las adaptaciones existentes.",
+  "compatibilityPatch.variantSelectorRequired": "La función está inactiva. Suscríbete al parche y activa Variant Selector. Falta: {mods}",
+  "compatibilityPatch.variantSelectorRuntimeNote": "Se activa por defecto al suscribirse. El parche se oculta en la lista de MOD y se adapta a los MOD activos al iniciar el juego desde este gestor.",
   "unitData.aria": "Modificación de datos de unidades",
   "unitData.eyebrow": "PARCHE DE DATOS DE UNIDADES",
   "unitData.title": "Modificación de datos de unidades",

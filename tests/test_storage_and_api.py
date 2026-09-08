@@ -1645,7 +1645,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertFalse(launched["ok"])
         self.assertIn("补丁", launched["error"]["message"])
 
-    def test_scan_discards_internal_feature_mods_from_a_stale_playset(self) -> None:
+    def test_scan_keeps_internal_feature_mods_hidden_when_a_playset_is_stale(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             game = root / "Total War WARHAMMER III"
@@ -1662,7 +1662,12 @@ class ApiContractTests(unittest.TestCase):
             api = API(root / "state")
             api.call(
                 "save_settings",
-                [{"game_path": str(game), "workshop_path": "", "fetch_workshop_metadata": False}],
+                [{
+                    "game_path": str(game),
+                    "workshop_path": "",
+                    "fetch_workshop_metadata": False,
+                    "language": "zh-CN",
+                }],
             )
             initial = api.call("scan_mods", [False])
             self.assertTrue(initial["ok"])
@@ -1683,8 +1688,10 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(rescanned["ok"])
         self.assertEqual(
             [item["pack_name"] for item in rescanned["data"]["mods"]],
-            ["visible.pack"],
+            ["visible.pack", unit_item["pack_name"]],
         )
+        self.assertTrue(rescanned["data"]["mods"][1]["hidden"])
+        self.assertEqual(rescanned["data"]["mods"][1]["display_name"], "动态单位规模")
         self.assertEqual(rescanned["data"]["enabled_order"], [])
         self.assertEqual(rescanned["data"]["missing_enabled_ids"], [])
         self.assertEqual(
@@ -2421,6 +2428,8 @@ class ApiContractTests(unittest.TestCase):
             self.assertTrue(saved["ok"])
             scan = api.call("scan_mods", [False])
             mod = scan["data"]["mods"][0]
+            typed = api.call("set_mod_types", [mod["id"], ["unit"]])
+            self.assertEqual(typed["data"]["mod_types"], ["unit"])
             bridge_calls: list[dict[str, object]] = []
 
             def fake_publish(**kwargs: object) -> dict[str, object]:
@@ -2456,7 +2465,18 @@ class ApiContractTests(unittest.TestCase):
                 uploaded = api.call("publish_workshop_item", [mod["id"], payload])
                 updated = api.call(
                     "publish_workshop_item",
-                    [mod["id"], {**payload, "mode": "update", "change_note": "Version 2"}],
+                    [
+                        mod["id"],
+                        {
+                            key: value
+                            for key, value in {
+                                **payload,
+                                "mode": "update",
+                                "change_note": "Version 2",
+                            }.items()
+                            if key != "category"
+                        },
+                    ],
                 )
 
             self.assertTrue(uploaded["ok"])
@@ -2466,6 +2486,7 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(bridge_calls[0]["workshop_id"], "")
             self.assertEqual(bridge_calls[1]["workshop_id"], "456789")
             self.assertEqual(bridge_calls[0]["tags"], ["mod", "units"])
+            self.assertEqual(bridge_calls[1]["tags"], ["mod", "units"])
             self.assertEqual(bridge_calls[0]["language"], "schinese")
             self.assertEqual(bridge_calls[1]["language"], "schinese")
             self.assertEqual(

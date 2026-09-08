@@ -1,25 +1,38 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.0.9",
-  "published_at": "2026-08-13",
+  "version": "1.1.0",
+  "published_at": "2026-09-08",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.0/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.0.9/Wyccc%27s%20Mod%20Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.0/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.0/Wyccc%27s%20Mod%20Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "b40036b1494d03af2a9addb1cde5e4e3040e5e0bbf4feb8be676a293c17dc538",
-    "size": 62630320
+    "sha256": "983cc7b50585ffb6e33ef71f14b7eb4979c3300687a61b1d21365142eab75c68",
+    "size": 62913685
   },
   "changelog": [
+    {
+      "title": "新增",
+      "changes": [
+        {
+          "type": "feature",
+          "text": "支持动态 Variant Selector 兼容补丁，可以通过该 MOD 给所有原版和 MOD 的角色重置模型，能够解决大部分模型冲突问题"
+        }
+      ]
+    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复单位数据修改识别MOD加载顺序不正确的问题"
+          "text": "修复比较存档中已启用的 MOD 时错误地计入原版 Pack 文件的问题"
+        },
+        {
+          "type": "fix",
+          "text": "修复发布 MOD 更新时模组分类标签载入不正确的问题"
         }
       ]
     }

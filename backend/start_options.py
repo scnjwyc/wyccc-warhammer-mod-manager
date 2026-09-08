@@ -8,6 +8,7 @@ import tempfile
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -24,6 +25,11 @@ from .game_data import (
     build_game_data_entries,
 )
 from .dynamic_ror_compatibility import build_dynamic_ror_compatibility_entries
+from .variant_selector_compatibility import (
+    VARIANT_SELECTOR_FRAMEWORK_SCRIPT,
+    VARIANT_SELECTOR_SOURCE_PREFIXES,
+    build_variant_selector_compatibility_entries,
+)
 from .game_data_settings import (
     normalize_category_unit_mode,
     normalize_single_entity_unit_mode,
@@ -39,6 +45,7 @@ RUNTIME_PACK_NAME = "!!!!wyccc_runtime_options.pack"
 GAME_DATA_PATCH_NAME = "!!!!wyccc_game_data_patch.pack"
 UNIT_DATA_PATCH_NAME = "!!!!wyccc_unit_data_patch.pack"
 DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME = "!!!!wyccc_dynamic_ror_compatibility.pack"
+VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME = "!!!!wyccc_variant_selector_patch.pack"
 PERMISSIONS_PREFIX = "db\\units_custom_battle_permissions_tables\\"
 PERMISSIONS_ENTRY = f"{PERMISSIONS_PREFIX}!!!!wyccc_runtime"
 PERMISSIONS_VERSION = 11
@@ -249,7 +256,9 @@ def read_pack_entries(
                     raise ValueError(f"Pack 文件索引损坏：{path.name}")
                 name = index[cursor:terminator].decode("utf-8", errors="replace")
                 if not prefixes or any(
-                    name.casefold().startswith(item.casefold()) for item in prefixes
+                    name.replace("/", "\\").casefold().startswith(
+                        item.replace("/", "\\").casefold()
+                    ) for item in prefixes
                 ):
                     selected.append((name, current_offset, file_size, compressed))
                 current_offset += file_size
@@ -686,6 +695,7 @@ def resolve_game_data_source_specs(
 
 def _read_game_data_source_snapshot_entry(
     spec: GameDataSourceSpec,
+    prefixes: tuple[str, ...] = TABLE_PREFIXES,
 ) -> GameDataSourceSnapshotEntry:
     path = spec.path
     source_name = _game_data_source_name(path, spec.asset, spec.role)
@@ -697,7 +707,7 @@ def _read_game_data_source_snapshot_entry(
         raise ValueError(f"游戏数据来源 {source_name} 不存在或无法读取：{exc}") from exc
 
     try:
-        raw_entries = read_pack_entries(path, TABLE_PREFIXES)
+        raw_entries = read_pack_entries(path, prefixes)
     except ValueError as exc:
         raise ValueError(f"游戏数据来源 {source_name} 读取失败：{exc}") from exc
 
@@ -738,6 +748,8 @@ def collect_game_data_source_snapshot(
     active_ids: Sequence[str],
     unit_data_patch_path: str | Path | None = None,
     game_id: str | None = None,
+    *,
+    prefixes: tuple[str, ...] = TABLE_PREFIXES,
 ) -> GameDataSourceSnapshot:
     specs = resolve_game_data_source_specs(
         data_path,
@@ -747,12 +759,13 @@ def collect_game_data_source_snapshot(
         game_id=game_id,
     )
     workers = min(8, max(1, len(specs)))
+    reader = partial(_read_game_data_source_snapshot_entry, prefixes=prefixes)
     if workers > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            entries = list(pool.map(_read_game_data_source_snapshot_entry, specs))
+            entries = list(pool.map(reader, specs))
         return GameDataSourceSnapshot(tuple(entries))
     return GameDataSourceSnapshot(
-        tuple(_read_game_data_source_snapshot_entry(spec) for spec in specs)
+        tuple(reader(spec) for spec in specs)
     )
 
 
@@ -915,6 +928,63 @@ def build_dynamic_ror_compatibility_patch(
     built = build_dynamic_ror_compatibility_entries(snapshot.sources)
     entries = [PackEntry(entry.name, entry.payload) for entry in built.entries]
     if not entries or int(built.stats.get("patched_unit_count", 0)) == 0:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": dict(built.stats),
+            "source_diagnostics": snapshot.diagnostics(),
+        }
+    write_pfh5_pack(output_path, entries)
+    diagnostics = snapshot.diagnostics()
+    diagnostics["output_entry_names"] = [entry.name for entry in entries]
+    return {
+        "path": str(output_path.resolve(strict=False)),
+        "entry_count": len(entries),
+        "stats": dict(built.stats),
+        "source_diagnostics": diagnostics,
+    }
+
+
+def build_variant_selector_compatibility_patch(
+    output_dir: Path,
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+    enabled: bool,
+    *,
+    source_snapshot: GameDataSourceSnapshot | None = None,
+) -> dict[str, Any]:
+    """Write the launch-time Variant Selector registration Pack."""
+    output_path = Path(output_dir) / VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME
+    if not enabled:
+        output_path.unlink(missing_ok=True)
+        return {
+            "path": "",
+            "entry_count": 0,
+            "stats": {
+                "art_set_rows": 0,
+                "valid_art_set_rows": 0,
+                "invalid_art_set_rows": 0,
+                "candidate_subtype_count": 0,
+                "candidate_art_set_count": 0,
+            },
+        }
+    snapshot = source_snapshot or collect_game_data_source_snapshot(
+        data_path,
+        assets,
+        active_ids,
+        prefixes=VARIANT_SELECTOR_SOURCE_PREFIXES,
+    )
+    if not any(
+        entry.name.replace("/", "\\").casefold() == VARIANT_SELECTOR_FRAMEWORK_SCRIPT
+        for source in snapshot.sources for entry in source.entries
+    ):
+        output_path.unlink(missing_ok=True)
+        return {"path": "", "entry_count": 0, "stats": {}}
+    built = build_variant_selector_compatibility_entries(snapshot.sources)
+    entries = [PackEntry(entry.name, entry.payload) for entry in built.entries]
+    if not entries:
         output_path.unlink(missing_ok=True)
         return {
             "path": "",

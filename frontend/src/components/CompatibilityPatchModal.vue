@@ -8,17 +8,25 @@ const props = defineProps({
   busy: { type: String, default: '' },
   requiredPacksEnabled: { type: Boolean, default: true },
   missingPacks: { type: Array, default: () => [] },
+  variantSelectorPacksEnabled: { type: Boolean, default: false },
+  variantSelectorMissingPacks: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['close', 'save'])
 
 const draft = reactive({
   dynamic_ror_compatibility_patch_enabled: false,
+  variant_selector_compatibility_patch_enabled: false,
 })
 
 const resetDraft = () => {
-  draft.dynamic_ror_compatibility_patch_enabled = !!(
-    props.settings.dynamic_ror_compatibility_patch_enabled
+  draft.dynamic_ror_compatibility_patch_enabled = Boolean(
+    props.requiredPacksEnabled
+    && props.settings.dynamic_ror_compatibility_patch_enabled,
+  )
+  draft.variant_selector_compatibility_patch_enabled = Boolean(
+    props.variantSelectorPacksEnabled
+    && props.settings.variant_selector_compatibility_patch_enabled !== false,
   )
 }
 
@@ -38,13 +46,25 @@ watch(
   { deep: true },
 )
 
+watch(
+  () => [props.requiredPacksEnabled, props.variantSelectorPacksEnabled],
+  () => {
+    if (props.open) resetDraft()
+  },
+)
+
 const currentSettings = () => ({
-  dynamic_ror_compatibility_patch_enabled:
-    !!draft.dynamic_ror_compatibility_patch_enabled,
+  dynamic_ror_compatibility_patch_enabled: Boolean(
+    props.requiredPacksEnabled && draft.dynamic_ror_compatibility_patch_enabled,
+  ),
+  variant_selector_compatibility_patch_enabled: Boolean(
+    props.variantSelectorPacksEnabled
+    && draft.variant_selector_compatibility_patch_enabled,
+  ),
 })
 
 const submit = () => {
-  if (!props.requiredPacksEnabled) return
+  if (props.busy) return
   emit('save', currentSettings())
 }
 </script>
@@ -96,6 +116,30 @@ const submit = () => {
           </p>
           <p class="compatibility-patch-note">
             {{ t('compatibilityPatch.runtimeNote') }}
+          </p>
+        </section>
+        <section class="compatibility-patch-card">
+          <label class="switch-row compatibility-patch-option">
+            <input
+              v-model="draft.variant_selector_compatibility_patch_enabled"
+              type="checkbox"
+              :disabled="!!busy || !variantSelectorPacksEnabled"
+              data-testid="variant-selector-compatibility-patch-enabled"
+            />
+            <span>
+              <strong>{{ t('compatibilityPatch.variantSelectorTitle') }}</strong>
+              <small>{{ t('compatibilityPatch.variantSelectorDescription') }}</small>
+            </span>
+          </label>
+          <p
+            v-if="!variantSelectorPacksEnabled"
+            class="compatibility-patch-requirement"
+            data-testid="variant-selector-required-packs"
+          >
+            {{ t('compatibilityPatch.variantSelectorRequired', { mods: variantSelectorMissingPacks.join(', ') }) }}
+          </p>
+          <p class="compatibility-patch-note">
+            {{ t('compatibilityPatch.variantSelectorRuntimeNote') }}
           </p>
         </section>
       </div>

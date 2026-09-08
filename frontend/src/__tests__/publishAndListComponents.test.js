@@ -122,6 +122,7 @@ describe('Workshop publish dialog', () => {
       mode: 'update',
       title: 'My Own Mod',
       language: 'zh-CN',
+      category: 'units',
     })
   })
 
@@ -141,10 +142,27 @@ describe('Workshop publish dialog', () => {
       mode: 'upload',
       title: 'My Workshop Mod',
       language: 'en-US',
-      category: 'graphical',
+      category: 'units',
       visibility: 0,
     })
     expect(wrapper.emitted('submit')[0][0]).not.toHaveProperty('preview_path')
+  })
+
+  it('initializes the Workshop category from the MOD type instead of always using graphical', async () => {
+    const wrapper = mount(WorkshopPublishModal, {
+      global: { plugins: [createPinia()] },
+      props: {
+        open: true,
+        mode: 'upload',
+        mod: { ...localMod, mod_types: ['unit'] },
+        busy: '',
+      },
+    })
+
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('submit')[0][0]).toMatchObject({
+      category: 'units',
+    })
   })
 
   it('defaults to English when only English description exists and reloads selected languages', async () => {

@@ -3,8 +3,14 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
+from .constants import (
+    CORE_VANILLA_PACKS,
+    INTERNAL_FEATURE_PACK_NAMES,
+    INTERNAL_RUNTIME_PACK_NAMES,
+    SAVE_BOOT_PACK_NAMES,
+)
 from .games import get_game_definition
 
 
@@ -12,6 +18,45 @@ _PACK_NAME_RE = re.compile(r'^[^<>:"/\\|?*\x00-\x1f]{1,260}\.pack$', re.IGNORECA
 _PACK_SUFFIX = b".pack"
 _MAX_PACK_TOKEN_BYTES = 1024
 _LENGTH_PREFIX_BYTES = 4
+
+
+def _save_exclusion_index(
+    extra_names: Iterable[str] | None = None,
+) -> tuple[set[str], set[str]]:
+    exact: set[str] = set()
+    bang_stripped: set[str] = set()
+    for name in (
+        *CORE_VANILLA_PACKS,
+        *SAVE_BOOT_PACK_NAMES,
+        *INTERNAL_FEATURE_PACK_NAMES,
+        *INTERNAL_RUNTIME_PACK_NAMES,
+        *(extra_names or ()),
+    ):
+        key = str(name).casefold()
+        if not key:
+            continue
+        exact.add(key)
+        if key.startswith("!"):
+            stripped = key.lstrip("!")
+            if stripped:
+                bang_stripped.add(stripped)
+    return exact, bang_stripped
+
+
+def _is_excluded_save_pack(
+    pack_name: str,
+    exact: set[str],
+    bang_stripped: set[str],
+) -> bool:
+    key = pack_name.casefold()
+    if key in exact:
+        return True
+    if not key.startswith("!"):
+        return False
+    stripped = key.lstrip("!")
+    return bool(stripped) and stripped in bang_stripped
+
+
 def _has_legacy_pack_terminator(content: bytes, token_end: int) -> bool:
     return token_end < len(content) and content[token_end] == 0
 
@@ -108,7 +153,7 @@ class SaveGameService:
         except OSError as exc:
             raise ValueError(f"无法读取存档：{exc}") from exc
 
-        excluded = {str(name).casefold() for name in (excluded_pack_names or set())}
+        excluded, bang_stripped = _save_exclusion_index(excluded_pack_names)
         lowered = content.lower()
         pack_names: list[str] = []
         seen: set[str] = set()
@@ -133,7 +178,11 @@ class SaveGameService:
             token = raw_token.decode("utf-8", errors="replace").strip()
             pack_name = Path(token.replace("\\", "/")).name
             key = pack_name.casefold()
-            if not _PACK_NAME_RE.fullmatch(pack_name) or key in excluded or key in seen:
+            if (
+                not _PACK_NAME_RE.fullmatch(pack_name)
+                or _is_excluded_save_pack(pack_name, excluded, bang_stripped)
+                or key in seen
+            ):
                 continue
             seen.add(key)
             pack_names.append(pack_name)

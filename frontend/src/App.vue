@@ -108,6 +108,25 @@ const nanuRorPackRequirement = computed(() => {
     })
   return { allEnabled: missing.length === 0, missing }
 })
+const variantSelectorPackRequirement = computed(() => {
+  const basePack = String(
+    store.variantSelectorFeature?.base_pack_name || '!marthvariantselector.pack',
+  )
+  const baseEnabled = store.mods.some(mod => (
+    (mod.provides_variant_selector
+      || String(mod.workshop_id || '') === '2888171970'
+      || String(mod.pack_name || '').toLocaleLowerCase() === basePack.toLocaleLowerCase())
+    && (store.activeIds.includes(mod.id) || mod.pack_type === 'movie')
+  ))
+  const missing = []
+  if (!store.variantSelectorFeatureSubscribed) {
+    missing.push(store.variantSelectorFeature?.title || 'Dynamic Variant Selector Patch')
+  }
+  if (!baseEnabled) {
+    missing.push('Variant Selector')
+  }
+  return { allEnabled: missing.length === 0, missing }
+})
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
 const inactiveSearchFocusId = computed(() => (
   store.inactiveSearchHighlightActive
@@ -241,8 +260,9 @@ const saveUnitData = async edits => {
   showUnitDataModification.value = false
 }
 
-const openCompatibilityPatch = () => {
+const openCompatibilityPatch = async () => {
   if (!supportsWh3Tools.value) return
+  await store.refreshVariantSelectorFeature().catch(() => {})
   showCompatibilityPatch.value = true
 }
 
@@ -1169,6 +1189,8 @@ onBeforeUnmount(() => {
       :busy="store.busy"
       :required-packs-enabled="nanuRorPackRequirement.allEnabled"
       :missing-packs="nanuRorPackRequirement.missing"
+      :variant-selector-packs-enabled="variantSelectorPackRequirement.allEnabled"
+      :variant-selector-missing-packs="variantSelectorPackRequirement.missing"
       @close="showCompatibilityPatch = false"
       @save="saveCompatibilityPatch"
     />

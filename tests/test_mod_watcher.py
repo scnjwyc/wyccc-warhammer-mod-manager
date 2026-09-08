@@ -35,7 +35,7 @@ class FakeObserver:
 
 
 class ModWatcherTests(unittest.TestCase):
-    def test_filters_for_pack_files_and_workshop_item_directories(self) -> None:
+    def test_refreshes_for_all_pack_files_and_workshop_item_directories(self) -> None:
         changes: list[str] = []
         data_handler = ModEventHandler(lambda: changes.append("data"), workshop=False)
         workshop_handler = ModEventHandler(lambda: changes.append("workshop"), workshop=True)
@@ -67,7 +67,7 @@ class ModWatcherTests(unittest.TestCase):
             SimpleNamespace(event_type="modified", src_path=r"C:\workshop\123456\preview.jpg", is_directory=False)
         )
 
-        self.assertEqual(changes, ["data", "workshop"])
+        self.assertEqual(changes, ["data", "data", "data", "workshop"])
 
     def test_debouncer_coalesces_event_bursts(self) -> None:
         calls: list[float] = []

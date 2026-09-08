@@ -43,6 +43,131 @@ def _load_schemas() -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
 # current schemas, while the historical schemas for the original game-data
 # transformations remain in ``wh3_db_schema.json``.
 EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
+    # Variant Selector compatibility reads the character appearance chain.
+    # These tables are kept in the focused reader rather than the generated
+    # JSON subset because their layouts are stable but are not used by the
+    # numeric game-data editor.
+    "campaign_character_art_sets_tables": {
+        7: (
+            ("agent_type", "OptionalStringU8"),
+            ("art_set_id", "StringU8"),
+            ("culture", "OptionalStringU8"),
+            ("subculture", "OptionalStringU8"),
+            ("faction", "OptionalStringU8"),
+            ("is_custom", "Boolean"),
+            ("is_male", "Boolean"),
+            ("agent_subtype", "OptionalStringU8"),
+            ("campaign_map_scale", "F32"),
+            ("prebattle_separation_offset", "F32"),
+        ),
+        6: (
+            ("agent_type", "OptionalStringU8"),
+            ("art_set_id", "StringU8"),
+            ("culture", "OptionalStringU8"),
+            ("subculture", "OptionalStringU8"),
+            ("faction", "OptionalStringU8"),
+            ("is_custom", "Boolean"),
+            ("is_male", "Boolean"),
+            ("agent_subtype", "OptionalStringU8"),
+            ("campaign_map_scale", "F32"),
+        ),
+    },
+    "campaign_character_arts_tables": {
+        7: (
+            ("art_set_id", "StringU8"),
+            ("level", "I32"),
+            ("age", "I32"),
+            ("portrait", "OptionalStringU8"),
+            ("season", "StringU8"),
+            ("uniform", "OptionalStringU8"),
+            ("card", "OptionalStringU8"),
+            ("info", "OptionalStringU8"),
+            ("sea_uniform", "OptionalStringU8"),
+            ("navy_uniform", "OptionalStringU8"),
+            ("land_animation", "OptionalStringU8"),
+            ("sea_animation", "OptionalStringU8"),
+            ("navy_animation", "OptionalStringU8"),
+            ("id", "I64"),
+            ("religion", "OptionalStringU8"),
+            ("land_animation_vfx_filter", "I32"),
+            ("sea_animation_vfx_filter", "I32"),
+            ("navy_animation_vfx_filter", "I32"),
+        ),
+        6: (
+            ("art_set_id", "StringU8"),
+            ("level", "I32"),
+            ("age", "I32"),
+            ("portrait", "OptionalStringU8"),
+            ("season", "StringU8"),
+            ("uniform", "OptionalStringU8"),
+            ("card", "OptionalStringU8"),
+            ("info", "OptionalStringU8"),
+            ("sea_uniform", "OptionalStringU8"),
+            ("navy_uniform", "OptionalStringU8"),
+            ("land_animation", "OptionalStringU8"),
+            ("sea_animation", "OptionalStringU8"),
+            ("navy_animation", "OptionalStringU8"),
+            ("id", "I64"),
+            ("religion", "OptionalStringU8"),
+        ),
+        0: (
+            ("art_set_id", "StringU8"),
+            ("level", "I32"),
+            ("age", "I32"),
+            ("portrait", "OptionalStringU8"),
+            ("season", "StringU8"),
+            ("uniform", "OptionalStringU8"),
+            ("card", "OptionalStringU8"),
+            ("info", "OptionalStringU8"),
+            ("sea_uniform", "OptionalStringU8"),
+            ("navy_uniform", "OptionalStringU8"),
+            ("land_animation", "OptionalStringU8"),
+            ("sea_animation", "OptionalStringU8"),
+            ("navy_animation", "OptionalStringU8"),
+            ("id", "I64"),
+            ("land_animation_vfx_filter", "I32"),
+            ("sea_animation_vfx_filter", "I32"),
+            ("navy_animation_vfx_filter", "I32"),
+        ),
+    },
+    "agent_uniforms_tables": {
+        10: (
+            ("filename", "StringU8"),
+            ("uniform_name", "StringU8"),
+            ("battle_filename", "OptionalStringU8"),
+            ("campaign_porthole_filename", "OptionalStringU8"),
+            ("campaign_politician_filename", "OptionalStringU8"),
+            ("campaign_override_skeleton", "OptionalStringU8"),
+        ),
+        9: (
+            ("filename", "StringU8"),
+            ("uniform_name", "StringU8"),
+            ("battle_filename", "OptionalStringU8"),
+            ("campaign_porthole_filename", "OptionalStringU8"),
+            ("campaign_politician_filename", "OptionalStringU8"),
+        ),
+    },
+    "variants_tables": {
+        6: (
+            ("variant_name", "StringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("variant_filename", "OptionalStringU8"),
+            ("low_poly_filename", "OptionalStringU8"),
+            ("mount_scale", "F32"),
+            ("scale", "F32"),
+            ("scale_variation", "F32"),
+            ("super_low_poly_filename", "OptionalStringU8"),
+        ),
+        5: (
+            ("variant_name", "StringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("variant_filename", "OptionalStringU8"),
+            ("low_poly_filename", "OptionalStringU8"),
+            ("mount_scale", "F32"),
+            ("scale", "F32"),
+            ("scale_variation", "F32"),
+        ),
+    },
     # WH3 movement references pass through these component tables before
     # reaching battle_entities_tables.  They are kept here because the
     # focused historical WH3 schema file predates the current definitions.
@@ -461,10 +586,25 @@ TABLE_ORDER = (
     "battle_vortexs_tables",
 )
 THREE_KINGDOMS_TABLE_ORDER = tuple(THREE_KINGDOMS_TABLE_SCHEMAS)
-ALL_TABLE_ORDER = tuple(dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER)))
-TABLE_PREFIXES = tuple(f"db\\{table_name}\\" for table_name in ALL_TABLE_ORDER)
+VARIANT_SELECTOR_TABLE_ORDER = (
+    "campaign_character_art_sets_tables",
+    "campaign_character_arts_tables",
+    "agent_uniforms_tables",
+    "variants_tables",
+)
+ALL_TABLE_ORDER = tuple(dict.fromkeys((
+    *TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER, *VARIANT_SELECTOR_TABLE_ORDER,
+)))
+TABLE_PREFIXES = tuple(
+    f"db\\{table_name}\\"
+    for table_name in dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER))
+)
 CURRENT_TABLE_VERSIONS = {
     "_kv_rules_tables": 0,
+    "campaign_character_art_sets_tables": 7,
+    "campaign_character_arts_tables": 0,
+    "agent_uniforms_tables": 10,
+    "variants_tables": 6,
     "main_units_tables": 7,
     "land_units_tables": 54,
     "mounts_tables": 10,
@@ -495,6 +635,10 @@ THREE_KINGDOMS_CURRENT_TABLE_VERSIONS = {
 }
 TABLE_KEY_FIELDS = {
     "_kv_rules_tables": "key",
+    "campaign_character_art_sets_tables": "art_set_id",
+    "campaign_character_arts_tables": "id",
+    "agent_uniforms_tables": "uniform_name",
+    "variants_tables": "variant_name",
     "main_units_tables": "unit",
     "land_units_tables": "key",
     "mounts_tables": "key",
@@ -1103,7 +1247,8 @@ def _table_row_key(
                 "unit_class",
             )
         )
-    return str(row.values.get(TABLE_KEY_FIELDS[table_name]) or "")
+    key = row.values.get(TABLE_KEY_FIELDS[table_name])
+    return "" if key is None else str(key)
 
 
 def _serialize_effective_table(

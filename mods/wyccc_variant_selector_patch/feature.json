@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "feature": "variant_selector_compatibility",
+  "title": "Dynamic Variant Selector Patch",
+  "pack_name": "wyccc_variant_selector_patch.pack",
+  "game": "warhammer3",
+  "required_workshop_items": [
+    {
+      "id": "2888171970",
+      "title": "Variant Selector"
+    }
+  ]
+}

@@ -68,6 +68,7 @@ class ModAsset:
     warnings: list[dict[str, Any]] = field(default_factory=list)
     ignored_warning_codes: list[str] = field(default_factory=list)
     unit_data_tables: list[str] = field(default_factory=list)
+    provides_variant_selector: bool = False
 
     @property
     def effective_name(self) -> str:

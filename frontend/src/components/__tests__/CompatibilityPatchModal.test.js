@@ -39,7 +39,32 @@ describe('compatibility patch modal', () => {
     expect(requirement.text()).toContain("Nanu's Dynamic RORs Ultimate Compatibility Patch")
   })
 
-  it('does not emit save while a required pack is missing', async () => {
+  it('forces stored options off when their dependencies are missing', () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: {
+        open: true,
+        settings: {
+          dynamic_ror_compatibility_patch_enabled: true,
+          variant_selector_compatibility_patch_enabled: true,
+        },
+        requiredPacksEnabled: false,
+        variantSelectorPacksEnabled: false,
+      },
+    })
+    const dynamicRorCheckbox = wrapper.get(
+      '[data-testid="dynamic-ror-compatibility-patch-enabled"]',
+    )
+    const variantSelectorCheckbox = wrapper.get(
+      '[data-testid="variant-selector-compatibility-patch-enabled"]',
+    )
+
+    expect(dynamicRorCheckbox.element.checked).toBe(false)
+    expect(dynamicRorCheckbox.attributes('disabled')).toBeDefined()
+    expect(variantSelectorCheckbox.element.checked).toBe(false)
+    expect(variantSelectorCheckbox.attributes('disabled')).toBeDefined()
+  })
+
+  it('saves both options off while dependencies are missing', async () => {
     const wrapper = mount(CompatibilityPatchModal, {
       props: {
         open: true,
@@ -49,7 +74,10 @@ describe('compatibility patch modal', () => {
       },
     })
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('save')).toBeUndefined()
+    expect(wrapper.emitted('save')[0][0]).toEqual({
+      dynamic_ror_compatibility_patch_enabled: false,
+      variant_selector_compatibility_patch_enabled: false,
+    })
   })
 
   it('emits the saved setting when toggled', async () => {
@@ -67,7 +95,72 @@ describe('compatibility patch modal', () => {
 
     expect(wrapper.emitted('save')[0][0]).toEqual({
       dynamic_ror_compatibility_patch_enabled: true,
+      variant_selector_compatibility_patch_enabled: false,
     })
+  })
+
+  it('enables Variant Selector by default when available', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: {
+        open: true,
+        requiredPacksEnabled: false,
+        variantSelectorPacksEnabled: true,
+        settings: {},
+      },
+    })
+    const checkbox = wrapper.get('[data-testid="variant-selector-compatibility-patch-enabled"]')
+    expect(checkbox.element.checked).toBe(true)
+    expect(checkbox.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).toContain('Dynamic Variant Selector Patch')
+    await checkbox.setValue(false)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0]).toEqual({
+      dynamic_ror_compatibility_patch_enabled: false,
+      variant_selector_compatibility_patch_enabled: false,
+    })
+  })
+
+  it('clears a stored preference when Variant Selector dependencies are missing', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: {
+        open: true,
+        variantSelectorPacksEnabled: false,
+        variantSelectorMissingPacks: ['Dynamic Variant Selector Patch', 'Variant Selector'],
+        settings: { variant_selector_compatibility_patch_enabled: true },
+      },
+    })
+    const checkbox = wrapper.get('[data-testid="variant-selector-compatibility-patch-enabled"]')
+    const requirement = wrapper.get('[data-testid="variant-selector-required-packs"]')
+    expect(requirement.text()).toContain('Dynamic Variant Selector Patch')
+    expect(checkbox.attributes('disabled')).toBeDefined()
+    expect(checkbox.element.checked).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0].variant_selector_compatibility_patch_enabled).toBe(false)
+  })
+
+  it('turns an open option off when its dependency disappears', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: {
+        open: true,
+        variantSelectorPacksEnabled: true,
+        settings: { variant_selector_compatibility_patch_enabled: true },
+      },
+    })
+    const checkbox = wrapper.get('[data-testid="variant-selector-compatibility-patch-enabled"]')
+    expect(checkbox.element.checked).toBe(true)
+
+    await wrapper.setProps({ variantSelectorPacksEnabled: false })
+
+    expect(checkbox.element.checked).toBe(false)
+    expect(checkbox.attributes('disabled')).toBeDefined()
+  })
+
+  it('does not save while busy', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: { open: true, busy: 'Saving' },
+    })
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')).toBeUndefined()
   })
 
   it('emits close through the cancel button', async () => {

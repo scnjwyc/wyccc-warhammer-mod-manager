@@ -56,6 +56,26 @@ class SaveGameTests(unittest.TestCase):
         self.assertEqual(result["save"]["name"], "campaign.save")
         self.assertEqual(result["pack_names"], ["first.pack", "second.pack"])
 
+    def test_filters_campaign_boot_and_manager_runtime_packs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            save_dir = Path(temporary)
+            save = save_dir / "campaign.save"
+            save.write_bytes(
+                b"header"
+                b"\0wh3_main_combi.pack\0"
+                b"\0!!!wyccc_game_data_patch.pack\0"
+                b"\0!!!!wyccc_runtime_options.pack\0"
+                b"\0!!!!out.pack\0"
+                b"\0!my_overhaul.pack\0"
+                b"\0user_mod.pack\0"
+                b"\0data.pack\0"
+            )
+            service = SaveGameService(save_dir)
+
+            result = service.pack_names("campaign.save")
+
+        self.assertEqual(result["pack_names"], ["!my_overhaul.pack", "user_mod.pack"])
+
     def test_extracts_length_prefixed_mod_pack_names_without_nul_terminators(self) -> None:
         def length_prefixed(name: bytes) -> bytes:
             return len(name).to_bytes(4, "little") + name
@@ -161,6 +181,25 @@ class SaveGameTests(unittest.TestCase):
 
         self.assertTrue(response["ok"])
         self.assertEqual(response["data"]["save"]["name"], "campaign.save")
+        self.assertEqual(response["data"]["pack_names"], ["example.pack"])
+
+    def test_save_mod_rpc_omits_vanilla_and_launcher_runtime_packs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            save_dir = root / "saves"
+            save_dir.mkdir()
+            (save_dir / "campaign.save").write_bytes(
+                b"\0wh3_main_combi.pack\0"
+                b"\0!!!wyccc_game_data_patch.pack\0"
+                b"\0!!!!wyccc_runtime_options.pack\0"
+                b"\0example.pack\0"
+            )
+            api = API(root / "state")
+            api.save_games = SaveGameService(save_dir)
+            with patch.object(api, "_vanilla_pack_names", return_value=set()):
+                response = api.call("get_save_mods", ["campaign.save"])
+
+        self.assertTrue(response["ok"])
         self.assertEqual(response["data"]["pack_names"], ["example.pack"])
 
     def test_api_switches_all_save_operations_to_the_selected_game(self) -> None:

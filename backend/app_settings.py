@@ -223,6 +223,7 @@ def default_settings(language: str = DEFAULT_LANGUAGE) -> dict[str, Any]:
         "disable_unit_friendly_fire": False,
         "disable_spell_friendly_fire": False,
         "dynamic_ror_compatibility_patch_enabled": False,
+        "variant_selector_compatibility_patch_enabled": True,
         "check_updates_automatically": True,
         "workshop_page_open_counts": {"browser": 0, "client": 0},
         "last_update_check_at": 0,
@@ -473,6 +474,7 @@ class SettingsService:
             "disable_unit_friendly_fire",
             "disable_spell_friendly_fire",
             "dynamic_ror_compatibility_patch_enabled",
+            "variant_selector_compatibility_patch_enabled",
             "check_updates_automatically",
         ):
             result[key] = bool(result.get(key, default_settings()[key]))

@@ -262,19 +262,25 @@ describe('anchored mod selection', () => {
     expect(store.inactiveDisplayMods.map(mod => mod.id)).toEqual(['visible', 'hidden'])
   })
 
-  it('never displays the hidden Nanu ROR compatibility patch in either MOD list', () => {
+  it('shows hidden internal patches when the current playset reveals hidden MODs', () => {
     const store = useAppStore()
     store.mods = [
-      { id: 'patch', pack_name: 'wyccc_nanu_rors_patch.pack', hidden: false },
+      { id: 'patch', pack_name: 'wyccc_nanu_rors_patch.pack', hidden: true },
+      { id: 'variant', pack_name: 'WYCCC_VARIANT_SELECTOR_PATCH.PACK', hidden: true },
       { id: 'legacy', pack_name: 'wyccc_nanu_ror_patch.pack', hidden: false },
       { id: 'visible', pack_name: 'visible.pack', hidden: false },
     ]
-    store.activeIds = ['patch']
+    store.activeIds = ['patch', 'variant']
+    store.playsets = [
+      { id: 'default', show_hidden_mods: false },
+      { id: 'show-hidden', show_hidden_mods: true },
+    ]
+    store.currentPlaysetId = 'default'
 
     expect(store.activeMods.map(mod => mod.id)).toEqual([])
     expect(store.inactiveMods.map(mod => mod.id)).toEqual(['legacy', 'visible'])
     store.currentPlaysetId = 'show-hidden'
-    expect(store.activeDisplayMods.map(mod => mod.id)).toEqual([])
+    expect(store.activeDisplayMods.map(mod => mod.id)).toEqual(['patch', 'variant'])
   })
 
   it('moves a multi-selection as one ordered block', () => {

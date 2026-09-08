@@ -249,7 +249,7 @@ class ScannerTests(unittest.TestCase):
         self.assertEqual(len(result.mods), 1)
         self.assertEqual(metadata.requested_app_id, 779340)
 
-    def test_internal_game_data_feature_mods_are_excluded_from_all_sources(self) -> None:
+    def test_internal_game_data_feature_mods_are_scanned_as_hidden_mods(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             game = root / "Total War WARHAMMER III"
@@ -265,7 +265,10 @@ class ScannerTests(unittest.TestCase):
             write_pack(workshop / unit_item["workshop_id"] / unit_item["pack_name"])
             write_pack(workshop / fire_item["workshop_id"] / fire_item["pack_name"])
             write_pack(workshop / "123456" / "visible_workshop.pack")
-            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            (data / "manifest.txt").write_text(
+                f"data.pack\t0\n{GAME_DATA_PATCH_NAME}\t0\n",
+                encoding="utf-8",
+            )
 
             metadata = OfflineWorkshopMetadata()
             result = ModScanner(metadata).scan(
@@ -277,11 +280,29 @@ class ScannerTests(unittest.TestCase):
                 {"language": "zh-CN", "check_outdated_mods": False},
             )
 
+            by_pack = {mod.pack_name: mod for mod in result.mods}
             self.assertEqual(
-                {mod.pack_name for mod in result.mods},
-                {"visible_local.pack", "visible_workshop.pack"},
+                set(by_pack),
+                {
+                    "visible_local.pack",
+                    "visible_workshop.pack",
+                    unit_item["pack_name"],
+                    fire_item["pack_name"],
+                    GAME_DATA_PATCH_NAME,
+                    RUNTIME_PACK_NAME,
+                },
             )
-            self.assertEqual(metadata.requested_ids, ["123456"])
+            self.assertEqual(metadata.requested_ids, [
+                "123456",
+                unit_item["workshop_id"],
+                fire_item["workshop_id"],
+            ])
+            self.assertTrue(by_pack[unit_item["pack_name"]].hidden)
+            self.assertTrue(by_pack[fire_item["pack_name"]].hidden)
+            self.assertTrue(by_pack[GAME_DATA_PATCH_NAME].hidden)
+            self.assertTrue(by_pack[RUNTIME_PACK_NAME].hidden)
+            self.assertEqual(by_pack[GAME_DATA_PATCH_NAME].display_name, "游戏数据修改")
+            self.assertEqual(by_pack[unit_item["pack_name"]].display_name, "动态单位规模")
 
     def test_reads_pfh5_mod_and_movie_pack_types(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

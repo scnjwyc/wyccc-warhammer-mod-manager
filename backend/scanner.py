@@ -15,6 +15,7 @@ from .constants import (
     CORE_VANILLA_PACKS,
     INTERNAL_FEATURE_PACK_NAMES,
     INTERNAL_FEATURE_WORKSHOP_IDS,
+    internal_pack_display_name,
     PACK_TYPE_MOD,
     PACK_TYPE_MOVIE,
     PACK_TYPE_UNKNOWN,
@@ -289,9 +290,13 @@ def read_pack_entry_names(path: Path) -> list[str]:
 
 def read_unit_data_tables(path: Path) -> list[str]:
     """Return unit DB table families present in a Pack."""
+    return _unit_data_tables_from_entries(read_pack_entry_names(path))
+
+
+def _unit_data_tables_from_entries(entries: list[str]) -> list[str]:
     tables = {
         table_name
-        for entry_name in read_pack_entry_names(path)
+        for entry_name in entries
         for table_name in ("main_units_tables", "land_units_tables")
         if entry_name.replace("/", "\\").casefold().startswith(
             f"db\\{table_name}\\"
@@ -371,7 +376,11 @@ class ModScanner:
                 SOURCE_DATA,
                 assets,
                 result,
-                excluded_names=vanilla,
+                excluded_names={
+                    name
+                    for name in vanilla
+                    if name.casefold() not in INTERNAL_FEATURE_PACK_NAMES
+                },
             )
         workshop_ids: list[str] = []
         workshop_root: Path | None = None
@@ -381,8 +390,6 @@ class ModScanner:
                 result.scanned_roots.append(str(workshop_root))
                 for child in sorted(workshop_root.iterdir(), key=lambda item: item.name.casefold()):
                     if not child.is_dir() or not child.name.isdigit():
-                        continue
-                    if child.name in INTERNAL_FEATURE_WORKSHOP_IDS:
                         continue
                     workshop_ids.append(child.name)
                     if directory_mods:
@@ -403,9 +410,9 @@ class ModScanner:
 
         subscription_times = _steam_subscription_times(paths)
 
+        interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
         metadata: dict[str, dict] = {}
         if workshop_ids:
-            interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
             app_id = int(paths.game_definition.app_id)
             metadata = self.workshop_metadata.get_many(
                 workshop_ids,
@@ -501,6 +508,7 @@ class ModScanner:
                             }
                         )
 
+        self._apply_internal_pack_metadata(assets, interface_language)
         result.mods = sorted(
             assets.values(),
             key=lambda mod: (mod.pack_name.casefold(), mod.pack_name, mod.id),
@@ -757,10 +765,7 @@ class ModScanner:
         result: ScanResult,
         excluded_names: Iterable[str] = (),
     ) -> None:
-        excluded = {
-            *(name.casefold() for name in excluded_names),
-            *INTERNAL_FEATURE_PACK_NAMES,
-        }
+        excluded = {name.casefold() for name in excluded_names}
         if not directory.is_dir():
             return
         result.scanned_roots.append(str(directory.resolve(strict=False)))
@@ -795,7 +800,6 @@ class ModScanner:
                     item
                     for item in directory.iterdir()
                     if item.is_file() and item.suffix.casefold() == ".pack"
-                    and item.name.casefold() not in INTERNAL_FEATURE_PACK_NAMES
                 ),
                 key=lambda item: item.name.casefold(),
             )
@@ -807,6 +811,22 @@ class ModScanner:
         for pack_path in pack_paths:
             asset = self._make_asset(pack_path, SOURCE_WORKSHOP, workshop_id)
             assets[asset.id] = asset
+
+    @staticmethod
+    def _apply_internal_pack_metadata(
+        assets: dict[str, ModAsset],
+        language: str,
+    ) -> None:
+        for asset in assets.values():
+            pack_key = asset.pack_name.casefold()
+            if (
+                pack_key in INTERNAL_FEATURE_PACK_NAMES
+                or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+            ):
+                asset.hidden = True
+            alias = internal_pack_display_name(asset.pack_name, language)
+            if alias:
+                asset.display_name = alias
 
     def _scan_feral_local_mods(
         self,
@@ -910,6 +930,7 @@ class ModScanner:
 
     @staticmethod
     def _make_asset(pack_path: Path, source: str, workshop_id: str = "") -> ModAsset:
+        entry_names = read_pack_entry_names(pack_path)
         try:
             stat = pack_path.lstat()
             updated_at = int(stat.st_mtime * 1000)
@@ -935,7 +956,12 @@ class ModScanner:
                 else ""
             ),
             pack_type=read_pack_type(pack_path),
-            unit_data_tables=read_unit_data_tables(pack_path),
+            unit_data_tables=_unit_data_tables_from_entries(entry_names),
+            provides_variant_selector=any(
+                name.replace("/", "\\").casefold()
+                == "script\\campaign\\mod\\marthvariantselector.lua"
+                for name in entry_names
+            ),
             updated_at=updated_at,
             file_updated_at=updated_at,
             created_at=created_at,

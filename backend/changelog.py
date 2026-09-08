@@ -9,6 +9,23 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.0",
+        "date": "2026-09-08",
+        "entries": (
+            (
+                "v110_added_title",
+                (("feature", "v110_variant_selector_compatibility"),),
+            ),
+            (
+                "v110_fixed_title",
+                (
+                    ("fix", "v110_save_mods_excludes_vanilla_packs"),
+                    ("fix", "v110_workshop_category_from_mod_type"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "1.0.9",
         "date": "2026-08-13",
         "entries": (
@@ -566,6 +583,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v110_added_title": "新增",
+        "v110_variant_selector_compatibility": "支持动态 Variant Selector 兼容补丁，可以通过该 MOD 给所有原版和 MOD 的角色重置模型，能够解决大部分模型冲突问题",
+        "v110_fixed_title": "修复",
+        "v110_save_mods_excludes_vanilla_packs": "修复比较存档中已启用的 MOD 时错误地计入原版 Pack 文件的问题",
+        "v110_workshop_category_from_mod_type": "修复发布 MOD 更新时模组分类标签载入不正确的问题",
         "v109_fixed_title": "修复",
         "v109_unit_data_mod_load_order": "修复单位数据修改识别MOD加载顺序不正确的问题",
         "v108_adjusted_title": "调整",
@@ -774,6 +796,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v110_added_title": "Added",
+        "v110_variant_selector_compatibility": "Added the Dynamic Variant Selector compatibility patch. This MOD can reset models for all vanilla and MOD characters, resolving most model conflicts.",
+        "v110_fixed_title": "Fixed",
+        "v110_save_mods_excludes_vanilla_packs": "Fixed save comparison incorrectly counting vanilla Pack files as enabled MODs.",
+        "v110_workshop_category_from_mod_type": "Fixed MOD category tags loading incorrectly when publishing a Workshop update.",
         "v109_fixed_title": "Fix",
         "v109_unit_data_mod_load_order": "Fixed incorrect MOD load-order detection in Unit Data Modification.",
         "v108_adjusted_title": "Adjusted",
@@ -982,6 +1009,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v110_added_title": "추가",
+        "v110_variant_selector_compatibility": "Dynamic Variant Selector 호환 패치를 추가했습니다. 이 MOD로 원본 게임과 MOD의 모든 캐릭터 모델을 재설정하여 대부분의 모델 충돌을 해결할 수 있습니다.",
+        "v110_fixed_title": "수정",
+        "v110_save_mods_excludes_vanilla_packs": "저장 게임 비교에서 원본 Pack 파일을 활성화된 MOD로 잘못 계산하던 문제를 수정했습니다.",
+        "v110_workshop_category_from_mod_type": "Workshop MOD 업데이트 게시 시 분류 태그가 올바르게 불러와지지 않던 문제를 수정했습니다.",
         "v109_fixed_title": "수정",
         "v109_unit_data_mod_load_order": "유닛 데이터 변경에서 MOD 로드 순서를 잘못 인식하던 문제를 수정했습니다.",
         "v108_adjusted_title": "조정",
@@ -1190,6 +1222,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v110_added_title": "Добавлено",
+        "v110_variant_selector_compatibility": "Добавлен патч совместимости Dynamic Variant Selector. Этот MOD позволяет сбросить модели всех персонажей из оригинальной игры и MOD, устраняя большинство конфликтов моделей.",
+        "v110_fixed_title": "Исправлено",
+        "v110_save_mods_excludes_vanilla_packs": "Исправлена ошибка, из-за которой при сравнении сохранения файлы оригинальных Pack ошибочно учитывались как активированные MOD.",
+        "v110_workshop_category_from_mod_type": "Исправлена неправильная загрузка категорий MOD при публикации обновления в Workshop.",
         "v109_fixed_title": "Исправлено",
         "v109_unit_data_mod_load_order": "Исправлено неправильное определение порядка загрузки MOD при изменении данных отрядов.",
         "v108_adjusted_title": "Изменено",
@@ -1398,6 +1435,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v110_added_title": "追加",
+        "v110_variant_selector_compatibility": "Dynamic Variant Selector 互換パッチを追加しました。この MOD でオリジナルと MOD のすべてのキャラクターのモデルをリセットし、多くのモデル競合を解決できます。",
+        "v110_fixed_title": "修正",
+        "v110_save_mods_excludes_vanilla_packs": "セーブデータの比較でオリジナルの Pack ファイルを有効な MOD として誤って数える問題を修正しました。",
+        "v110_workshop_category_from_mod_type": "Workshop で MOD を更新するとき、MOD の分類タグが正しく読み込まれない問題を修正しました。",
         "v109_fixed_title": "修正",
         "v109_unit_data_mod_load_order": "ユニットデータ変更でMODの読み込み順序を誤って認識する問題を修正しました。",
         "v108_adjusted_title": "調整",
@@ -1606,6 +1648,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v110_added_title": "Añadido",
+        "v110_variant_selector_compatibility": "Se añadió el parche de compatibilidad Dynamic Variant Selector. Este MOD puede restablecer los modelos de todos los personajes del juego original y de los MOD, lo que resuelve la mayoría de los conflictos de modelos.",
+        "v110_fixed_title": "Corregido",
+        "v110_save_mods_excludes_vanilla_packs": "Se corrigió que la comparación de partidas contara por error los archivos Pack originales como MOD activados.",
+        "v110_workshop_category_from_mod_type": "Se corrigió la carga incorrecta de las etiquetas de categoría de MOD al publicar una actualización en Workshop.",
         "v109_fixed_title": "Corregido",
         "v109_unit_data_mod_load_order": "Se corrigió la detección incorrecta del orden de carga de MOD en la modificación de datos de unidades.",
         "v108_adjusted_title": "Ajustado",

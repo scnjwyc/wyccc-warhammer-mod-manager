@@ -26,6 +26,21 @@ const languageLoading = ref(false)
 const languageMessage = ref('')
 let languageRequestId = 0
 
+const workshopCategoryByModType = {
+  graphical: 'graphical',
+  visual: 'graphical',
+  campaign: 'campaign',
+  unit: 'units',
+  units: 'units',
+  battle: 'battle',
+  ui: 'ui',
+  map: 'maps',
+  maps: 'maps',
+  overhaul: 'overhaul',
+  compilation: 'compilation',
+  cheat: 'cheat',
+}
+
 const categories = [
   ['graphical', 'publish.categoryGraphical'],
   ['campaign', 'publish.categoryCampaign'],
@@ -51,6 +66,16 @@ const visibilitySelectOptions = computed(() => [
   { value: 2, label: t('publish.private') },
   { value: 3, label: t('publish.unlisted') },
 ])
+const workshopCategoryForMod = mod => {
+  const types = Array.isArray(mod?.mod_types) && mod.mod_types.length
+    ? mod.mod_types
+    : [mod?.mod_type]
+  for (const type of types) {
+    const category = workshopCategoryByModType[String(type || '').trim().toLowerCase()]
+    if (category) return category
+  }
+  return 'graphical'
+}
 
 watch(
   () => [props.open, props.mod?.id, props.mode],
@@ -62,7 +87,7 @@ watch(
     draft.language = props.mode === 'update'
       ? normalizeLanguage(store.settings.language)
       : 'en-US'
-    draft.category = 'graphical'
+    draft.category = workshopCategoryForMod(props.mod)
     draft.visibility = 0
     languageMessage.value = ''
     languageRequestId += 1

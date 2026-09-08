@@ -19,11 +19,6 @@ let playsetWriteQueue = Promise.resolve()
 let collectionImportPollTimer = 0
 const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
 const LIST_UNDO_HISTORY_LIMIT = 30
-const HIDDEN_PATCH_PACK_NAMES = new Set(['wyccc_nanu_rors_patch.pack'])
-
-const isHiddenPatch = mod => HIDDEN_PATCH_PACK_NAMES.has(
-  String(mod?.pack_name || '').toLowerCase(),
-)
 
 const defaultGameDataFeatures = () => ({
   unit_size: {
@@ -52,6 +47,14 @@ const defaultUnitDataFeature = () => ({
   subscribed: false,
 })
 
+const defaultVariantSelectorFeature = () => ({
+  pack_name: 'wyccc_variant_selector_patch.pack',
+  title: 'Dynamic Variant Selector Patch',
+  base_pack_name: '!marthvariantselector.pack',
+  subscribed: false,
+  required: true,
+})
+
 const localizedSelectedGameName = settings => t(gameLabelKey(settings?.selected_game))
 
 const enqueuePlaysetWrite = task => {
@@ -78,7 +81,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.0.9',
+    appVersion: '1.1.0',
     settings: {},
     paths: {},
     pathHealth: {},
@@ -128,6 +131,7 @@ export const useAppStore = defineStore('app', {
     toast: null,
     gameDataFeatures: defaultGameDataFeatures(),
     unitDataFeature: defaultUnitDataFeature(),
+    variantSelectorFeature: defaultVariantSelectorFeature(),
     gameDataFeatureWarning: '',
     workshopUpdateEligibility: new Set(),
     workshopEligibilityKnownIds: new Set(),
@@ -140,6 +144,7 @@ export const useAppStore = defineStore('app', {
       Boolean(state.gameDataFeatures?.[featureKey]?.subscribed)
     ),
     unitDataFeatureSubscribed: state => Boolean(state.unitDataFeature?.subscribed),
+    variantSelectorFeatureSubscribed: state => Boolean(state.variantSelectorFeature?.subscribed),
     unitDataModIds: state => state.mods
       .filter(mod => Array.isArray(mod.unit_data_tables) && mod.unit_data_tables.length > 0)
       .map(mod => mod.id),
@@ -213,7 +218,6 @@ export const useAppStore = defineStore('app', {
       const mods = this.activeIds
         .map(id => this.modMap.get(id))
         .filter(Boolean)
-        .filter(mod => !isHiddenPatch(mod))
         .filter(mod => this.showHidden || !mod.hidden)
       return sortDisplayedMods(mods, this.activeSortMode, this.activeSortDescending, this.modTypeRanks)
     },
@@ -221,7 +225,6 @@ export const useAppStore = defineStore('app', {
       const active = new Set(this.activeIds)
       const mods = this.mods
         .filter(mod => !active.has(mod.id))
-        .filter(mod => !isHiddenPatch(mod))
         .filter(mod => this.showHidden || !mod.hidden)
       const sorted = sortDisplayedMods(
         mods,
@@ -387,6 +390,11 @@ export const useAppStore = defineStore('app', {
         ...(data.unit_data_feature || {}),
         subscribed: Boolean(data.unit_data_feature?.subscribed),
       }
+      this.variantSelectorFeature = {
+        ...defaultVariantSelectorFeature(),
+        ...(data.variant_selector_feature || {}),
+        subscribed: Boolean(data.variant_selector_feature?.subscribed),
+      }
       if (this.pathHealth.game_ready) {
         await this.scan(false)
         if (this.settings.fetch_workshop_metadata) {
@@ -414,6 +422,11 @@ export const useAppStore = defineStore('app', {
           ...defaultUnitDataFeature(),
           ...(data.unit_data_feature || {}),
           subscribed: Boolean(data.unit_data_feature?.subscribed),
+        }
+        this.variantSelectorFeature = {
+          ...defaultVariantSelectorFeature(),
+          ...(data.variant_selector_feature || {}),
+          subscribed: Boolean(data.variant_selector_feature?.subscribed),
         }
         const currentThumbnails = this.thumbnails
         this.thumbnails = Object.fromEntries(
@@ -1183,6 +1196,15 @@ export const useAppStore = defineStore('app', {
         subscribed: Boolean(data?.subscribed),
       }
       return this.unitDataFeature
+    },
+    async refreshVariantSelectorFeature() {
+      const data = await invoke('get_variant_selector_feature_status')
+      this.variantSelectorFeature = {
+        ...defaultVariantSelectorFeature(),
+        ...(data || {}),
+        subscribed: Boolean(data?.subscribed),
+      }
+      return this.variantSelectorFeature
     },
     async loadChangelog() {
       const data = await invoke('get_changelog')

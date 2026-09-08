@@ -34,10 +34,13 @@ from .constants import (
     INTERNAL_FEATURE_PACK_NAMES,
     INTERNAL_FEATURE_WORKSHOP_IDS,
     INTERNAL_RUNTIME_PACK_NAMES,
+    internal_pack_display_name,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
     UNIT_DATA_FEATURE_PACK_NAME,
     UNIT_DATA_FEATURE_TITLE,
+    VARIANT_SELECTOR_FEATURE_PACK_NAME,
+    VARIANT_SELECTOR_FEATURE_TITLE,
 )
 from .file_operations import (
     build_delete_preview,
@@ -54,6 +57,7 @@ from .launch_paths import LaunchPathAliases
 from .load_order import LoadOrderService, current_order_path, file_token
 from .games import GameDefinition
 from .models import GamePaths, ModAsset
+from .mod_types import workshop_category_for_mod_types
 from .mod_profiles import existing_profile_directory, parse_mod_profile
 from .mod_watcher import ModChangeMonitor
 from .scanner import ModScanner
@@ -72,10 +76,12 @@ from .start_options import (
     GAME_DATA_PATCH_NAME,
     RUNTIME_PACK_NAME,
     UNIT_DATA_PATCH_NAME,
+    VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
     build_runtime_options_pack,
     collect_game_data_source_snapshot,
 )
 from .dynamic_ror_patch_state import ensure_dynamic_ror_compatibility_patch
+from .variant_selector_patch_state import ensure_variant_selector_compatibility_patch
 from .unit_data import (
     _display_source_name,
     build_unit_table_snapshot,
@@ -185,6 +191,7 @@ class API:
             "save_compatibility_patch_settings": self._save_compatibility_patch_settings,
             "get_game_data_feature_status": self._get_game_data_feature_status,
             "get_unit_data_feature_status": self._get_unit_data_feature_status,
+            "get_variant_selector_feature_status": self._get_variant_selector_feature_status,
             "get_unit_data_list": self._get_unit_data_list,
             "save_unit_data_edits": self._save_unit_data_edits,
             "check_for_updates": self._check_for_updates,
@@ -266,6 +273,14 @@ class API:
 
     def interface_language(self) -> str:
         return str(self.settings_service.get().get("language") or DEFAULT_LANGUAGE)
+
+    def _apply_internal_asset_metadata(self, assets: Mapping[str, ModAsset]) -> None:
+        language = self.interface_language()
+        for asset in assets.values():
+            asset.hidden = True
+            alias = internal_pack_display_name(asset.pack_name, language)
+            if alias:
+                asset.display_name = alias
 
     def low_consumption_enabled(self) -> bool:
         return bool(self.settings_service.get().get("auto_low_consumption_mode", True))
@@ -374,6 +389,7 @@ class API:
             "auto_update_due": self.update_service.should_check_automatically(private_settings),
             "update_install_error": self.update_service.consume_install_error(),
             "unit_data_feature": self._unit_data_feature_status(paths),
+            "variant_selector_feature": self._variant_selector_feature_status(paths),
         }
 
     @staticmethod
@@ -415,6 +431,50 @@ class API:
             "Unit data modification",
         )
         return self._unit_data_feature_status(self.settings_service.resolve_game_paths())
+
+    @staticmethod
+    def _variant_selector_feature_status(paths: GamePaths) -> dict[str, Any]:
+        """Return the subscription status for the hidden Variant Selector patch."""
+        if not paths.game_definition.supports_game_data_modification:
+            return {
+                "pack_name": VARIANT_SELECTOR_FEATURE_PACK_NAME,
+                "title": VARIANT_SELECTOR_FEATURE_TITLE,
+                "base_pack_name": "!marthvariantselector.pack",
+                "subscribed": False,
+                "required": False,
+            }
+        workshop_path = Path(paths.workshop_path) if paths.workshop_path else None
+        subscribed = False
+        if workshop_path and workshop_path.is_dir():
+            try:
+                for item_dir in workshop_path.iterdir():
+                    if not item_dir.is_dir() or not item_dir.name.isdigit():
+                        continue
+                    if any(
+                        item.is_file()
+                        and item.name.casefold() == VARIANT_SELECTOR_FEATURE_PACK_NAME.casefold()
+                        for item in item_dir.iterdir()
+                    ):
+                        subscribed = True
+                        break
+            except OSError:
+                subscribed = False
+        return {
+            "pack_name": VARIANT_SELECTOR_FEATURE_PACK_NAME,
+            "title": VARIANT_SELECTOR_FEATURE_TITLE,
+            "base_pack_name": "!marthvariantselector.pack",
+            "subscribed": subscribed,
+            "required": True,
+        }
+
+    def _get_variant_selector_feature_status(self) -> dict[str, Any]:
+        self._require_game_capability(
+            "supports_game_data_modification",
+            "Variant Selector compatibility patch",
+        )
+        return self._variant_selector_feature_status(
+            self.settings_service.resolve_game_paths()
+        )
 
     def _get_game_data_feature_status(self) -> dict[str, Any]:
         self._require_game_capability("supports_game_data_modification", "Game data modification")
@@ -608,13 +668,20 @@ class API:
         )
         if not isinstance(changes, dict):
             raise ValueError("兼容补丁设置必须是对象")
-        value = changes.get("dynamic_ror_compatibility_patch_enabled", False)
-        if isinstance(value, str):
-            enabled = value.strip().casefold() in {"1", "true", "yes", "on"}
-        else:
-            enabled = bool(value)
+        def coerce(value: Any) -> bool:
+            if isinstance(value, str):
+                return value.strip().casefold() in {"1", "true", "yes", "on"}
+            return bool(value)
+
         self.settings_service.save(
-            {"dynamic_ror_compatibility_patch_enabled": enabled}
+            {
+                key: coerce(changes[key])
+                for key in (
+                    "dynamic_ror_compatibility_patch_enabled",
+                    "variant_selector_compatibility_patch_enabled",
+                )
+                if key in changes
+            }
         )
         return {"settings": self.settings_service.get_public()}
 
@@ -927,7 +994,9 @@ class API:
                         if str(warning.get("code") or "") != "workshop_update_available"
                     ]
                 mod.hidden = bool(
-                    hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
+                    mod.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
+                    or mod.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                    or hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
                 )
                 raw_ignored_warning_codes = custom.get("ignored_warning_codes")
                 mod.ignored_warning_codes = (
@@ -977,6 +1046,7 @@ class API:
                     # visible to the frontend so it schedules one follow-up scan.
                     "mod_revision": scan_revision,
                     "unit_data_feature": self._unit_data_feature_status(paths),
+                    "variant_selector_feature": self._variant_selector_feature_status(paths),
                 }
             )
             return payload
@@ -1031,10 +1101,15 @@ class API:
     def _set_mod_hidden(self, mod_id: str, hidden: bool) -> dict[str, Any]:
         asset = self._require_asset(mod_id)
         game_id = self._active_game().id
+        managed = (
+            asset.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
+            or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+        )
+        effective_hidden = bool(hidden) or managed
         asset.hidden = self.state_repository.set_playset_mod_hidden(
             self.state_repository.get_current_playset_id(game_id),
             asset.id,
-            hidden,
+            effective_hidden,
             game_id,
         )
         return asset.to_dict()
@@ -1312,6 +1387,31 @@ class API:
                     "source_pack_names", []
                 ),
             )
+            try:
+                variant_selector_patch = ensure_variant_selector_compatibility_patch(
+                    output_dir=self.data_dir / "runtime",
+                    data_path=paths.data_path,
+                    assets=self._assets,
+                    active_ids=saved["plan"]["ordered_mod_ids"],
+                    playset_id=self.state_repository.get_current_playset_id(paths.game_id),
+                    settings=settings,
+                    subscribed=self._variant_selector_feature_status(paths)["subscribed"],
+                )
+            except Exception:
+                logger.exception(
+                    "Variant Selector compatibility patch status=generation_failed"
+                )
+                raise
+            logger.info(
+                "Variant Selector compatibility patch status=%s fingerprint=%s entries=%s stats=%s sources=%s",
+                variant_selector_patch["status"],
+                str(variant_selector_patch.get("fingerprint") or "")[:12],
+                variant_selector_patch.get("entry_count", 0),
+                variant_selector_patch.get("stats", {}),
+                variant_selector_patch.get("source_diagnostics", {}).get(
+                    "source_pack_names", []
+                ),
+            )
             runtime = build_runtime_options_pack(
                 self.data_dir / "runtime",
                 paths.data_path,
@@ -1328,6 +1428,11 @@ class API:
                 str(dynamic_ror_patch.get("path") or ""),
                 data_root,
                 DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
+            )
+            variant_selector_path = self._stage_runtime_pack_in_data(
+                str(variant_selector_patch.get("path") or ""),
+                data_root,
+                VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
             )
             runtime_path = self._stage_runtime_pack_in_data(
                 str(runtime.get("path") or ""),
@@ -1378,6 +1483,19 @@ class API:
                     sources=[SOURCE_DATA],
                 )
                 internal_ids.append(dynamic_ror_id)
+            variant_selector_id = ""
+            if variant_selector_path is not None:
+                variant_selector_id = "runtime:variant-selector-compatibility"
+                internal_assets[variant_selector_id] = ModAsset(
+                    id=variant_selector_id,
+                    pack_name=VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
+                    display_name="Dynamic Variant Selector Patch",
+                    path=str(variant_selector_path),
+                    directory=str(data_root),
+                    source=SOURCE_DATA,
+                    sources=[SOURCE_DATA],
+                )
+                internal_ids.append(variant_selector_id)
             if runtime_path is not None:
                 runtime_id = "runtime:start-options"
                 internal_assets[runtime_id] = ModAsset(
@@ -1391,6 +1509,7 @@ class API:
                 )
                 internal_ids.append(runtime_id)
 
+            self._apply_internal_asset_metadata(internal_assets)
             if internal_ids:
                 runtime_assets = {**self._assets, **internal_assets}
                 runtime_plan = self.load_order.build_plan(
@@ -1425,6 +1544,13 @@ class API:
                         runtime_plan.ordered_mod_ids.index(dynamic_ror_id) + 1,
                         len(runtime_plan.ordered_mod_ids),
                     )
+                if variant_selector_id in runtime_plan.ordered_mod_ids:
+                    logger.info(
+                        "Variant Selector compatibility patch launch placement pack=%s position=%s/%s",
+                        VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
+                        runtime_plan.ordered_mod_ids.index(variant_selector_id) + 1,
+                        len(runtime_plan.ordered_mod_ids),
+                    )
             process = launch_game(
                 path_map.map_path(paths.game_path),
                 launch_path,
@@ -1440,6 +1566,7 @@ class API:
                 "unit_data_patch": unit_data_patch,
                 "game_data_patch": game_data_patch,
                 "dynamic_ror_compatibility_patch": dynamic_ror_patch,
+                "variant_selector_compatibility_patch": variant_selector_patch,
                 "runtime_options": runtime,
                 "launch_plan": launch_plan,
                 "save": selected_save,
@@ -1489,6 +1616,7 @@ class API:
                     sources=[SOURCE_DATA],
                 ),
             }
+            self._apply_internal_asset_metadata({unit_data_id: runtime_assets[unit_data_id]})
             runtime_plan = self.load_order.build_plan(
                 paths.game_path,
                 paths.data_path,
@@ -1523,6 +1651,13 @@ class API:
                 "game_data": {},
             },
             "dynamic_ror_compatibility_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "entry_count": 0,
+                "stats": {},
+            },
+            "variant_selector_compatibility_patch": {
                 "status": "unsupported",
                 "path": "",
                 "fingerprint": "",
@@ -1580,6 +1715,13 @@ class API:
                 "game_data": {},
             },
             "dynamic_ror_compatibility_patch": {
+                "status": "unsupported",
+                "path": "",
+                "fingerprint": "",
+                "entry_count": 0,
+                "stats": {},
+            },
+            "variant_selector_compatibility_patch": {
                 "status": "unsupported",
                 "path": "",
                 "fingerprint": "",
@@ -1730,7 +1872,11 @@ class API:
             return sorted(hidden_mod_ids)
         effective_hidden_ids: list[str] = []
         for asset in self._assets.values():
-            asset.hidden = bool(hidden_mod_ids.intersection([asset.id, *asset.alternate_ids]))
+            asset.hidden = bool(
+                asset.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
+                or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                or hidden_mod_ids.intersection([asset.id, *asset.alternate_ids])
+            )
             if asset.hidden:
                 effective_hidden_ids.append(asset.id)
         return sorted(effective_hidden_ids)
@@ -2441,7 +2587,10 @@ class API:
         if len(description) > 8_000 or len(change_note) > 8_000:
             raise ValueError("Workshop 描述或更新日志过长")
 
-        category = str(publish_data.get("category") or "graphical").strip().casefold()
+        category_value = str(publish_data.get("category") or "").strip().casefold()
+        category = category_value or workshop_category_for_mod_types(
+            asset.mod_types or [asset.mod_type]
+        )
         allowed_categories = {
             "graphical", "campaign", "units", "battle", "ui",
             "maps", "overhaul", "compilation", "cheat",
@@ -2758,6 +2907,11 @@ class API:
 
     def _is_internal_feature_mod_id(self, mod_id: str) -> bool:
         normalized = str(mod_id)
+        if any(
+            normalized.casefold().endswith(f":{name}")
+            for name in INTERNAL_FEATURE_PACK_NAMES
+        ):
+            return True
         if normalized in self._internal_feature_mod_ids:
             return True
         pending = parse_pending_workshop_mod_id(normalized)
