@@ -4,7 +4,7 @@
 
 A lightweight mod manager for every Total War game with Steam Workshop support, covering both CA Pack files and ROME REMASTERED directory mods.
 
-The current version is `1.1.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `1.1.1`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 

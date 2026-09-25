@@ -169,18 +169,17 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "1.1.0")
+        self.assertEqual(APP_VERSION, "1.1.1")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '1.1.0'", frontend_store)
-        self.assertIn("filevers=(1, 1, 0, 0)", version_info)
-        self.assertIn("prodvers=(1, 1, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '1.1.0')", version_info)
-        self.assertIn("`1.1.0`", readme)
-        self.assertIn("`1.1.0`", readme_en)
+        self.assertIn("appVersion: '1.1.1'", frontend_store)
+        self.assertIn("filevers=(1, 1, 1, 0)", version_info)
+        self.assertIn("prodvers=(1, 1, 1, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '1.1.1')", version_info)
+        self.assertIn("`1.1.1`", readme)
+        self.assertIn("`1.1.1`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
-        self.assertEqual(update_manifest["version"], "1.1.0")
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
         self.assertEqual(changelog[0]["version"], APP_VERSION)
         manifest_release = next(
@@ -198,9 +197,10 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:10]],
-            ["1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0", "0.9.9", "0.9.8"],
+            ["1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0", "0.9.9"],
         )
-        self.assertEqual(changelog[6]["version"], "1.0.0")
+        self.assertEqual(changelog[7]["version"], "1.0.1")
+        self.assertEqual(changelog[0]["entries"][0]["changes"][0]["text"], "适配战锤9.0版本更新")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
         self.assertEqual(previous_release["version"], "0.6.0")
         self.assertIn("低消耗模式", str(previous_release))
@@ -220,9 +220,9 @@ class PackagedRuntimeTests(unittest.TestCase):
         for releases in localized.values():
             self.assertEqual(
                 [release["version"] for release in releases[:10]],
-            ["1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0", "0.9.9", "0.9.8"],
+            ["1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0", "0.9.9"],
             )
-            self.assertEqual(len(releases[0]["entries"]), 2)
+            self.assertEqual(len(releases[0]["entries"]), 1)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")
             release_070 = next(release for release in releases if release["version"] == "0.7.0")
             release_065 = next(release for release in releases if release["version"] == "0.6.5")

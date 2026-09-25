@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.1",
+        "date": "2026-09-25",
+        "entries": (
+            (
+                "v111_adjusted_title",
+                (("improvement", "v111_wh3_90_compatibility"),),
+            ),
+        ),
+    },
+    {
         "version": "1.1.0",
         "date": "2026-09-08",
         "entries": (
@@ -583,6 +593,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v111_adjusted_title": "调整",
+        "v111_wh3_90_compatibility": "适配战锤9.0版本更新",
         "v110_added_title": "新增",
         "v110_variant_selector_compatibility": "支持动态 Variant Selector 兼容补丁，可以通过该 MOD 给所有原版和 MOD 的角色重置模型，能够解决大部分模型冲突问题",
         "v110_fixed_title": "修复",
@@ -796,6 +808,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v111_adjusted_title": "Adjusted",
+        "v111_wh3_90_compatibility": "Updated compatibility with the Total War: WARHAMMER III 9.0 update.",
         "v110_added_title": "Added",
         "v110_variant_selector_compatibility": "Added the Dynamic Variant Selector compatibility patch. This MOD can reset models for all vanilla and MOD characters, resolving most model conflicts.",
         "v110_fixed_title": "Fixed",
@@ -1009,6 +1023,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v111_adjusted_title": "조정",
+        "v111_wh3_90_compatibility": "토탈 워: 워해머 III 9.0 업데이트에 맞게 호환성을 조정했습니다.",
         "v110_added_title": "추가",
         "v110_variant_selector_compatibility": "Dynamic Variant Selector 호환 패치를 추가했습니다. 이 MOD로 원본 게임과 MOD의 모든 캐릭터 모델을 재설정하여 대부분의 모델 충돌을 해결할 수 있습니다.",
         "v110_fixed_title": "수정",
@@ -1222,6 +1238,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v111_adjusted_title": "Изменено",
+        "v111_wh3_90_compatibility": "Обновлена совместимость с обновлением Total War: WARHAMMER III до версии 9.0.",
         "v110_added_title": "Добавлено",
         "v110_variant_selector_compatibility": "Добавлен патч совместимости Dynamic Variant Selector. Этот MOD позволяет сбросить модели всех персонажей из оригинальной игры и MOD, устраняя большинство конфликтов моделей.",
         "v110_fixed_title": "Исправлено",
@@ -1435,6 +1453,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v111_adjusted_title": "調整",
+        "v111_wh3_90_compatibility": "Total War: WARHAMMER III の 9.0 アップデートに対応しました。",
         "v110_added_title": "追加",
         "v110_variant_selector_compatibility": "Dynamic Variant Selector 互換パッチを追加しました。この MOD でオリジナルと MOD のすべてのキャラクターのモデルをリセットし、多くのモデル競合を解決できます。",
         "v110_fixed_title": "修正",
@@ -1648,6 +1668,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v111_adjusted_title": "Ajustado",
+        "v111_wh3_90_compatibility": "Se actualizó la compatibilidad con la actualización 9.0 de Total War: WARHAMMER III.",
         "v110_added_title": "Añadido",
         "v110_variant_selector_compatibility": "Se añadió el parche de compatibilidad Dynamic Variant Selector. Este MOD puede restablecer los modelos de todos los personajes del juego original y de los MOD, lo que resuelve la mayoría de los conflictos de modelos.",
         "v110_fixed_title": "Corregido",

@@ -3875,6 +3875,7 @@
     ]
   },
   "battle_vortexs_tables": {
+    "20": [["change_max_angle","I32"],["contact_effect","OptionalStringU8"],["damage","I32"],["damage_ap","I32"],["duration","F32"],["expansion_speed","F32"],["goal_radius","F32"],["infinite_height","Boolean"],["move_change_freq","F32"],["movement_speed","F32"],["start_radius","F32"],["vortex_key","StringU8"],["ignition_amount","F32"],["is_magical","Boolean"],["composite_scene","StringU8"],["detonation_force","F32"],["launch_source","StringU8"],["building_collision","StringU8"],["launch_vfx","OptionalStringU8"],["height_off_ground","F32"],["delay","F32"],["num_vortexes","I32"],["composite_scene_blood","OptionalStringU8"],["affects_allies","Boolean"],["launch_source_offset","F32"],["composite_scene_group","OptionalStringU8"],["delay_between_vortexes","F32"],["is_spell","Boolean"],["shape","StringU8"],["start_height","F64"],["goal_height","F64"],["affects_enemies","Boolean"],["follow_target","Boolean"],["subsequent_vortex","OptionalStringU8"],["subsequent_vortex_delay","F32"]],
     "19": [
       [
         "change_max_angle",

@@ -6,6 +6,7 @@ from typing import Any
 
 import backend.game_data as game_data_module
 from backend.game_data import (
+    CURRENT_TABLE_VERSIONS,
     TABLE_SCHEMAS,
     DbSource,
     GameDataEntry,
@@ -184,6 +185,48 @@ class GameDataPatchTests(unittest.TestCase):
             set(TABLE_SCHEMAS["battle_entities_tables"]),
             {31, 32, 33, 34, 38, 39},
         )
+
+    def test_latest_wh3_table_versions_parse_current_db_fields(self) -> None:
+        cases = (
+            (
+                "battlefield_engines_tables",
+                24,
+                {"key": "engine_updated", "crew_reserve_distance_offset": 1.75},
+                "crew_reserve_distance_offset",
+                1.75,
+            ),
+            (
+                "missile_weapons_tables",
+                12,
+                {
+                    "key": "missile_updated",
+                    "hide_secondary_range_ammo_statistics_ui": True,
+                },
+                "hide_secondary_range_ammo_statistics_ui",
+                True,
+            ),
+            (
+                "battle_vortexs_tables",
+                20,
+                {
+                    "vortex_key": "vortex_updated",
+                    "subsequent_vortex": "follow_up_vortex",
+                    "subsequent_vortex_delay": 0.25,
+                },
+                "subsequent_vortex_delay",
+                0.25,
+            ),
+        )
+
+        for table_name, version, values, field_name, expected in cases:
+            with self.subTest(table=table_name):
+                self.assertEqual(CURRENT_TABLE_VERSIONS[table_name], version)
+                parsed = parse_db_table(
+                    table_name,
+                    _table_payload(table_name, version, [values]),
+                )
+                self.assertEqual(parsed.version, version)
+                self.assertEqual(parsed.rows[0].values[field_name], expected)
 
     def test_mod_tables_outrank_vanilla_regardless_of_internal_name(self) -> None:
         mod = DbSource(
@@ -1522,10 +1565,20 @@ class GameDataPatchTests(unittest.TestCase):
                     "db\\battle_vortexs_tables\\data__",
                     _table_payload(
                         "battle_vortexs_tables",
-                        19,
+                        20,
                         [
-                            {"vortex_key": "normal_vortex", "affects_allies": True, "is_spell": False},
-                            {"vortex_key": "spell_vortex", "affects_allies": True, "is_spell": True},
+                            {
+                                "vortex_key": "normal_vortex",
+                                "affects_allies": True,
+                                "is_spell": False,
+                            },
+                            {
+                                "vortex_key": "spell_vortex",
+                                "affects_allies": True,
+                                "is_spell": True,
+                                "subsequent_vortex": "follow_up_vortex",
+                                "subsequent_vortex_delay": 0.25,
+                            },
                         ],
                     ),
                 ),
@@ -1557,6 +1610,14 @@ class GameDataPatchTests(unittest.TestCase):
                 self.assertEqual(explosions["spell_blast"]["affects_allies"], spell_expected)
                 self.assertEqual(vortexes["normal_vortex"]["affects_allies"], normal_expected)
                 self.assertEqual(vortexes["spell_vortex"]["affects_allies"], spell_expected)
+                self.assertEqual(
+                    vortexes["spell_vortex"]["subsequent_vortex"],
+                    "follow_up_vortex",
+                )
+                self.assertAlmostEqual(
+                    vortexes["spell_vortex"]["subsequent_vortex_delay"],
+                    0.25,
+                )
                 kv_entries = [
                     entry
                     for entry in result.entries

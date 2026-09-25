@@ -11,11 +11,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend.app_settings import SettingsService
-from backend.constants import GITEE_UPDATE_MANIFEST_URL, GITHUB_UPDATE_MANIFEST_URL
+from backend.constants import APP_VERSION, GITEE_UPDATE_MANIFEST_URL, GITHUB_UPDATE_MANIFEST_URL
 from backend.update_service import UpdateService, is_newer_version
 
 
 class UpdateServiceTests(unittest.TestCase):
+    @staticmethod
+    def _next_patch_version() -> str:
+        components = APP_VERSION.split(".")
+        components[-1] = str(int(components[-1]) + 1)
+        return ".".join(components)
+
     @staticmethod
     def _manifest(version: str) -> dict[str, object]:
         return {
@@ -45,6 +51,7 @@ class UpdateServiceTests(unittest.TestCase):
     def test_local_manifest_check_download_hash_and_ignore_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            version = self._next_patch_version()
             executable = root / "Wyccc's Mod Manager.exe"
             executable.write_bytes(b"MZ" + b"release-fixture" * 20)
             data = executable.read_bytes()
@@ -54,7 +61,7 @@ class UpdateServiceTests(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "app": "Wyccc's Mod Manager",
-                        "version": "1.0.10",
+                        "version": version,
                         "published_at": "2026-07-15",
                         "download": {
                             "url": executable.name,
@@ -81,12 +88,12 @@ class UpdateServiceTests(unittest.TestCase):
             self.assertEqual(checked["entries"][0]["changes"][0]["type"], "feature")
             self.assertGreater(settings.get()["last_update_check_at"], 0)
 
-            downloaded = service.download("1.0.10")
+            downloaded = service.download(version)
             self.assertEqual(downloaded["status"], "ready")
             self.assertTrue(Path(downloaded["local_path"]).is_file())
             self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
 
-            service.ignore("1.0.10")
+            service.ignore(version)
             ignored = service.check(manual=False)
             self.assertFalse(ignored["has_update"])
             self.assertTrue(ignored["ignored"])
@@ -96,13 +103,14 @@ class UpdateServiceTests(unittest.TestCase):
     def test_download_rejects_a_hash_mismatch_and_removes_partial_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            version = self._next_patch_version()
             executable = root / "bad.exe"
             executable.write_bytes(b"MZbad-update")
             manifest = root / "update-manifest.json"
             manifest.write_text(
                 json.dumps(
                     {
-                        "version": "1.0.10",
+                        "version": version,
                         "download_url": executable.name,
                         "sha256": "0" * 64,
                         "size": executable.stat().st_size,
@@ -148,7 +156,8 @@ class UpdateServiceTests(unittest.TestCase):
         thread.start()
         try:
             base = f"http://127.0.0.1:{server.server_address[1]}"
-            manifest = self._manifest("1.0.10")
+            version = self._next_patch_version()
+            manifest = self._manifest(version)
             manifest["download"]["url"] = f"{base}/broken/main.exe"
             manifest["download"]["mirrors"] = {
                 "github": f"{base}/broken/github.exe",
@@ -166,7 +175,7 @@ class UpdateServiceTests(unittest.TestCase):
 
                 checked = service.check(manual=True)
                 self.assertTrue(checked["has_update"])
-                downloaded = service.download("1.0.10")
+                downloaded = service.download(version)
                 self.assertEqual(downloaded["status"], "ready")
                 self.assertEqual(Path(downloaded["local_path"]).read_bytes(), data)
                 self.assertIn("/broken/github.exe", served)
@@ -208,6 +217,7 @@ class UpdateServiceTests(unittest.TestCase):
 
     def test_non_chinese_checks_github_first_but_uses_a_newer_gitee_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
+            newer_version = self._next_patch_version()
             settings = SettingsService(Path(temporary))
             settings.save({"language": "en-US"})
             service = UpdateService(Path(temporary), settings)
@@ -215,7 +225,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 calls.append(url)
-                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else "1.0.10"
+                version = "0.5.0" if url == GITHUB_UPDATE_MANIFEST_URL else newer_version
                 return self._manifest(version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
@@ -223,7 +233,7 @@ class UpdateServiceTests(unittest.TestCase):
 
             self.assertEqual(calls, [GITHUB_UPDATE_MANIFEST_URL, GITEE_UPDATE_MANIFEST_URL])
             self.assertEqual(checked["source"], "gitee")
-            self.assertEqual(checked["version"], "1.0.10")
+            self.assertEqual(checked["version"], newer_version)
             self.assertTrue(service._last_info["download_url"].startswith("https://github.com/"))
             self.assertTrue(checked["has_update"])
 
@@ -240,6 +250,7 @@ class UpdateServiceTests(unittest.TestCase):
 
     def test_repository_check_falls_back_when_the_preferred_source_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
+            newer_version = self._next_patch_version()
             settings = SettingsService(Path(temporary))
             settings.save({"language": "zh-CN"})
             service = UpdateService(Path(temporary), settings)
@@ -247,7 +258,7 @@ class UpdateServiceTests(unittest.TestCase):
             def read_manifest(url: str) -> tuple[dict[str, object], str]:
                 if url == GITEE_UPDATE_MANIFEST_URL:
                     raise OSError("Gitee unavailable")
-                return self._manifest("1.0.10"), url
+                return self._manifest(newer_version), url
 
             with patch.object(service, "_read_json", side_effect=read_manifest):
                 checked = service.check(manual=True)

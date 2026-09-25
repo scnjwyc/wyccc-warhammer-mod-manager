@@ -36,11 +36,36 @@ def _load_schemas() -> dict[str, dict[int, tuple[tuple[str, str], ...]]]:
     }
 
 
+_CUSTOM_BATTLE_PERMISSIONS_V7_SCHEMA = (
+    ("faction", "StringU8"),
+    ("general_unit", "Boolean"),
+    ("unit", "StringU8"),
+    ("siege_unit_attacker", "Boolean"),
+    ("siege_unit_defender", "Boolean"),
+    ("general_portrait", "OptionalStringU8"),
+    ("general_uniform", "OptionalStringU8"),
+    ("set_piece_character", "OptionalStringU8"),
+)
+_CUSTOM_BATTLE_PERMISSIONS_V8_SCHEMA = (
+    *_CUSTOM_BATTLE_PERMISSIONS_V7_SCHEMA,
+    ("campaign_exclusive", "Boolean"),
+)
+_CUSTOM_BATTLE_PERMISSIONS_V9_V10_SCHEMA = (
+    *_CUSTOM_BATTLE_PERMISSIONS_V8_SCHEMA,
+    ("armory_item_set", "OptionalStringU8"),
+)
+_CUSTOM_BATTLE_PERMISSIONS_V11_SCHEMA = (
+    *_CUSTOM_BATTLE_PERMISSIONS_V9_V10_SCHEMA,
+    ("supports_upgrades", "Boolean"),
+)
+
+
 # This is a focused subset of the locally verified WH3 schema.  Every known
 # version of the six required tables is retained so older enabled mods can be
 # resolved without replacing their rows with vanilla data.
 # The unit-data editor reads a few additional tables.  They have stable, small
-# current schemas, while the historical schemas for the original game-data
+# schemas, including known historical layouts when the editor only needs fields
+# shared by all versions.  Historical schemas for the original game-data
 # transformations remain in ``wh3_db_schema.json``.
 EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
     # Variant Selector compatibility reads the character appearance chain.
@@ -190,6 +215,28 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         ),
     },
     "battlefield_engines_tables": {
+        24: (
+            ("destroyed_model", "OptionalStringU8"),
+            ("destruction_animation", "OptionalStringU8"),
+            ("engine_type", "StringU8"),
+            ("gun_animation_table", "StringU8"),
+            ("key", "StringU8"),
+            ("missile_weapon", "OptionalStringU8"),
+            ("model", "StringU8"),
+            ("battle_entity", "StringU8"),
+            ("asset_folder", "OptionalStringU8"),
+            ("variant", "OptionalStringU8"),
+            ("draught_attachment_point", "OptionalStringU8"),
+            ("tech_folder", "OptionalStringU8"),
+            ("rider_attachment_point", "OptionalStringU8"),
+            ("destruct_model", "OptionalStringU8"),
+            ("destruct_anim", "OptionalStringU8"),
+            ("destruct_meta", "OptionalStringU8"),
+            ("audio_armour_type", "OptionalStringU8"),
+            ("riders_shoot_behaviour", "StringU8"),
+            ("scale", "F32"),
+            ("crew_reserve_distance_offset", "F32"),
+        ),
         23: (
             ("destroyed_model", "OptionalStringU8"),
             ("destruction_animation", "OptionalStringU8"),
@@ -347,6 +394,14 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         ),
     },
     "missile_weapons_tables": {
+        12: (
+            ("key", "StringU8"),
+            ("precursor", "Boolean"),
+            ("default_projectile", "StringU8"),
+            ("audio_type", "OptionalStringU8"),
+            ("use_secondary_ammo_pool", "Boolean"),
+            ("hide_secondary_range_ammo_statistics_ui", "Boolean"),
+        ),
         11: (
             ("key", "StringU8"), ("precursor", "Boolean"), ("default_projectile", "StringU8"),
             ("audio_type", "OptionalStringU8"), ("use_secondary_ammo_pool", "Boolean"),
@@ -422,19 +477,11 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         0: (("unit", "StringU8"),),
     },
     "units_custom_battle_permissions_tables": {
-        11: (
-            ("faction", "StringU8"),
-            ("general_unit", "Boolean"),
-            ("unit", "StringU8"),
-            ("siege_unit_attacker", "Boolean"),
-            ("siege_unit_defender", "Boolean"),
-            ("general_portrait", "OptionalStringU8"),
-            ("general_uniform", "OptionalStringU8"),
-            ("set_piece_character", "OptionalStringU8"),
-            ("campaign_exclusive", "Boolean"),
-            ("armory_item_set", "OptionalStringU8"),
-            ("supports_upgrades", "Boolean"),
-        ),
+        7: _CUSTOM_BATTLE_PERMISSIONS_V7_SCHEMA,
+        8: _CUSTOM_BATTLE_PERMISSIONS_V8_SCHEMA,
+        9: _CUSTOM_BATTLE_PERMISSIONS_V9_V10_SCHEMA,
+        10: _CUSTOM_BATTLE_PERMISSIONS_V9_V10_SCHEMA,
+        11: _CUSTOM_BATTLE_PERMISSIONS_V11_SCHEMA,
     },
     # Race/culture resolution for the unit-data editor: unit -> exclusive
     # faction -> subculture -> culture.  Versions follow the current vanilla
@@ -608,11 +655,11 @@ CURRENT_TABLE_VERSIONS = {
     "main_units_tables": 7,
     "land_units_tables": 54,
     "mounts_tables": 10,
-    "battlefield_engines_tables": 23,
+    "battlefield_engines_tables": 24,
     "land_unit_articulated_vehicles_tables": 6,
     "battle_entities_tables": 39,
     "melee_weapons_tables": 25,
-    "missile_weapons_tables": 11,
+    "missile_weapons_tables": 12,
     "effect_bonus_value_missile_weapon_junctions_tables": 0,
     "unit_missile_weapon_junctions_tables": 1,
     "unit_purchasable_effect_sets_tables": 1,
@@ -627,7 +674,7 @@ CURRENT_TABLE_VERSIONS = {
     "cultures_subcultures_tables": 6,
     "projectiles_tables": 53,
     "projectiles_explosions_tables": 19,
-    "battle_vortexs_tables": 19,
+    "battle_vortexs_tables": 20,
 }
 THREE_KINGDOMS_CURRENT_TABLE_VERSIONS = {
     table_name: max(versions)

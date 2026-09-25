@@ -97,27 +97,33 @@ def _string_u8(value: str) -> bytes:
     return struct.pack("<H", len(raw)) + raw
 
 
-def _custom_battle_row(faction: str, unit: str) -> bytes:
-    return b"".join(
-        (
-            _string_u8(faction),
-            b"\0",  # general_unit
-            _string_u8(unit),
-            b"\1\1",  # siege_unit_attacker / siege_unit_defender
-            b"\0\0\0",  # general portrait, uniform, set-piece character
-            b"\0",  # campaign_exclusive
-            b"\0",  # armory_item_set
-            b"\0",  # supports_upgrades
-        )
-    )
+def _custom_battle_row(faction: str, unit: str, version: int = 11) -> bytes:
+    fields = [
+        _string_u8(faction),
+        b"\0",  # general_unit
+        _string_u8(unit),
+        b"\1\1",  # siege_unit_attacker / siege_unit_defender
+        b"\0\0\0",  # general portrait, uniform, set-piece character
+    ]
+    if version >= 8:
+        fields.append(b"\0")  # campaign_exclusive
+    if version >= 9:
+        fields.append(b"\0")  # armory_item_set
+    if version >= 11:
+        fields.append(b"\0")  # supports_upgrades
+    return b"".join(fields)
 
 
-def _custom_battle_payload(rows: list[bytes], guid: str) -> bytes:
+def _custom_battle_payload(
+    rows: list[bytes],
+    guid: str,
+    version: int = 11,
+) -> bytes:
     return b"".join(
         (
             _guid_prefix(guid),
             b"\xfc\xfd\xfe\xff",
-            struct.pack("<i", 11),
+            struct.pack("<i", version),
             b"\1",
             struct.pack("<i", len(rows)),
             *rows,
@@ -470,7 +476,7 @@ def _engine_artillery_source() -> DbSource:
                 "db\\battlefield_engines_tables\\data__",
                 _table_payload(
                     "battlefield_engines_tables",
-                    23,
+                    24,
                     [
                         {
                             "key": "engine_great_cannon",
@@ -481,6 +487,7 @@ def _engine_artillery_source() -> DbSource:
                             "missile_weapon": "weap_great_cannon",
                             "riders_shoot_behaviour": "none",
                             "scale": 1.0,
+                            "crew_reserve_distance_offset": 2.5,
                         }
                     ],
                 ),
@@ -508,7 +515,7 @@ def _engine_artillery_source() -> DbSource:
                 "db\\missile_weapons_tables\\data__",
                 _table_payload(
                     "missile_weapons_tables",
-                    11,
+                    12,
                     [
                         {
                             "key": "weap_great_cannon",
@@ -516,6 +523,7 @@ def _engine_artillery_source() -> DbSource:
                             "default_projectile": "proj_great_cannon",
                             "audio_type": None,
                             "use_secondary_ammo_pool": False,
+                            "hide_secondary_range_ammo_statistics_ui": True,
                         }
                     ],
                 ),
@@ -839,6 +847,51 @@ class UnitDataPatchTests(unittest.TestCase):
         self.assertNotIn(target.encode("ascii"), payload)
         self.assertIn(b"kept_unit", payload)
 
+    def test_disabled_unit_accepts_compatible_older_custom_battle_permissions_versions(
+        self,
+    ) -> None:
+        target = "inf_swordsmen"
+        guid = "55555555-5555-5555-5555-555555555555"
+        for version in range(7, 11):
+            with self.subTest(version=version):
+                source = DbSource(
+                    "Hef_reskin_combination_pure.pack",
+                    (
+                        GameDataEntry(
+                            "db\\units_custom_battle_permissions_tables\\mod_battle",
+                            _custom_battle_payload(
+                                [
+                                    _custom_battle_row(
+                                        "wh_main_emp_empire", target, version
+                                    ),
+                                    _custom_battle_row(
+                                        "wh_main_emp_empire", "kept_unit", version
+                                    ),
+                                ],
+                                guid,
+                                version=version,
+                            ),
+                        ),
+                    ),
+                )
+
+                result = build_unit_data_entries(
+                    [source], {}, {target: {"enabled": False}}
+                )
+                entries = {entry.name: entry.payload for entry in result.entries}
+                payload = entries[
+                    "db\\units_custom_battle_permissions_tables\\mod_battle"
+                ]
+                prefix_length = len(_guid_prefix(guid))
+
+                self.assertTrue(payload.startswith(_guid_prefix(guid)))
+                self.assertEqual(
+                    payload[prefix_length + 4 : prefix_length + 8],
+                    struct.pack("<i", version),
+                )
+                self.assertNotIn(target.encode("ascii"), payload)
+                self.assertIn(b"kept_unit", payload)
+
     def test_disabled_unit_is_removed_from_allied_recruitment_permissions(self) -> None:
         target = "inf_swordsmen"
         guid = "66666666-6666-6666-6666-666666666666"
@@ -917,6 +970,25 @@ class UnitDataPatchTests(unittest.TestCase):
         explosions = _rows_by_key(result, "projectiles_explosions_tables")
         self.assertEqual(explosions["expl_great_cannon"]["detonation_damage"], 45)
         self.assertEqual(explosions["expl_great_cannon"]["detonation_damage_ap"], 95)
+        engine_payload = next(
+            entry.payload
+            for entry in source.entries
+            if entry.name.startswith("db\\battlefield_engines_tables\\")
+        )
+        missile_weapon_payload = next(
+            entry.payload
+            for entry in source.entries
+            if entry.name.startswith("db\\missile_weapons_tables\\")
+        )
+        engine_row = parse_db_table("battlefield_engines_tables", engine_payload).rows[0]
+        missile_weapon_row = parse_db_table(
+            "missile_weapons_tables",
+            missile_weapon_payload,
+        ).rows[0]
+        self.assertEqual(engine_row.values["crew_reserve_distance_offset"], 2.5)
+        self.assertTrue(
+            missile_weapon_row.values["hide_secondary_range_ammo_statistics_ui"]
+        )
         # The land row keeps its engine reference untouched: artillery carries
         # the weapon through battlefield_engines.missile_weapon, and the engine
         # still points at the same projectile keys, now overlaid with edits.
