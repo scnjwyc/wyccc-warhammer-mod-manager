@@ -24,6 +24,25 @@ def _used_drive_letters() -> set[str]:
     }
 
 
+def _existing_drive_aliases() -> dict[str, str]:
+    """Query Unicode DOS device targets; unlike `subst` output this is locale independent."""
+    if os.name != "nt":
+        return {}
+    aliases: dict[str, str] = {}
+    for letter in sorted(_used_drive_letters(), reverse=True):
+        buffer = ctypes.create_unicode_buffer(32768)
+        if not ctypes.windll.kernel32.QueryDosDeviceW(f"{letter}:", buffer, len(buffer)):
+            continue
+        target = buffer.value
+        if target.startswith("\\??\\") and len(target) > 6 and target[5] == ":":
+            physical = Path(target[4:]).resolve(strict=False)
+            aliases.setdefault(os.path.normcase(str(physical)), f"{letter}:\\")
+    return aliases
+
+
+_ALIAS_LOCK = threading.Lock()
+
+
 @dataclass(frozen=True)
 class LaunchPathMap:
     aliases: tuple[tuple[Path, str], ...] = ()
@@ -40,11 +59,10 @@ class LaunchPathMap:
 
 
 class LaunchPathAliases:
-    """Expose non-ASCII game roots through session-local ASCII drive aliases."""
+    """Reuse system SUBST mappings across launcher instances and restarts."""
 
     def __init__(self) -> None:
         self._aliases: dict[str, str] = {}
-        self._lock = threading.Lock()
 
     def prepare(self, game_path: str, workshop_path: str) -> LaunchPathMap:
         roots = [
@@ -62,9 +80,10 @@ class LaunchPathAliases:
 
     def _alias_for(self, root: Path) -> str:
         key = os.path.normcase(str(root))
-        with self._lock:
-            existing = self._aliases.get(key)
+        with _ALIAS_LOCK:
+            existing = _existing_drive_aliases().get(key)
             if existing:
+                self._aliases[key] = existing
                 return existing
             reserved_letters = _used_drive_letters() | {
                 value[0].upper() for value in self._aliases.values()

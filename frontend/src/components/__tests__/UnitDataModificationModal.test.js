@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../bridge', () => ({ invoke: vi.fn() }))
@@ -120,6 +120,44 @@ describe('unit data modification modal', () => {
     expect(invoke).toHaveBeenCalledWith('get_unit_data_list')
     expect(wrapper.findAll('.unit-data-row')).toHaveLength(2)
     expect(wrapper.get('[data-testid="unit-data-count"]').text()).toContain('2')
+  })
+
+  it('opens one cached unit and preserves all saved edits when saving or expanding the search', async () => {
+    invoke.mockImplementation(async (_method, _token, key) => ({
+      units: sampleUnits.filter(u => !key || u.key === key), stats: { unit_count: 2 },
+      partial: Boolean(key), saved_edits: { veh_chariot: { melee_attack: 80 } },
+    }))
+    const wrapper = mount(UnitDataModificationModal, { props: {
+      open: false, initialUnitKey: 'inf_swordsmen', snapshotToken: 'catalogue-token',
+    } })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    expect(invoke).toHaveBeenCalledWith('get_unit_data_list', 'catalogue-token', 'inf_swordsmen')
+    expect(wrapper.findAll('.unit-data-row')).toHaveLength(1)
+    await wrapper.get('[data-testid="unit-melee_attack-inf_swordsmen"]').setValue('35')
+    await wrapper.get('[data-testid="unit-data-save"]').trigger('click')
+    expect(wrapper.emitted('save')[0][0]).toEqual({ inf_swordsmen: { melee_attack: 35 }, veh_chariot: { melee_attack: 80 } })
+    await wrapper.get('[data-testid="unit-data-search"]').setValue('')
+    await flushPromises()
+    expect(invoke).toHaveBeenCalledWith('get_unit_data_list', 'catalogue-token', '')
+    expect(wrapper.findAll('.unit-data-row')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="unit-melee_attack-inf_swordsmen"]').element.value).toBe('35')
+    expect(wrapper.get('[data-testid="unit-melee_attack-veh_chariot"]').element.value).toBe('80')
+    wrapper.unmount()
+  })
+
+  it('ignores a late unit response after closing and reopening a different unit', async () => {
+    let resolveOld
+    invoke.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+    const wrapper = mount(UnitDataModificationModal, { props: { open: false, initialUnitKey: 'inf_swordsmen', snapshotToken: 'old' } })
+    await wrapper.setProps({ open: true })
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ initialUnitKey: 'veh_chariot', snapshotToken: 'new', open: true })
+    await flushPromises()
+    resolveOld({ units: [sampleUnits[0]], partial: true })
+    await flushPromises()
+    expect(wrapper.get('.unit-data-keytag').text()).toBe('veh_chariot')
+    wrapper.unmount()
   })
 
   it('keeps the configured column widths fixed in the rendered table', async () => {

@@ -7,16 +7,19 @@ import zlib
 from typing import Any
 
 from .models import ModAsset
+from .games import DEFAULT_GAME_ID, game_definitions
 
 PREFIX = "WMM1"
 LEGACY_PREFIXES = ("WWM1", "WWMM1")
 PENDING_WORKSHOP_PREFIX = "pending:steam:"
 
 
-def export_share(mods: list[ModAsset]) -> str:
+def export_share(mods: list[ModAsset], game_id: str = DEFAULT_GAME_ID) -> str:
+    if game_id not in {game.id for game in game_definitions()}:
+        raise ValueError("不支持的分享码版本或游戏")
     payload = {
-        "schema_version": 1,
-        "game": "wh3",
+        "schema_version": 2,
+        "game": game_id,
         "mods": [
             {
                 "id": mod.id,
@@ -34,7 +37,7 @@ def export_share(mods: list[ModAsset]) -> str:
     return f"{PREFIX}-{checksum:08X}-{encoded}"
 
 
-def parse_share(value: str) -> list[dict[str, Any]]:
+def parse_share(value: str, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
     text = value.strip()
     matched_prefix = next(
         (
@@ -58,14 +61,24 @@ def parse_share(value: str) -> list[dict[str, Any]]:
             payload = json.loads(zlib.decompress(compressed).decode("utf-8"))
         except (ValueError, TypeError, json.JSONDecodeError, zlib.error) as exc:
             raise ValueError(f"无法解析分享码：{exc}") from exc
-        if payload.get("game") != "wh3" or payload.get("schema_version") != 1:
+        if not isinstance(payload, dict):
+            raise ValueError("分享码内容无效")
+        version = payload.get("schema_version")
+        shared_game = payload.get("game")
+        if version == 1 and shared_game == "wh3":
+            shared_game = DEFAULT_GAME_ID
+        elif version != 2 or not isinstance(shared_game, str) or shared_game not in {game.id for game in game_definitions()}:
             raise ValueError("不支持的分享码版本或游戏")
+        if shared_game != game_id:
+            raise ValueError("分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入")
         mods = payload.get("mods", [])
         if not isinstance(mods, list):
             raise ValueError("分享码内容无效")
         return [item for item in mods if isinstance(item, dict)]
 
     # Compatibility with WH3-Mod-Manager's workshopId[;loadOrder]|... format.
+    if game_id != DEFAULT_GAME_ID:
+        raise ValueError("旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码")
     result = []
     for index, token in enumerate(part.strip() for part in text.split("|")):
         if not token:

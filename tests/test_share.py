@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import base64
+import json
+import zlib
 from pathlib import Path
 
 from backend.constants import SOURCE_DATA, SOURCE_WORKSHOP
+from backend.games import game_definitions
 from backend.share import (
     PREFIX,
     export_share,
@@ -17,6 +21,25 @@ from tests.helpers import make_asset, write_pack
 
 
 class ShareCodeTests(unittest.TestCase):
+    def test_shares_are_bound_to_the_selected_game(self) -> None:
+        for game in game_definitions():
+            with self.subTest(game=game.id):
+                code = export_share([], game.id)
+                self.assertEqual(parse_share(code, game.id), [])
+                other = "three_kingdoms" if game.id == "warhammer3" else "warhammer3"
+                with self.assertRaisesRegex(ValueError, "所属游戏"):
+                    parse_share(code, other)
+
+    def test_old_shares_are_only_accepted_for_warhammer3(self) -> None:
+        payload = zlib.compress(json.dumps({"schema_version": 1, "game": "wh3", "mods": []}).encode())
+        encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+        code = f"WMM1-{zlib.crc32(payload):08X}-{encoded}"
+        self.assertEqual(parse_share(code, "warhammer3"), [])
+        with self.assertRaisesRegex(ValueError, "所属游戏"):
+            parse_share(code, "three_kingdoms")
+        with self.assertRaisesRegex(ValueError, "旧版分享码"):
+            parse_share("123;0|456;1", "three_kingdoms")
+
     def test_round_trip_and_resolve_preserves_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

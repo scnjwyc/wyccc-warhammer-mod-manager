@@ -37,6 +37,7 @@ from .game_data_settings import (
     normalize_unit_scale_multiplier,
 )
 from .models import ModAsset
+from .pack_reader import read_pack_index
 from .scanner import read_pack_type
 from .unit_data import build_unit_data_entries
 
@@ -231,50 +232,27 @@ def read_pack_entries(
     )
     try:
         with path.open("rb") as stream:
-            header = stream.read(28)
-            if len(header) != 28 or header[:4] != b"PFH5":
-                return []
-            _, _, dependency_size, file_count, index_size, _ = struct.unpack_from("<6i", header, 4)
-            if dependency_size < 0 or file_count < 0 or index_size < 0:
-                raise ValueError(f"Pack 索引无效：{path.name}")
-            stream.seek(28 + dependency_size)
-            index = stream.read(index_size)
-            if len(index) != index_size:
-                raise ValueError(f"Pack 索引不完整：{path.name}")
-            data_offset = 28 + dependency_size + index_size
-            cursor = 0
-            current_offset = data_offset
-            selected: list[tuple[str, int, int, bool]] = []
-            for _ in range(file_count):
-                if cursor + 5 > len(index):
-                    raise ValueError(f"Pack 文件索引损坏：{path.name}")
-                file_size = struct.unpack_from("<i", index, cursor)[0]
-                compressed = index[cursor + 4] == 1
-                cursor += 5
-                terminator = index.find(b"\0", cursor)
-                if file_size < 0 or terminator < 0:
-                    raise ValueError(f"Pack 文件索引损坏：{path.name}")
-                name = index[cursor:terminator].decode("utf-8", errors="replace")
+            selected = [
+                entry for entry in read_pack_index(path)
                 if not prefixes or any(
-                    name.replace("/", "\\").casefold().startswith(
+                    entry.name.replace("/", "\\").casefold().startswith(
                         item.replace("/", "\\").casefold()
                     ) for item in prefixes
-                ):
-                    selected.append((name, current_offset, file_size, compressed))
-                current_offset += file_size
-                cursor = terminator + 1
+                )
+            ]
 
             entries: list[PackEntry] = []
-            for name, offset, file_size, compressed in selected:
-                stream.seek(offset)
-                payload = stream.read(file_size)
-                if len(payload) != file_size:
+            for entry in selected:
+                name = entry.name
+                stream.seek(entry.offset)
+                payload = stream.read(entry.size)
+                if len(payload) != entry.size:
                     raise ValueError(f"Pack 内文件不完整：{name}")
                 # A few third-party Packs contain a valid Zstandard/LZ4 frame
                 # but mark the index entry as uncompressed.  Accept only an
                 # unmistakable frame at the payload start (or after CA's size
                 # prefix), so ordinary uncompressed entries are untouched.
-                needs_decompression = compressed or _has_compression_frame(payload)
+                needs_decompression = entry.compressed or _has_compression_frame(payload)
                 entries.append(
                     PackEntry(
                         name,

@@ -81,9 +81,10 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.1',
+    appVersion: '1.1.5',
     settings: {},
     paths: {},
+    gameContextRevision: 0,
     pathHealth: {},
     mods: [],
     modTypes: [],
@@ -411,12 +412,55 @@ export const useAppStore = defineStore('app', {
       }
       return data
     },
+    isCurrentGameResult(data, revision = this.gameContextRevision) {
+      return Boolean(data) && !data.discarded && revision === this.gameContextRevision
+        && (!data.game_id || data.game_id === this.settings.selected_game)
+    },
+    beginGameContextChange() {
+      this.gameContextRevision += 1
+      this.stopCollectionImportDownloadSync()
+      this.workshopRefreshing = false
+      this.liveModRefreshing = false
+      return this.gameContextRevision
+    },
+    clearGameContextData() {
+      this.mods = []
+      this.thumbnails = {}
+      this.replaceActiveIds([])
+      this.inactiveOrderIds = []
+      this.inactiveOrderCustomized = false
+      this.selectedId = ''
+      this.selectedIds = []
+      this.selectionAnchorId = ''
+      this.selectedPreview = ''
+      this.missingEnabledIds = []
+      this.playsets = []
+      this.currentPlaysetId = ''
+      this.orderToken = 'missing'
+      this.warnings = []
+      this.gameUpdatedAt = 0
+      this.modRevision = 0
+      this.runtime = { running: false, mod_revision: 0 }
+      this.saveGames = []
+      this.saveGamesDirectory = ''
+      this.unitDataFeature = defaultUnitDataFeature()
+      this.variantSelectorFeature = defaultVariantSelectorFeature()
+      this.gameDataFeatures = defaultGameDataFeatures()
+      this.gameDataFeatureWarning = ''
+      this.workshopEligibilityRequestId += 1
+      this.workshopUpdateEligibility = new Set()
+      this.workshopEligibilityKnownIds = new Set()
+      this.dirty = false
+    },
     async scan(refreshWorkshop = false) {
+      const revision = this.gameContextRevision
       await this.flushPlaysetUpdates()
+      if (revision !== this.gameContextRevision) return null
       return this.withBusy(refreshWorkshop ? t('busy.refreshWorkshop') : t('busy.scanMods'), async () => {
         const previousIds = [...this.activeIds]
         const preserveDirty = this.dirty
         const data = await invoke('scan_mods', refreshWorkshop)
+        if (!this.isCurrentGameResult(data, revision)) return null
         this.mods = data.mods
         this.unitDataFeature = {
           ...defaultUnitDataFeature(),
@@ -461,6 +505,7 @@ export const useAppStore = defineStore('app', {
           this.mods.filter(mod => mod?.workshop_id).map(mod => mod.id),
         )
         await this.loadPreview(this.selectedId)
+        if (!this.isCurrentGameResult(data, revision)) return null
         void this.loadThumbnails()
         this.notify(t('toast.scanComplete', { count: this.mods.length }))
         return data
@@ -468,10 +513,13 @@ export const useAppStore = defineStore('app', {
     },
     async refreshWorkshopInBackground() {
       if (this.workshopRefreshing || this.runtime.running) return
+      const revision = this.gameContextRevision
       await this.flushPlaysetUpdates()
+      if (revision !== this.gameContextRevision) return
       this.workshopRefreshing = true
       try {
         const data = await invoke('scan_mods', true)
+        if (!this.isCurrentGameResult(data, revision)) return
         const installed = new Set(data.mods.map(mod => mod.id))
         const currentOrder = [...this.activeIds]
         this.mods = data.mods
@@ -501,23 +549,27 @@ export const useAppStore = defineStore('app', {
           this.mods.filter(mod => mod?.workshop_id).map(mod => mod.id),
         )
         await this.loadPreview(this.selectedId)
+        if (!this.isCurrentGameResult(data, revision)) return
         void this.loadThumbnails(true)
         this.notify(t('toast.workshopComplete'))
       } catch (error) {
-        this.notify(error.message || t('toast.workshopFailed'), 'warning')
+        if (revision === this.gameContextRevision) this.notify(error.message || t('toast.workshopFailed'), 'warning')
       } finally {
-        this.workshopRefreshing = false
+        if (revision === this.gameContextRevision) this.workshopRefreshing = false
       }
     },
     async loadThumbnails(force = false) {
+      const revision = this.gameContextRevision
       const installed = new Set(this.mods.map(mod => mod.id))
       const pending = this.mods
         .map(mod => mod.id)
         .filter(modId => force || !this.thumbnails[modId])
       for (let start = 0; start < pending.length; start += 80) {
+        if (revision !== this.gameContextRevision) return
         const chunk = pending.slice(start, start + 80)
         try {
           const data = await invoke('get_mod_thumbnails', chunk)
+          if (revision !== this.gameContextRevision) return
           const additions = Object.fromEntries(
             Object.entries(data.items || {}).filter(([modId, url]) => installed.has(modId) && url),
           )
@@ -573,13 +625,14 @@ export const useAppStore = defineStore('app', {
       return selected
     },
     async loadPreview(modId) {
+      const revision = this.gameContextRevision
       this.selectedPreview = ''
       if (!modId) return
       try {
         const data = await invoke('get_mod_preview', modId)
-        if (this.selectedId === modId) this.selectedPreview = data.url || ''
+        if (revision === this.gameContextRevision && this.selectedId === modId) this.selectedPreview = data.url || ''
       } catch {
-        this.selectedPreview = ''
+        if (revision === this.gameContextRevision && this.selectedId === modId) this.selectedPreview = ''
       }
     },
     playsetOrderSnapshot() {
@@ -944,6 +997,38 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
+    async getModDiagnostics() {
+      return invoke('get_mod_diagnostics')
+    },
+    async getCrashDiagnosis() {
+      return invoke('get_crash_diagnosis')
+    },
+    async dismissCrashDiagnosis() {
+      return invoke('dismiss_crash_diagnosis')
+    },
+    async getDiagnosticsHistory() {
+      return invoke('get_diagnostics_history')
+    },
+    async startModDiagnostics(mode) {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('diagnostics.start'), () => invoke('start_mod_diagnostics', this.activeIds, mode))
+    },
+    async confirmDiagnosticTrial({ id, round, verdict }) {
+      return invoke('confirm_diagnostic_trial', id, round, verdict)
+    },
+    async cancelModDiagnostics() {
+      return invoke('cancel_mod_diagnostics')
+    },
+    async applyDiagnosticsResult(runId, restore = false) {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('diagnostics.apply'), async () => {
+        const result = await invoke('apply_diagnostics_result', runId, restore)
+        this.applyPlaysetPayload(result)
+        this.dirty = true
+        await this.recordCurrentPlaysetChange()
+        return result
+      })
+    },
     async terminateGame() {
       return this.withBusy(t('busy.terminateGame'), async () => {
         const data = await invoke('terminate_game')
@@ -1069,24 +1154,16 @@ export const useAppStore = defineStore('app', {
     async saveSettings(changes) {
       await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.saveSettings'), async () => {
+        const revision = this.beginGameContextChange()
         const data = await invoke('save_settings', changes)
+        if (revision !== this.gameContextRevision) return data
         this.settings = data.settings
         applyInterfaceLanguage(this.settings.language)
         this.paths = data.paths
         this.pathHealth = data.path_health
-        this.mods = []
-        this.thumbnails = {}
-        this.replaceActiveIds([])
-        this.inactiveOrderIds = []
-        this.inactiveOrderCustomized = false
-        this.selectedId = ''
-        this.selectedIds = []
-        this.selectionAnchorId = ''
-        this.workshopEligibilityRequestId += 1
-        this.workshopUpdateEligibility = new Set()
-        this.workshopEligibilityKnownIds = new Set()
-        this.dirty = false
+        this.clearGameContextData()
         const changelog = await invoke('get_changelog')
+        if (revision !== this.gameContextRevision) return data
         this.changelog = changelog.items || []
         this.notify(t('toast.settingsSaved'))
         return data
@@ -1217,15 +1294,16 @@ export const useAppStore = defineStore('app', {
       return data
     },
     async detectPaths(gameId = '') {
+      await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.detectSteam'), async () => {
+        const revision = this.beginGameContextChange()
         const data = await invoke('detect_paths', gameId)
+        if (revision !== this.gameContextRevision) return data
         this.settings = data.settings
         applyInterfaceLanguage(this.settings.language)
         this.paths = data.paths
         this.pathHealth = data.path_health || {}
-        this.workshopEligibilityRequestId += 1
-        this.workshopUpdateEligibility = new Set()
-        this.workshopEligibilityKnownIds = new Set()
+        this.clearGameContextData()
         if (data.found) this.notify(t('toast.pathsDetected', {
           game: localizedSelectedGameName(this.settings),
         }))
@@ -1623,6 +1701,7 @@ export const useAppStore = defineStore('app', {
         : null
     },
     async refreshCollectionImportDownloads() {
+      const revision = this.gameContextRevision
       const sync = this.collectionImportSync
       if (!sync) return null
       if (sync.playsetId !== this.currentPlaysetId || this.runtime.running) {
@@ -1636,9 +1715,12 @@ export const useAppStore = defineStore('app', {
       this.liveModRefreshing = true
       try {
         await this.flushPlaysetUpdates()
+        if (revision !== this.gameContextRevision) return null
         const previousActiveIds = [...this.activeIds]
         const data = await invoke('scan_mods', false)
-        await this.applyExternalScan(data, { forcePlaysetOrder: true })
+        if (!this.isCurrentGameResult(data, revision)) return null
+        await this.applyExternalScan(data, { forcePlaysetOrder: true, revision })
+        if (!this.isCurrentGameResult(data, revision)) return null
         this.updateCollectionImportProgress(data)
         if (!sameIds(previousActiveIds, this.activeIds)) {
           this.dirty = true
@@ -1648,12 +1730,14 @@ export const useAppStore = defineStore('app', {
       } catch {
         return null
       } finally {
-        this.liveModRefreshing = false
-        this.scheduleCollectionImportDownloadRefresh()
+        if (revision === this.gameContextRevision) {
+          this.liveModRefreshing = false
+          this.scheduleCollectionImportDownloadRefresh()
+        }
       }
     },
-    async applyExternalScan(data, { forcePlaysetOrder = false } = {}) {
-      if (!data) return
+    async applyExternalScan(data, { forcePlaysetOrder = false, revision = this.gameContextRevision } = {}) {
+      if (!this.isCurrentGameResult(data, revision)) return
       const previousIds = [...this.activeIds]
       const installed = new Set((data.mods || []).map(mod => mod.id))
       this.mods = data.mods || []
@@ -1675,9 +1759,11 @@ export const useAppStore = defineStore('app', {
       if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
       this.selectionAnchorId = installed.has(this.selectionAnchorId) ? this.selectionAnchorId : this.selectedId
       await this.loadPreview(this.selectedId)
+      if (!this.isCurrentGameResult(data, revision)) return
       void this.loadThumbnails()
     },
     async refreshModsInBackground() {
+      const revision = this.gameContextRevision
       if (
         this.liveModRefreshing
         || this.workshopRefreshing
@@ -1687,22 +1773,26 @@ export const useAppStore = defineStore('app', {
       this.liveModRefreshing = true
       try {
         await this.flushPlaysetUpdates()
+        if (revision !== this.gameContextRevision) return null
         const previousWorkshopIds = new Set(
           this.mods
             .map(mod => String(mod?.workshop_id || '').trim())
             .filter(Boolean),
         )
         let data = await invoke('scan_mods', false)
+        if (!this.isCurrentGameResult(data, revision)) return null
         const hasNewWorkshopMod = (data.mods || []).some(mod => {
           const workshopId = String(mod?.workshop_id || '').trim()
           return mod?.source === 'workshop' && workshopId && !previousWorkshopIds.has(workshopId)
         })
         if (hasNewWorkshopMod && this.settings.fetch_workshop_metadata !== false) {
           data = await invoke('scan_mods', true)
+          if (!this.isCurrentGameResult(data, revision)) return null
         }
         const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
         const previousActiveIds = [...this.activeIds]
-        await this.applyExternalScan(data, { forcePlaysetOrder })
+        await this.applyExternalScan(data, { forcePlaysetOrder, revision })
+        if (!this.isCurrentGameResult(data, revision)) return null
         if (forcePlaysetOrder) {
           this.updateCollectionImportProgress(data)
           if (!sameIds(previousActiveIds, this.activeIds)) {
@@ -1712,10 +1802,10 @@ export const useAppStore = defineStore('app', {
         }
         return data
       } catch (error) {
-        this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
+        if (revision === this.gameContextRevision) this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
         return null
       } finally {
-        this.liveModRefreshing = false
+        if (revision === this.gameContextRevision) this.liveModRefreshing = false
       }
     },
     async deleteModFiles(previewToken) {
@@ -1905,17 +1995,21 @@ export const useAppStore = defineStore('app', {
       await invoke('open_game_folder')
     },
     async refreshRuntime() {
+      const revision = this.gameContextRevision
       try {
         const previousRevision = this.modRevision
         const runtime = await invoke('get_runtime_status')
+        if (revision !== this.gameContextRevision) return
         this.runtime = runtime
         const nextRevision = Number(runtime.mod_revision || 0)
         if (
           this.settings.live_mod_detection
+          && !runtime.diagnostics_running
           && (!runtime.running || this.settings.auto_low_consumption_mode === false)
           && nextRevision > previousRevision
         ) {
           const refreshed = await this.refreshModsInBackground()
+          if (revision !== this.gameContextRevision) return
           if (!refreshed) this.modRevision = previousRevision
         } else {
           this.modRevision = nextRevision

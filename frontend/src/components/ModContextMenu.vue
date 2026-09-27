@@ -40,7 +40,7 @@ const submenuToLeft = computed(() => {
 const hasWorkshop = computed(() => !!props.mod?.workshop_id)
 const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.sources : [props.mod?.source]))
 const canCopyToData = computed(() => (
-  props.packActions && !!props.mod?.path && !sources.value.has('data')
+  props.packActions && !props.gameRunning && !!props.mod?.path && !sources.value.has('data')
 ))
 const selectedModIds = computed(() => [...new Set(
   (Array.isArray(props.selectedModIds) ? props.selectedModIds : [])
@@ -209,7 +209,9 @@ const run = (action, value = null, close = true) => {
           >
             <span class="context-menu-icon">⊘</span><span>{{ batchLabel(t('context.unsubscribe')) }}</span>
           </button>
-          <button v-if="hasWorkshop" type="button" class="context-menu-item" @click.stop="run('force-update')">
+          <button v-if="hasWorkshop" type="button" class="context-menu-item"
+            :disabled="gameRunning" :title="gameRunning ? t('context.gameRunningBlocked') : ''"
+            @click.stop="run('force-update')">
             <span class="context-menu-icon">↻</span><span>{{ batchLabel(t('context.forceUpdate')) }}</span>
           </button>
           <div v-if="hasWorkshop && (canUploadWorkshop || canUpdateWorkshop)" class="context-menu-divider"></div>
@@ -322,12 +324,12 @@ const run = (action, value = null, close = true) => {
         type="button"
         class="context-menu-item"
         :disabled="!canCopyToData"
-        :title="canCopyToData ? '' : t('context.existsData')"
+        :title="gameRunning ? t('context.gameRunningBlocked') : (canCopyToData ? '' : t('context.existsData'))"
         @click="run('copy-to-data')"
       >
         <span class="context-menu-icon">⇩</span>
         <span>{{ batchLabel(t('context.copyToData')) }}</span>
-        <span v-if="!canCopyToData" class="context-menu-unavailable">{{ t('context.inData') }}</span>
+        <span v-if="sources.has('data')" class="context-menu-unavailable">{{ t('context.inData') }}</span>
       </button>
       <button
         v-if="showAiGenerate"

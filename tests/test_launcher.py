@@ -1,14 +1,42 @@
 from __future__ import annotations
 
-import unittest
+import ctypes
+import os
 import tempfile
+import threading
+import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.launcher import is_game_running, launch_game, terminate_game
+from backend.launcher import _windows_process_entries, is_game_running, launch_game, terminate_game
 
 
 class LauncherProcessTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows process snapshot APIs are required")
+    def test_concurrent_windows_process_scans_keep_their_native_argument_types(self) -> None:
+        before_first_entry = threading.Barrier(2, timeout=5)
+        per_thread = threading.local()
+        native_byref = ctypes.byref
+
+        def synchronized_byref(value):
+            pointer = native_byref(value)
+            if not getattr(per_thread, "ready", False):
+                per_thread.ready = True
+                # Both scans have configured Process32* before either uses its
+                # own structure. The native calls and snapshots stay real.
+                before_first_entry.wait()
+            return pointer
+
+        with patch("backend.launcher.ctypes.byref", side_effect=synchronized_byref):
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                scans = [workers.submit(_windows_process_entries) for _ in range(2)]
+                results = [scan.result(timeout=10) for scan in scans]
+
+        for entries in results:
+            self.assertIn(os.getpid(), dict(entries))
+            self.assertTrue(dict(entries)[os.getpid()])
+
     def test_windows_detection_uses_a_supplied_process_name(self) -> None:
         with (
             patch("backend.launcher.os.name", "nt"),

@@ -25,7 +25,9 @@ def _windows_process_entries() -> list[tuple[int, str]]:
             ("szExeFile", wintypes.WCHAR * 260),
         ]
 
-    kernel32 = ctypes.windll.kernel32
+    # Runtime polling and diagnostic trials can scan concurrently. Keep the
+    # function signatures local to this call's ProcessEntry32W class.
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry32W))
@@ -217,6 +219,19 @@ def terminate_game(
         for process_id in process_ids:
             os.kill(process_id, 15)
     return {"process_ids": process_ids}
+
+
+def terminate_game_processes(
+    process_ids: set[int], expected_executable: str | Path,
+    *, process_name: str = WH3_PROCESS_NAME,
+) -> None:
+    """Stop only this diagnostic trial's processes that still match the game."""
+    matching = set(_matching_game_process_ids(expected_executable, process_name=process_name))
+    for process_id in sorted(matching.intersection(process_ids)):
+        if os.name == "nt":
+            _windows_terminate_process(process_id)
+        else:
+            os.kill(process_id, 15)
 
 
 def launch_game(

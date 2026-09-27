@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -35,6 +36,10 @@ def _default_playset_id(game_id: str) -> str:
 
 def _game_state_key(prefix: str, game_id: str) -> str:
     return f"{prefix}:{game_id}"
+
+
+def _sync_target_key(path: str) -> str:
+    return os.path.normcase(str(Path(path).resolve(strict=False)))
 
 
 class StateRepository:
@@ -181,6 +186,7 @@ class StateRepository:
                         row["mod_id"],
                     ),
                 )
+            self._ensure_data_sync_schema(connection)
             self._ensure_playset_schema(connection)
             connection.execute(
                 """
@@ -197,6 +203,39 @@ class StateRepository:
                 "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', ?)",
                 (PLAYSET_SCHEMA_VERSION,),
             )
+
+    @staticmethod
+    def _ensure_data_sync_schema(connection: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(data_sync_items)")}
+        if "target_key" in columns:
+            return
+        connection.execute("SAVEPOINT migrate_data_sync")
+        connection.execute("ALTER TABLE data_sync_items RENAME TO legacy_data_sync_items")
+        connection.execute("""
+            CREATE TABLE data_sync_items (
+                game_id TEXT NOT NULL,
+                target_key TEXT NOT NULL,
+                pack_name TEXT NOT NULL COLLATE NOCASE,
+                workshop_id TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                source_size INTEGER NOT NULL,
+                source_mtime_ns INTEGER NOT NULL,
+                target_path TEXT NOT NULL,
+                target_size INTEGER NOT NULL,
+                target_mtime_ns INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (game_id, target_key)
+            )
+        """)
+        for row in connection.execute("SELECT * FROM legacy_data_sync_items").fetchall():
+            # Old records contain no game identity. Only an exact target may
+            # reclaim one; never assume all pre-migration records belong to WH3.
+            connection.execute(
+                "INSERT INTO data_sync_items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ("", _sync_target_key(row["target_path"]), *tuple(row)),
+            )
+        connection.execute("DROP TABLE legacy_data_sync_items")
+        connection.execute("RELEASE SAVEPOINT migrate_data_sync")
 
     @classmethod
     def _ensure_playset_schema(cls, connection: sqlite3.Connection) -> None:
@@ -809,16 +848,26 @@ class StateRepository:
             )
         return ordered
 
-    def get_data_sync_item(self, pack_name: str) -> dict[str, Any] | None:
+    def get_data_sync_item(
+        self, pack_name: str, *, game_id: str = DEFAULT_GAME_ID, target_path: str = "",
+    ) -> dict[str, Any] | None:
         normalized = Path(str(pack_name)).name
         if not normalized:
             return None
         with self._lock, self._connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE",
-                (normalized,),
-            ).fetchone()
-        return dict(row) if row else None
+            if target_path:
+                row = connection.execute(
+                    """SELECT * FROM data_sync_items
+                       WHERE pack_name = ? COLLATE NOCASE AND target_key = ? AND game_id IN (?, '')
+                       ORDER BY (game_id = ?) DESC LIMIT 1""",
+                    (normalized, _sync_target_key(target_path), game_id, game_id),
+                ).fetchone()
+                return dict(row) if row else None
+            rows = connection.execute(
+                "SELECT * FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE AND game_id = ? LIMIT 2",
+                (normalized, game_id),
+            ).fetchall()
+            return dict(rows[0]) if len(rows) == 1 else None
 
     def save_data_sync_item(
         self,
@@ -830,12 +879,16 @@ class StateRepository:
         target_path: str,
         target_size: int,
         target_mtime_ns: int,
+        *,
+        game_id: str = DEFAULT_GAME_ID,
     ) -> dict[str, Any]:
         normalized = Path(str(pack_name)).name
         if not normalized.casefold().endswith(".pack"):
             raise ValueError("同步记录必须使用有效的 Pack 文件名")
         now = int(time.time() * 1000)
         values = (
+            game_id,
+            _sync_target_key(target_path),
             normalized,
             str(workshop_id or ""),
             str(source_path),
@@ -850,10 +903,12 @@ class StateRepository:
             connection.execute(
                 """
                 INSERT INTO data_sync_items(
+                    game_id, target_key,
                     pack_name, workshop_id, source_path, source_size, source_mtime_ns,
                     target_path, target_size, target_mtime_ns, updated_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(pack_name) DO UPDATE SET
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(game_id, target_key) DO UPDATE SET
+                    pack_name = excluded.pack_name,
                     workshop_id = excluded.workshop_id,
                     source_path = excluded.source_path,
                     source_size = excluded.source_size,
@@ -865,7 +920,12 @@ class StateRepository:
                 """,
                 values,
             )
+            connection.execute(
+                "DELETE FROM data_sync_items WHERE game_id = '' AND target_key = ?",
+                (_sync_target_key(target_path),),
+            )
         return {
+            "game_id": game_id,
             "pack_name": normalized,
             "workshop_id": str(workshop_id or ""),
             "source_path": str(source_path),
@@ -877,12 +937,20 @@ class StateRepository:
             "updated_at": now,
         }
 
-    def delete_data_sync_item(self, pack_name: str) -> None:
+    def delete_data_sync_item(
+        self, pack_name: str, *, game_id: str = DEFAULT_GAME_ID, target_path: str = "",
+    ) -> None:
         with self._lock, self._connect() as connection:
-            connection.execute(
-                "DELETE FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE",
-                (Path(str(pack_name or "")).name,),
-            )
+            if target_path:
+                connection.execute(
+                    "DELETE FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE AND game_id IN (?, '') AND target_key = ?",
+                    (Path(str(pack_name or "")).name, game_id, _sync_target_key(target_path)),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM data_sync_items WHERE pack_name = ? COLLATE NOCASE AND game_id = ?",
+                    (Path(str(pack_name or "")).name, game_id),
+                )
 
     @staticmethod
     def _validate_mod_type_name(name: str) -> str:

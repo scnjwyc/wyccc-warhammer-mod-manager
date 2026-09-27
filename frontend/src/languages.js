@@ -1,4 +1,6 @@
 import { ref } from 'vue'
+import { encyclopediaEntries } from './encyclopediaLanguages'
+import { diagnosticsEntries } from './diagnosticsLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -1772,6 +1774,33 @@ Object.assign(spanishEntries, {
   'toast.syncComplete': 'Sincronización completada: {copied} añadidos, {updated} actualizados, {unchanged} sin cambios{skipped}',
 })
 
+Object.assign(entries, {
+  'share.wrongGame': ['分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入', 'This share code belongs to another game. Switch to that game before importing.', '다른 게임의 공유 코드입니다. 해당 게임으로 전환한 후 가져오세요.', 'Код предназначен для другой игры. Переключитесь на неё перед импортом.', '別のゲームの共有コードです。対応するゲームに切り替えてからインポートしてください。'],
+  'share.legacyGame': ['旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码', 'Legacy share codes only support Warhammer III. Switch games or use a new code that includes the game.', '이전 공유 코드는 워해머 3만 지원합니다. 게임을 전환하거나 게임 정보가 포함된 새 코드를 사용하세요.', 'Старые коды поддерживают только Warhammer III. Переключите игру или используйте новый код с указанием игры.', '旧形式の共有コードはウォーハンマー3専用です。ゲームを切り替えるか、ゲーム情報を含む新しいコードを使用してください。'],
+  'warnings.duplicatePack': ['存在多个同名 Pack，已保留为独立项目；请只启用一个来源', 'Multiple Packs have the same filename and are listed separately. Enable only one source.', '파일 이름이 같은 Pack을 별도 항목으로 유지했습니다. 하나의 출처만 활성화하세요.', 'Несколько Pack имеют одинаковое имя и показаны отдельно. Включите только один источник.', '同名のPackを別項目として保持しています。有効にするのは1つの入手元だけにしてください。'],
+  'errors.duplicatePack': ['不能同时启用多个同名 Pack：{name}', 'Cannot enable multiple Packs with the same filename: {name}', '이름이 같은 Pack을 동시에 활성화할 수 없습니다: {name}', 'Нельзя одновременно включить Pack с одинаковым именем: {name}', '同名のPackを同時に有効にできません：{name}'],
+  'errors.packIndex': ['Pack 索引无效或不完整：{name}', 'Invalid or incomplete Pack index: {name}', 'Pack 인덱스가 유효하지 않거나 불완전합니다: {name}', 'Некорректный или неполный индекс Pack: {name}', 'Packのインデックスが無効または不完全です：{name}'],
+  'errors.encryptedPack': ['不支持加密 Pack 索引：{name}', 'Encrypted Pack indexes are not supported: {name}', '암호화된 Pack 인덱스는 지원되지 않습니다: {name}', 'Зашифрованные индексы Pack не поддерживаются: {name}', '暗号化されたPackのインデックスには対応していません：{name}'],
+})
+Object.assign(spanishEntries, {
+  'share.wrongGame': 'Este código pertenece a otro juego. Cambia a ese juego antes de importarlo.',
+  'share.legacyGame': 'Los códigos antiguos solo admiten Warhammer III. Cambia de juego o usa un código nuevo que incluya el juego.',
+  'warnings.duplicatePack': 'Varios Pack tienen el mismo nombre y se muestran por separado. Activa solo un origen.',
+  'errors.duplicatePack': 'No se pueden activar varios Pack con el mismo nombre: {name}',
+  'errors.packIndex': 'Índice de Pack no válido o incompleto: {name}',
+  'errors.encryptedPack': 'No se admiten índices de Pack cifrados: {name}',
+})
+
+for (const [key, variants] of Object.entries(diagnosticsEntries)) {
+  entries[key] = variants.slice(0, 5)
+  spanishEntries[key] = variants[5]
+}
+
+for (const [key, variants] of Object.entries(encyclopediaEntries)) {
+  entries[key] = variants.slice(0, 5)
+  spanishEntries[key] = variants[5]
+}
+
 const catalogs = Object.fromEntries(languageCodes.map((code, languageIndex) => [
   code,
   code === 'es-ES'
@@ -1847,8 +1876,22 @@ const scanNoticeEnglish = value => {
 
 export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
   const value = String(message || '').trim()
+  if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
   const language = normalizeLanguage(interfaceLanguage.value)
   if (!value) return t(fallbackKey)
+  const knownMessages = {
+    '游戏运行期间不能修改 MOD 文件': 'context.gameRunningBlocked',
+    '分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入': 'share.wrongGame',
+    '旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码': 'share.legacyGame',
+    '存在多个同名 Pack，已保留为独立项目；请只启用一个来源': 'warnings.duplicatePack',
+  }
+  if (knownMessages[value]) return t(knownMessages[value])
+  const duplicate = value.match(/^不能同时启用多个同名 Pack：(.+)$/)
+  if (duplicate) return t('errors.duplicatePack', { name: duplicate[1] })
+  const invalidIndex = value.match(/^Pack (?:索引无效|索引不完整|文件索引损坏)：(.+)$/)
+  if (invalidIndex) return t('errors.packIndex', { name: invalidIndex[1] })
+  const encryptedIndex = value.match(/^不支持加密 Pack 索引：(.+)$/)
+  if (encryptedIndex) return t('errors.encryptedPack', { name: encryptedIndex[1] })
   if (!hanPattern.test(value)) {
     if (language === 'en-US') return value
     return `${t(fallbackKey)}：${value}`

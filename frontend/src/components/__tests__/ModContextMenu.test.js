@@ -86,6 +86,15 @@ describe('ModContextMenu', () => {
 
     expect(buttonByText(wrapper, '从 DATA 中删除').attributes('disabled')).toBeDefined()
     expect(buttonByText(wrapper, '取消订阅').attributes('disabled')).toBeDefined()
+    expect(buttonByText(wrapper, '强制更新').attributes('disabled')).toBeDefined()
+  })
+
+  it('blocks copying a Workshop file while the game runs', () => {
+    const wrapper = mount(ModContextMenu, { props: { open: true, mod, types, gameRunning: true } })
+    const copy = buttonByText(wrapper, '复制模组到 Data 文件夹')
+    expect(copy.attributes('disabled')).toBeDefined()
+    expect(copy.attributes('title')).toContain('游戏运行')
+    expect(copy.text()).not.toContain('已在 Data')
   })
 
   it('offers update for an eligible Workshop-only MOD and hides it for mismatched ownership', () => {

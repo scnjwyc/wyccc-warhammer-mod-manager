@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import os
 import unittest
 from unittest.mock import call, patch
 
@@ -8,6 +9,21 @@ from backend.launch_paths import LaunchPathAliases
 
 
 class LaunchPathAliasTests(unittest.TestCase):
+    def test_existing_subst_is_reused_across_instances_and_rebinding_is_detected(self) -> None:
+        root = r"D:\游戏\Warhammer"
+        with (
+            patch("backend.launch_paths._existing_drive_aliases", return_value={os.path.normcase(root): "X:\\"}) as mappings,
+            patch("backend.launch_paths._used_drive_letters", return_value={"C", "D", "X"}),
+            patch("backend.launch_paths.subprocess.run") as run,
+        ):
+            aliases = LaunchPathAliases()
+            for manager in (aliases, LaunchPathAliases(), LaunchPathAliases()):
+                self.assertEqual(manager.prepare(root, "").map_path(root), "X:\\")
+            run.assert_not_called()
+            mappings.return_value = {}
+            self.assertEqual(aliases.prepare(root, "").map_path(root), "Z:\\")
+            self.assertEqual(run.call_count, 1)
+
     def test_ascii_game_and_workshop_paths_are_not_mapped(self) -> None:
         aliases = LaunchPathAliases()
 

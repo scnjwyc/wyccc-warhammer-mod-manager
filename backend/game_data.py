@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .encyclopedia_schema import ENCYCLOPEDIA_SCHEMAS
 from .game_data_settings import (
     CATEGORY_UNIT_MODE_FULL,
     CATEGORY_UNIT_MODE_HALF,
@@ -604,7 +605,7 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
     },
 }
 
-TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS}
+TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS, **ENCYCLOPEDIA_SCHEMAS}
 THREE_KINGDOMS_TABLE_SCHEMAS = load_three_kingdoms_schemas()
 TABLE_ORDER = (
     "_kv_rules_tables",
@@ -640,13 +641,19 @@ VARIANT_SELECTOR_TABLE_ORDER = (
     "variants_tables",
 )
 ALL_TABLE_ORDER = tuple(dict.fromkeys((
-    *TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER, *VARIANT_SELECTOR_TABLE_ORDER,
+    *TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER, *VARIANT_SELECTOR_TABLE_ORDER, *ENCYCLOPEDIA_SCHEMAS,
 )))
 TABLE_PREFIXES = tuple(
     f"db\\{table_name}\\"
     for table_name in dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER))
 )
 CURRENT_TABLE_VERSIONS = {
+    # Legacy ability junctions omit the version header and use the v0 layout
+    # (without culture). Explicit version headers still select their own schema.
+    **{
+        table_name: 0 if 0 in versions else max(versions)
+        for table_name, versions in ENCYCLOPEDIA_SCHEMAS.items()
+    },
     "_kv_rules_tables": 0,
     "campaign_character_art_sets_tables": 7,
     "campaign_character_arts_tables": 0,
@@ -1276,6 +1283,13 @@ def _table_row_key(
             str(values.get(field) or "")
             for field in ("effect", "bonus_value_id", "missile_weapon_junction")
         )
+    if table_name in ENCYCLOPEDIA_SCHEMAS:
+        fields = {
+            "unit_variants_tables": ("faction", "unit"),
+            "unit_attributes_to_groups_junctions_tables": ("attribute", "attribute_group"),
+            "land_units_to_unit_abilites_junctions_tables": ("ability", "land_unit", "culture"),
+        }.get(table_name, ("key",))
+        return "\x1f".join(str(row.values.get(field) or "") for field in fields)
     if table_name == "unit_purchasable_effect_sets_tables":
         values = row.values
         return "\x1f".join(

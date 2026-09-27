@@ -10,6 +10,7 @@ from pathlib import Path
 
 from backend import APP_NAME
 from backend.api import API
+from backend.desktop_bridge import DesktopBridge
 from backend.app_settings import default_data_dir
 from backend.launcher import is_game_running
 from backend.runtime import RuntimeCoordinator, localized_idle_url
@@ -181,7 +182,7 @@ def run_desktop(
         window = webview.create_window(
             APP_NAME,
             initial_url,
-            js_api=api,
+            js_api=DesktopBridge(api),
             width=1440,
             height=900,
             min_size=(1080, 680),

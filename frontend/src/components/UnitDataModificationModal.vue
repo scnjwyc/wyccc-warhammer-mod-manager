@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import { t } from '../languages'
 import { invoke } from '../bridge'
 
@@ -7,6 +7,8 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   busy: { type: String, default: '' },
   initialSearch: { type: String, default: '' },
+  initialUnitKey: { type: String, default: '' },
+  snapshotToken: { type: String, default: '' },
   gameId: { type: String, default: 'warhammer3' },
 })
 
@@ -17,8 +19,12 @@ const PAGE_SIZE = 200
 const loading = ref(false)
 const error = ref('')
 const rows = shallowRef([])
+const partial = ref(false)
+const savedEdits = shallowRef({})
+let loadGeneration = 0
 const stats = ref({})
 const search = ref('')
+const searchInput = ref(null)
 const page = ref(1)
 const sortField = ref('')
 const sortDesc = ref(false)
@@ -138,6 +144,9 @@ const cellStyle = column => {
 const filteredRows = computed(() => {
   const query = search.value.trim().toLowerCase()
   if (!query) return rows.value
+  if (props.initialUnitKey && query === props.initialUnitKey.toLowerCase()) {
+    return rows.value.filter(row => String(row.key || '').toLowerCase() === query)
+  }
   return rows.value.filter(row => (
     String(row.mod_name || '').toLowerCase().includes(query)
     || (Array.isArray(row.source_chain)
@@ -202,6 +211,9 @@ const editedCount = computed(() => Object.keys(draftEdits).length)
 
 const resetDraft = () => {
   for (const key of Object.keys(draftEdits)) delete draftEdits[key]
+  for (const [key, fields] of Object.entries(savedEdits.value)) {
+    if (fields && Object.keys(fields).length) draftEdits[key] = { ...fields }
+  }
   for (const row of rows.value) {
     if (row.edited && typeof row.edited === 'object' && Object.keys(row.edited).length) {
       draftEdits[row.key] = { ...row.edited }
@@ -353,8 +365,12 @@ const showOriginalValueTooltip = (event, row, column) => {
   })
 }
 
-const removeUnitEdits = (row, event) => {
+const removeUnitEdits = async (row, event) => {
   if (event?.shiftKey) {
+    if (partial.value) {
+      await load(true)
+      if (partial.value || !props.open) return
+    }
     const modName = String(row.mod_name || '')
     for (const candidate of rows.value) {
       if (String(candidate.mod_name || '') === modName) delete draftEdits[candidate.key]
@@ -368,36 +384,54 @@ const modifiedByCount = row => (
   Math.max(0, (row.source_chain || []).length - 1)
 )
 
-const load = async () => {
+const load = async (expand = false) => {
+  const run = ++loadGeneration
   loading.value = true
   error.value = ''
   try {
-    const data = await invoke('get_unit_data_list')
+    const data = props.snapshotToken
+      ? await invoke('get_unit_data_list', props.snapshotToken, expand ? '' : props.initialUnitKey)
+      : await invoke('get_unit_data_list')
+    if (run !== loadGeneration || !props.open) return
     rows.value = data.units || []
+    partial.value = Boolean(data.partial)
+    savedEdits.value = data.saved_edits || {}
     stats.value = data.stats || {}
     page.value = 1
-    resetDraft()
+    if (!expand) resetDraft()
   } catch (err) {
-    error.value = String(err?.message || err)
+    if (run === loadGeneration) error.value = String(err?.message || err)
   } finally {
-    loading.value = false
+    if (run === loadGeneration) {
+      loading.value = false
+      if (partial.value && !error.value && search.value.trim().toLowerCase() !== props.initialUnitKey.toLowerCase()) void load(true)
+    }
   }
 }
+watch(search, () => {
+  if (props.open && partial.value && !loading.value && search.value.trim().toLowerCase() !== props.initialUnitKey.toLowerCase()) void load(true)
+})
 
 watch(
   () => props.open,
-  open => {
+  async open => {
     if (open) {
-      search.value = String(props.initialSearch || '')
+      partial.value = false
+      search.value = String(props.initialUnitKey || props.initialSearch || '')
       void load()
+      await nextTick()
+      searchInput.value?.focus()
+    } else {
+      loadGeneration += 1
+      loading.value = false
     }
   },
 )
 
 watch(
-  () => props.initialSearch,
-  value => {
-    if (props.open) search.value = String(value || '')
+  () => [props.initialSearch, props.initialUnitKey],
+  () => {
+    if (props.open) search.value = String(props.initialUnitKey || props.initialSearch || '')
   },
 )
 
@@ -426,6 +460,7 @@ const submit = () => {
 
         <div class="unit-data-toolbar">
           <input
+            ref="searchInput"
             v-model="search"
             class="unit-data-search"
             type="search"

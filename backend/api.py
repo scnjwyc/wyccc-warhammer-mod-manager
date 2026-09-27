@@ -13,6 +13,7 @@ import traceback
 import uuid
 import webbrowser
 from io import BytesIO
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
@@ -47,6 +48,7 @@ from .file_operations import (
     execute_delete_preview,
     workshop_item_directory,
 )
+from .diagnostics_api import ModDiagnosticsService
 from .game_data_patch_state import (
     ensure_game_data_patch,
     game_data_settings_requested,
@@ -92,6 +94,7 @@ from .unit_data_state import (
     load_unit_data_edits,
     save_unit_data_edits,
 )
+from .unit_encyclopedia import load_catalogue, catalogue_fingerprint
 from .steamworks_bridge import (
     SteamworksBridgeError,
     get_current_user,
@@ -125,6 +128,30 @@ GAME_DATA_SETTING_KEYS = frozenset(
 MAX_WORKSHOP_COVER_BYTES = 1_024 * 1_024
 
 
+def _requires_idle_game(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        # Launch and file changes share this lock, so a launch cannot slip
+        # between the running check and the write. Game switching also uses it.
+        with self._file_operation_lock:
+            if self.detect_game_running():
+                raise ValueError("游戏运行期间不能修改 MOD 文件")
+            return method(self, *args, **kwargs)
+    return guarded
+
+
+def _changes_game_context(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self._file_operation_lock, self._context_lock:
+            self._game_context_revision += 1
+            self._thumbnail_cache.clear()
+            with self._delete_preview_lock:
+                self._delete_previews.clear()
+            return method(self, *args, **kwargs)
+    return guarded
+
+
 def _require_workshop_cover(source_pack: Path) -> Path:
     cover_path = source_pack.with_suffix(".png")
     if not cover_path.is_file():
@@ -148,7 +175,7 @@ def _stage_workshop_upload_file(source: Path, target: Path) -> None:
 
 
 class API:
-    """Single explicit RPC facade exposed through pywebview."""
+    """Application services behind an explicit RPC allowlist."""
 
     def __init__(self, data_dir: str | Path | None = None):
         self.data_dir = Path(data_dir or default_data_dir())
@@ -163,7 +190,12 @@ class API:
         self._assets: dict[str, ModAsset] = {}
         self._asset_aliases: dict[str, str] = {}
         self._thumbnail_cache: dict[str, tuple[str, str]] = {}
+        self._encyclopedia_views: dict[str, Any] = {}
+        self._encyclopedia_editors: dict[str, Any] = {}
         self._scan_lock = threading.Lock()
+        self._context_lock = threading.RLock()
+        self._file_operation_lock = threading.RLock()
+        self._game_context_revision = 0
         self._order_lock = threading.Lock()
         self._delete_preview_lock = threading.Lock()
         self._delete_previews: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -182,7 +214,16 @@ class API:
         self._window: Any | None = None
         self._exit_low_consumption_callback: Callable[[], bool] | None = None
         self._last_order_token = "missing"
+        self.diagnostics = ModDiagnosticsService(self)
         self._rpc: dict[str, Callable[..., Any]] = {
+            "get_crash_diagnosis": self.diagnostics.diagnosis,
+            "dismiss_crash_diagnosis": self.diagnostics.dismiss,
+            "start_mod_diagnostics": self.diagnostics.start,
+            "get_mod_diagnostics": self.diagnostics.status,
+            "confirm_diagnostic_trial": self.diagnostics.session.confirm,
+            "cancel_mod_diagnostics": self.diagnostics.session.cancel,
+            "get_diagnostics_history": self.diagnostics.history,
+            "apply_diagnostics_result": self.diagnostics.apply,
             "get_bootstrap": self._get_bootstrap,
             "detect_paths": self._detect_paths,
             "save_settings": self._save_settings,
@@ -193,6 +234,8 @@ class API:
             "get_unit_data_feature_status": self._get_unit_data_feature_status,
             "get_variant_selector_feature_status": self._get_variant_selector_feature_status,
             "get_unit_data_list": self._get_unit_data_list,
+            "get_unit_encyclopedia": self._get_unit_encyclopedia,
+            "get_unit_encyclopedia_images": self._get_unit_encyclopedia_images,
             "save_unit_data_edits": self._save_unit_data_edits,
             "check_for_updates": self._check_for_updates,
             "download_update": self._download_update,
@@ -283,7 +326,9 @@ class API:
                 asset.display_name = alias
 
     def low_consumption_enabled(self) -> bool:
-        return bool(self.settings_service.get().get("auto_low_consumption_mode", True))
+        return not self.diagnostics.running and bool(
+            self.settings_service.get().get("auto_low_consumption_mode", True)
+        )
 
     def _active_game(self) -> GameDefinition:
         return self.settings_service.selected_game_definition()
@@ -300,6 +345,7 @@ class API:
             raise ValueError(f"{feature} 不支持 Rome Remastered 目录式 MOD")
 
     def close(self) -> None:
+        self.diagnostics.session.close()
         self.mod_monitor.stop()
         self._exit_low_consumption_callback = None
 
@@ -339,7 +385,10 @@ class API:
                 "error": {"code": "METHOD_NOT_ALLOWED", "message": "该操作未开放"},
             }
         try:
-            data = handler(*(args or []), **(kwargs or {}))
+            # Keep normal concurrent reads/scans intact, but reserve the captured
+            # game/Pack/playset context for the duration of a diagnostic run.
+            with self.diagnostics.rpc_scope(str(method)):
+                data = handler(*(args or []), **(kwargs or {}))
             return {"ok": True, "data": data}
         except (ValueError, OSError) as exc:
             return {
@@ -596,6 +645,7 @@ class API:
         self.settings_service.save({"last_seen_app_version": APP_VERSION})
         return {"last_seen_app_version": APP_VERSION}
 
+    @_changes_game_context
     def _detect_paths(self, game_id: str = "") -> dict[str, Any]:
         result = self.settings_service.detect_and_save(str(game_id or ""))
         self._sync_save_games()
@@ -621,6 +671,7 @@ class API:
         self._sync_runtime_services(self.detect_game_running(), force=True)
         return result
 
+    @_changes_game_context
     def _save_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
         self.settings_service.save(changes)
         self._sync_save_games()
@@ -712,7 +763,7 @@ class API:
             result.append(mod_id)
         return result
 
-    def _get_unit_data_list(self) -> dict[str, Any]:
+    def _get_unit_data_list(self, encyclopedia_token: str = "", unit_key: str = "") -> dict[str, Any]:
         self._require_game_capability(
             "supports_unit_data_modification",
             "Unit data modification",
@@ -721,13 +772,21 @@ class API:
         if not paths.data_path:
             raise ValueError("尚未设置游戏数据目录")
         active_ids = self._unit_data_source_ids()
+        edits = load_unit_data_edits(self.data_dir / "runtime", paths.game_id)
+        if encyclopedia_token and paths.game_id == "warhammer3":
+            with self._context_lock:
+                cached = self._encyclopedia_editors.get(str(encyclopedia_token))
+                if (cached and cached["revision"] == self._game_context_revision
+                        and cached["edits"] == edits
+                        and cached["fingerprint"] == catalogue_fingerprint(
+                            paths.data_path, self._assets, active_ids, self.interface_language())):
+                    return self._unit_editor_response(cached["data"], edits, unit_key)
         snapshot = collect_game_data_source_snapshot(
             paths.data_path,
             self._assets,
             active_ids,
             game_id=paths.game_id,
         )
-        edits = load_unit_data_edits(self.data_dir / "runtime", paths.game_id)
         mod_loc_files = [
             Path(self._assets[mod_id].path)
             for mod_id in active_ids
@@ -753,8 +812,55 @@ class API:
         result["source_pack_names"] = [
             entry.spec.path.name for entry in snapshot.entries
         ]
-        return result
+        return self._unit_editor_response(result, edits, unit_key)
 
+    @staticmethod
+    def _unit_editor_response(data, edits, unit_key):
+        if not unit_key:
+            return {**data, "saved_edits": edits, "partial": False}
+        return {**data, "units": [row for row in data["units"] if row["key"] == unit_key],
+                "saved_edits": edits, "partial": True}
+
+    def _get_unit_encyclopedia(self) -> dict[str, Any]:
+        with self._context_lock:
+            paths = self.settings_service.resolve_game_paths()
+            if paths.game_id != "warhammer3":
+                raise ValueError("Unit encyclopedia is available for Warhammer III")
+            if not paths.data_path:
+                raise ValueError("尚未设置游戏数据目录")
+            revision = self._game_context_revision
+            active_ids = self._unit_data_source_ids()
+            mods = dict(self._assets)
+            language = self.interface_language()
+            edits = load_unit_data_edits(self.data_dir / "runtime", paths.game_id)
+            fingerprint = catalogue_fingerprint(paths.data_path, mods, active_ids, language)
+        result, assets = load_catalogue(paths.data_path, mods, active_ids, edits, language)
+        editor = result.pop("_editor_data", None)
+        with self._context_lock:
+            if revision != self._game_context_revision or active_ids != self._unit_data_source_ids():
+                raise ValueError("The MOD list changed; refresh the unit encyclopedia")
+            token = uuid.uuid4().hex
+            self._encyclopedia_views[token] = assets
+            if editor is not None:
+                self._encyclopedia_editors[token] = {
+                    "revision": revision, "fingerprint": fingerprint, "edits": edits,
+                    "data": {**editor, "source_count": result["source_count"],
+                             "source_pack_names": result["source_pack_names"]},
+                }
+            while len(self._encyclopedia_views) > 2:
+                expired = next(iter(self._encyclopedia_views))
+                del self._encyclopedia_views[expired]
+                self._encyclopedia_editors.pop(expired, None)
+        return {**result, "token": token}
+
+    def _get_unit_encyclopedia_images(self, token: str, names: list[str]) -> dict[str, str]:
+        with self._context_lock:
+            assets = self._encyclopedia_views.get(str(token))
+        if assets is None:
+            raise ValueError("The unit encyclopedia has expired; refresh it")
+        return assets.read(names)
+
+    @_requires_idle_game
     def _save_unit_data_edits(self, edits: dict[str, Any]) -> dict[str, Any]:
         self._require_game_capability(
             "supports_unit_data_modification",
@@ -900,158 +1006,167 @@ class API:
             raise ValueError(f"无法打开官方配置选择器：{exc}") from exc
 
     def _scan_mods(self, refresh_workshop: bool = False) -> dict[str, Any]:
-        if not self._scan_lock.acquire(blocking=False):
-            raise ValueError("扫描正在进行中")
-        try:
-            scan_revision = self._mod_revision_value()
+        with self._context_lock:
+            context_revision = self._game_context_revision
             settings = self.settings_service.get()
             paths = self.settings_service.resolve_game_paths()
-            game_id = paths.game_id
-            current_playset = self.state_repository.get_current_playset(game_id)
-            hidden_mod_ids = self.state_repository.get_playset_hidden_mod_ids(
-                current_playset["id"], game_id
-            )
-            health = self._path_health(paths)
-            if not health["game_ready"]:
-                raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
+        game_id = paths.game_id
+        discarded = {"discarded": True, "game_id": game_id, "context_revision": context_revision}
+        # Queue the new game's scan instead of rejecting it while the previous
+        # game's request finishes. Obsolete queued requests do no work.
+        with self._scan_lock:
+            with self._context_lock:
+                if context_revision != self._game_context_revision:
+                    return discarded
+                scan_revision = self._mod_revision_value()
+                current_playset = self.state_repository.get_current_playset(game_id)
+                hidden_mod_ids = self.state_repository.get_playset_hidden_mod_ids(
+                    current_playset["id"], game_id
+                )
+                health = self._path_health(paths)
+                if not health["game_ready"]:
+                    raise ValueError("游戏目录无效，请先在设置中自动检测或手动指定")
             scan_result = self.scanner.scan(paths, settings, bool(refresh_workshop))
-            user_data = self.state_repository.list_user_mod_data()
-            self._internal_feature_mod_ids = {
-                mod_id
-                for mod_id, custom in user_data.items()
-                if str(custom.get("published_workshop_id") or "")
-                in INTERNAL_FEATURE_WORKSHOP_IDS
-            }
-            legacy_owned_candidates: list[tuple[ModAsset, dict[str, Any]]] = []
-            for mod in scan_result.mods:
-                custom = user_data.get(mod.id, {})
-                if not custom:
-                    custom = next(
-                        (user_data[alias] for alias in mod.alternate_ids if alias in user_data),
-                        {},
-                    )
-                has_update_warning = any(
-                    str(warning.get("code") or "") == "workshop_update_available"
-                    for warning in mod.warnings
-                    if isinstance(warning, dict)
-                )
-                if (
-                    has_update_warning
-                    and not str(custom.get("published_workshop_id") or "").strip()
-                    and SOURCE_DATA in (mod.sources or [mod.source])
-                    and mod.workshop_id.isdigit()
-                    and str(mod.creator_id or "").isdigit()
-                ):
-                    legacy_owned_candidates.append((mod, custom))
-            if legacy_owned_candidates:
-                try:
-                    current_user = get_current_user(
-                        app_id=int(self._active_game().app_id)
-                    )
-                except SteamworksBridgeError:
-                    current_user = {}
-                current_steam_id = str(current_user.get("steam_id") or "").strip()
-                if current_steam_id.isdigit():
-                    for mod, custom in legacy_owned_candidates:
-                        if str(mod.creator_id).strip() != current_steam_id:
-                            continue
-                        published_workshop_id = self.state_repository.set_published_workshop_id(
-                            mod.id,
-                            mod.workshop_id,
-                        )
-                        user_data[mod.id] = {
-                            **custom,
-                            "published_workshop_id": published_workshop_id,
-                        }
-            for mod in scan_result.mods:
-                custom = user_data.get(mod.id, {})
-                if not custom:
-                    custom = next(
-                        (user_data[alias] for alias in mod.alternate_ids if alias in user_data),
-                        {},
-                    )
-                mod.alias = str(custom.get("alias") or "")
-                mod.notes = str(custom.get("notes") or "")
-                raw_types = custom.get("mod_types")
-                mod.mod_types = list(raw_types) if isinstance(raw_types, list) else [
-                    str(custom.get("mod_type") or "unknown")
-                ]
-                mod.mod_type = mod.mod_types[0] if mod.mod_types else "unknown"
-                if not mod.workshop_id and str(custom.get("published_workshop_id") or "").isdigit():
-                    mod.workshop_id = str(custom["published_workshop_id"])
-                    mod.workshop_url = (
-                        "https://steamcommunity.com/sharedfiles/filedetails/"
-                        f"?id={mod.workshop_id}"
-                    )
-                published_workshop_id = str(custom.get("published_workshop_id") or "").strip()
-                if (
-                    published_workshop_id
-                    and SOURCE_DATA in (mod.sources or [mod.source])
-                ):
-                    mod.warnings = [
-                        warning
-                        for warning in mod.warnings
-                        if str(warning.get("code") or "") != "workshop_update_available"
-                    ]
-                mod.hidden = bool(
-                    mod.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
-                    or mod.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
-                    or hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
-                )
-                raw_ignored_warning_codes = custom.get("ignored_warning_codes")
-                mod.ignored_warning_codes = (
-                    list(raw_ignored_warning_codes)
-                    if isinstance(raw_ignored_warning_codes, list)
-                    else []
-                )
-            self._assets = {mod.id: mod for mod in scan_result.mods}
-            self._asset_aliases = {
-                alias: mod.id
-                for mod in scan_result.mods
-                for alias in mod.alternate_ids
-            }
-            self._thumbnail_cache = {
-                mod_id: cached
-                for mod_id, cached in self._thumbnail_cache.items()
-                if mod_id in self._assets
-            }
-
-            current_playset = self.state_repository.get_current_playset(game_id)
-            original_order = list(current_playset["mod_ids"])
-            if not self.state_repository.are_playsets_initialized(game_id):
-                original_order = self.load_order.import_disk_order(
-                    paths.game_path,
-                    scan_result.mods,
-                    self.state_repository.get_active_order_filename(),
-                )
-                self.state_repository.update_current_playset(original_order, game_id)
-                self.state_repository.mark_playsets_initialized(game_id)
-            stored_order = self._canonicalize_mod_ids(original_order)
-            if stored_order != original_order:
-                self.state_repository.update_current_playset(stored_order, game_id)
-            present_order = [mod_id for mod_id in stored_order if mod_id in self._assets]
-            missing_order = [mod_id for mod_id in stored_order if mod_id not in self._assets]
-            self._refresh_missing_dependency_warnings(present_order)
-            target = self._active_order_path(paths.game_path)
-            self._last_order_token = file_token(target)
-            payload = scan_result.to_dict()
-            payload.update(
-                {
-                    "enabled_order": present_order,
-                    "missing_enabled_ids": missing_order,
-                    "order_token": self._last_order_token,
-                    "playsets": self.state_repository.list_playsets(game_id),
-                    "current_playset": self.state_repository.get_current_playset(game_id),
-                    # A filesystem event arriving during this scan must remain
-                    # visible to the frontend so it schedules one follow-up scan.
-                    "mod_revision": scan_revision,
-                    "unit_data_feature": self._unit_data_feature_status(paths),
-                    "variant_selector_feature": self._variant_selector_feature_status(paths),
+            with self._context_lock:
+                if context_revision != self._game_context_revision:
+                    return discarded
+                user_data = self.state_repository.list_user_mod_data()
+                self._internal_feature_mod_ids = {
+                    mod_id
+                    for mod_id, custom in user_data.items()
+                    if str(custom.get("published_workshop_id") or "")
+                    in INTERNAL_FEATURE_WORKSHOP_IDS
                 }
-            )
-            return payload
-        finally:
-            self._scan_lock.release()
+                legacy_owned_candidates: list[tuple[ModAsset, dict[str, Any]]] = []
+                for mod in scan_result.mods:
+                    custom = user_data.get(mod.id, {})
+                    if not custom:
+                        custom = next(
+                            (user_data[alias] for alias in mod.alternate_ids if alias in user_data),
+                            {},
+                        )
+                    has_update_warning = any(
+                        str(warning.get("code") or "") == "workshop_update_available"
+                        for warning in mod.warnings
+                        if isinstance(warning, dict)
+                    )
+                    if (
+                        has_update_warning
+                        and not str(custom.get("published_workshop_id") or "").strip()
+                        and SOURCE_DATA in (mod.sources or [mod.source])
+                        and mod.workshop_id.isdigit()
+                        and str(mod.creator_id or "").isdigit()
+                    ):
+                        legacy_owned_candidates.append((mod, custom))
+                if legacy_owned_candidates:
+                    try:
+                        current_user = get_current_user(
+                            app_id=int(self._active_game().app_id)
+                        )
+                    except SteamworksBridgeError:
+                        current_user = {}
+                    current_steam_id = str(current_user.get("steam_id") or "").strip()
+                    if current_steam_id.isdigit():
+                        for mod, custom in legacy_owned_candidates:
+                            if str(mod.creator_id).strip() != current_steam_id:
+                                continue
+                            published_workshop_id = self.state_repository.set_published_workshop_id(
+                                mod.id,
+                                mod.workshop_id,
+                            )
+                            user_data[mod.id] = {
+                                **custom,
+                                "published_workshop_id": published_workshop_id,
+                            }
+                for mod in scan_result.mods:
+                    custom = user_data.get(mod.id, {})
+                    if not custom:
+                        custom = next(
+                            (user_data[alias] for alias in mod.alternate_ids if alias in user_data),
+                            {},
+                        )
+                    mod.alias = str(custom.get("alias") or "")
+                    mod.notes = str(custom.get("notes") or "")
+                    raw_types = custom.get("mod_types")
+                    mod.mod_types = list(raw_types) if isinstance(raw_types, list) else [
+                        str(custom.get("mod_type") or "unknown")
+                    ]
+                    mod.mod_type = mod.mod_types[0] if mod.mod_types else "unknown"
+                    if not mod.workshop_id and str(custom.get("published_workshop_id") or "").isdigit():
+                        mod.workshop_id = str(custom["published_workshop_id"])
+                        mod.workshop_url = (
+                            "https://steamcommunity.com/sharedfiles/filedetails/"
+                            f"?id={mod.workshop_id}"
+                        )
+                    published_workshop_id = str(custom.get("published_workshop_id") or "").strip()
+                    if (
+                        published_workshop_id
+                        and SOURCE_DATA in (mod.sources or [mod.source])
+                    ):
+                        mod.warnings = [
+                            warning
+                            for warning in mod.warnings
+                            if str(warning.get("code") or "") != "workshop_update_available"
+                        ]
+                    mod.hidden = bool(
+                        mod.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
+                        or mod.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                        or hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
+                    )
+                    raw_ignored_warning_codes = custom.get("ignored_warning_codes")
+                    mod.ignored_warning_codes = (
+                        list(raw_ignored_warning_codes)
+                        if isinstance(raw_ignored_warning_codes, list)
+                        else []
+                    )
+                self._assets = {mod.id: mod for mod in scan_result.mods}
+                self._asset_aliases = {
+                    alias: mod.id
+                    for mod in scan_result.mods
+                    for alias in mod.alternate_ids
+                }
+                self._thumbnail_cache = {
+                    mod_id: cached
+                    for mod_id, cached in self._thumbnail_cache.items()
+                    if mod_id in self._assets
+                }
+
+                current_playset = self.state_repository.get_current_playset(game_id)
+                original_order = list(current_playset["mod_ids"])
+                if not self.state_repository.are_playsets_initialized(game_id):
+                    original_order = self.load_order.import_disk_order(
+                        paths.game_path,
+                        scan_result.mods,
+                        self.state_repository.get_active_order_filename(),
+                    )
+                    self.state_repository.update_current_playset(original_order, game_id)
+                    self.state_repository.mark_playsets_initialized(game_id)
+                stored_order = self._canonicalize_mod_ids(original_order)
+                if stored_order != original_order:
+                    self.state_repository.update_current_playset(stored_order, game_id)
+                present_order = [mod_id for mod_id in stored_order if mod_id in self._assets]
+                missing_order = [mod_id for mod_id in stored_order if mod_id not in self._assets]
+                self._refresh_missing_dependency_warnings(present_order)
+                target = self._active_order_path(paths.game_path)
+                self._last_order_token = file_token(target)
+                payload = scan_result.to_dict()
+                payload.update(
+                    {
+                        "game_id": game_id,
+                        "context_revision": context_revision,
+                        "enabled_order": present_order,
+                        "missing_enabled_ids": missing_order,
+                        "order_token": self._last_order_token,
+                        "playsets": self.state_repository.list_playsets(game_id),
+                        "current_playset": self.state_repository.get_current_playset(game_id),
+                        # A filesystem event arriving during this scan must remain
+                        # visible to the frontend so it schedules one follow-up scan.
+                        "mod_revision": scan_revision,
+                        "unit_data_feature": self._unit_data_feature_status(paths),
+                        "variant_selector_feature": self._variant_selector_feature_status(paths),
+                    }
+                )
+                return payload
 
     def _save_mod_user_data(self, mod_id: str, alias: str = "", notes: str = "") -> dict[str, Any]:
         asset = self._require_asset(mod_id)
@@ -1263,20 +1378,28 @@ class API:
             "activation": "external_launcher",
         }
 
+    @_requires_idle_game
     def _launch_game(
         self,
         ordered_mod_ids: list[str],
         expected_token: str = "",
         save_name: str = "",
     ) -> dict[str, Any]:
+        self.diagnostics.require_idle()
+        before = self.diagnostics.before_launch()
         if not self._game_data_patch_lock.acquire(blocking=False):
             raise ValueError("游戏数据补丁正在生成，暂时无法启动游戏")
         try:
-            return self._launch_game_when_patch_idle(
+            result = self._launch_game_when_patch_idle(
                 ordered_mod_ids,
                 expected_token,
                 save_name,
             )
+            try:
+                self.diagnostics.remember_launch(result, before)
+            except (OSError, ValueError, KeyError):
+                logger.exception("Unable to persist launch diagnostics")
+            return result
         finally:
             self._game_data_patch_lock.release()
 
@@ -1854,6 +1977,7 @@ class API:
     def _runtime_payload(self, running: bool) -> dict[str, Any]:
         return {
             "running": running,
+            "diagnostics_running": self.diagnostics.running,
             "mod_revision": self._mod_revision_value(),
             "live_mod_detection_available": self.mod_monitor.available,
             "live_mod_detection_active": self.mod_monitor.active,
@@ -1962,12 +2086,15 @@ class API:
         return self.state_repository.list_backups()
 
     def _export_share(self, ordered_mod_ids: list[str]) -> dict[str, str]:
-        mods = [self._require_asset(mod_id) for mod_id in ordered_mod_ids]
-        return {"share_code": export_share(mods)}
+        with self._context_lock:
+            mods = [self._require_asset(mod_id) for mod_id in ordered_mod_ids]
+            return {"share_code": export_share(mods, self._active_game().id)}
 
     def _preview_import_share(self, share_code: str) -> dict[str, Any]:
-        references = parse_share(share_code)
-        ordered_ids, missing = resolve_share(references, self._assets)
+        with self._context_lock:
+            game = self._active_game()
+            references = parse_share(share_code, game.id)
+            ordered_ids, missing = resolve_share(references, self._assets)
         references_by_workshop_id: dict[str, dict[str, Any]] = {}
         for reference in references:
             workshop_id = str(reference.get("workshop_id") or "").strip()
@@ -1983,7 +2110,7 @@ class API:
                 statuses = query_workshop_subscription_status(
                     list(references_by_workshop_id),
                     language,
-                    app_id=int(self._active_game().app_id),
+                    app_id=int(game.app_id),
                 )
             except SteamworksBridgeError as exc:
                 raise ValueError(f"无法检查分享码中的 Workshop 订阅状态：{exc}") from exc
@@ -2008,23 +2135,24 @@ class API:
         }
 
     def _import_share(self, share_code: str) -> dict[str, Any]:
-        references = parse_share(share_code)
-        ordered_ids, missing = resolve_share_with_pending(references, self._assets)
-        self.state_repository.update_current_playset(
-            ordered_ids, self._active_game().id
-        )
-        pending_workshop_ids = list(
-            dict.fromkeys(
-                str(reference.get("workshop_id") or "")
-                for reference in missing
-                if str(reference.get("workshop_id") or "").isdigit()
+        with self._context_lock:
+            references = parse_share(share_code, self._active_game().id)
+            ordered_ids, missing = resolve_share_with_pending(references, self._assets)
+            self.state_repository.update_current_playset(
+                ordered_ids, self._active_game().id
             )
-        )
-        return {
-            **self._current_playset_payload(),
-            "missing": missing,
-            "pending_workshop_ids": pending_workshop_ids,
-        }
+            pending_workshop_ids = list(
+                dict.fromkeys(
+                    str(reference.get("workshop_id") or "")
+                    for reference in missing
+                    if str(reference.get("workshop_id") or "").isdigit()
+                )
+            )
+            return {
+                **self._current_playset_payload(),
+                "missing": missing,
+                "pending_workshop_ids": pending_workshop_ids,
+            }
 
     def _import_workshop_collection(self, collection_value: str) -> dict[str, Any]:
         collection = fetch_workshop_collection(
@@ -2402,6 +2530,7 @@ class API:
             self._delete_previews[token] = (now, preview)
         return {**preview, "token": token}
 
+    @_requires_idle_game
     def _delete_mod_files(self, preview_token: str) -> dict[str, Any]:
         self._require_pack_mod_format("删除 MOD 文件")
         if self.detect_game_running():
@@ -2417,13 +2546,18 @@ class API:
         )
         for item in result["deleted"]:
             if item.get("source") == SOURCE_DATA:
-                self.state_repository.delete_data_sync_item(str(item.get("pack_name") or ""))
+                self.state_repository.delete_data_sync_item(
+                    str(item.get("pack_name") or ""),
+                    game_id=self._active_game().id,
+                    target_path=str(item["path"]),
+                )
         result["scan"] = self._scan_mods(False)
         return result
 
     def _unsubscribe_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         return self._unsubscribe_workshop_mods([mod_id])
 
+    @_requires_idle_game
     def _unsubscribe_workshop_mods(self, mod_ids: list[str]) -> dict[str, Any]:
         if self.detect_game_running():
             raise ValueError("游戏运行期间不能取消订阅或删除工坊文件")
@@ -2465,6 +2599,7 @@ class API:
             "scan": self._scan_mods(False),
         }
 
+    @_requires_idle_game
     def _force_update_workshop_mod(self, mod_id: str) -> dict[str, Any]:
         asset = self._require_workshop_asset(mod_id)
         try:
@@ -2694,6 +2829,7 @@ class API:
         self._open_path(pack_path)
         return {"opened": True, "path": str(pack_path.resolve(strict=False))}
 
+    @_requires_idle_game
     def _copy_mod_to_data(self, mod_id: str) -> dict[str, Any]:
         self._require_pack_mod_format("复制到 Data")
         asset = self._require_asset(mod_id)
@@ -2714,6 +2850,7 @@ class API:
             self._record_data_sync(asset, source, target)
         return {"copied": True, "already_in_data": False, "target_path": str(target)}
 
+    @_requires_idle_game
     def _sync_workshop_to_data(self) -> dict[str, Any]:
         self._require_pack_mod_format("同步到 Data")
         paths = self.settings_service.resolve_game_paths()
@@ -2750,7 +2887,15 @@ class API:
                 continue
             asset, source = items[0]
             target = data_path / asset.pack_name
-            record = self.state_repository.get_data_sync_item(asset.pack_name)
+            record = self.state_repository.get_data_sync_item(
+                asset.pack_name, game_id=paths.game_id, target_path=str(target),
+            )
+            if record and (
+                str(record.get("workshop_id") or "") != asset.workshop_id
+                or os.path.normcase(str(record.get("source_path") or ""))
+                != os.path.normcase(str(source.resolve(strict=False)))
+            ):
+                record = None
             source_stat = source.stat()
             if target.exists() and record is None:
                 counts["skipped_existing"] += 1
@@ -2852,6 +2997,7 @@ class API:
             str(target.resolve(strict=False)),
             target_stat.st_size,
             target_stat.st_mtime_ns,
+            game_id=self._active_game().id,
         )
 
     def _require_workshop_asset(self, mod_id: str) -> ModAsset:

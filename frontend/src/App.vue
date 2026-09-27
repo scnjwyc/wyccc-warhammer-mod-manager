@@ -9,8 +9,10 @@ import DeleteModsModal from './components/DeleteModsModal.vue'
 import CompatibilityPatchModal from './components/CompatibilityPatchModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
 import UnitDataModificationModal from './components/UnitDataModificationModal.vue'
+import UnitEncyclopediaModal from './components/UnitEncyclopediaModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
+import ModDiagnosticsModal from './components/ModDiagnosticsModal.vue'
 import ModList from './components/ModList.vue'
 import OfficialProfileImportModal from './components/OfficialProfileImportModal.vue'
 import SaveGamesModal from './components/SaveGamesModal.vue'
@@ -26,7 +28,17 @@ import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 const store = useAppStore()
 const showGameDataModification = ref(false)
 const showUnitDataModification = ref(false)
+const showUnitEncyclopedia = ref(false)
+const unitEncyclopediaRevision = ref(0)
+const openingUnitDataModification = ref(false)
 const showCompatibilityPatch = ref(false)
+const showDiagnostics = ref(false)
+const diagnosticsBusy = ref(false)
+const diagnosticSession = ref({ status: 'idle', running: false })
+const crashDiagnosis = ref({})
+const diagnosticHistory = ref([])
+let diagnosticsPolling = false
+let diagnosticsViewRevision = 0
 const showSettings = ref(false)
 const showShare = ref(false)
 const showTypeManager = ref(false)
@@ -41,6 +53,8 @@ const deleteModsPreview = ref(null)
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const unitDataSearch = ref('')
+const unitDataUnitKey = ref('')
+const unitDataSnapshotToken = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
 const confirmationDialog = reactive({ open: false, message: '', confirmLabel: '', danger: false })
@@ -176,6 +190,7 @@ const completeConfirmation = confirmed => {
 
 watch(supportsWh3Tools, supported => {
   if (supported) return
+  showUnitEncyclopedia.value = false
   showGameDataModification.value = false
   showCompatibilityPatch.value = false
   showOfficialProfileImport.value = false
@@ -196,6 +211,7 @@ watch(supportsSaveGames, supported => {
 const initialize = async () => {
   try {
     const bootstrap = await store.bootstrap()
+    void refreshDiagnostics(false)
     if (!store.pathHealth.game_ready) showSettings.value = true
     if (bootstrap.show_changelog) {
       updateDialog.mode = 'changelog'
@@ -233,30 +249,38 @@ const openGameDataModification = () => {
   void store.refreshGameDataFeatures().catch(() => {})
 }
 
-const openUnitDataModification = async (mod = null) => {
-  if (!supportsUnitDataTools.value) return
+const openUnitDataModification = async (mod = null, targetUnitKey = '', snapshotToken = '') => {
+  if (!supportsUnitDataTools.value || openingUnitDataModification.value) return
+  if (targetUnitKey && (store.busy || store.orderSaving || store.runtime.running)) return
+  const requestGame = activeGame.value
+  openingUnitDataModification.value = true
   try {
     await store.refreshUnitDataFeature()
+    if (activeGame.value !== requestGame || (targetUnitKey && !showUnitEncyclopedia.value)) return
+    if (store.unitDataFeature?.required !== false && !store.unitDataFeatureSubscribed) {
+      await requestConfirmation({
+        message: t('gameData.requiredModNotSubscribed', {
+          mod: store.unitDataFeature?.title || 'Dynamic Units Modify',
+        }),
+      })
+      return
+    }
+    unitDataSearch.value = mod
+      ? (mod.effective_name || mod.display_name || mod.pack_name || '')
+      : ''
+    unitDataUnitKey.value = targetUnitKey
+    unitDataSnapshotToken.value = snapshotToken
+    showUnitDataModification.value = true
   } catch (error) {
     store.notify(error?.message || String(error), 'error')
-    return
+  } finally {
+    openingUnitDataModification.value = false
   }
-  if (store.unitDataFeature?.required !== false && !store.unitDataFeatureSubscribed) {
-    await requestConfirmation({
-      message: t('gameData.requiredModNotSubscribed', {
-        mod: store.unitDataFeature?.title || 'Dynamic Units Modify',
-      }),
-    })
-    return
-  }
-  unitDataSearch.value = mod
-    ? (mod.effective_name || mod.display_name || mod.pack_name || '')
-    : ''
-  showUnitDataModification.value = true
 }
 
 const saveUnitData = async edits => {
   await store.saveUnitData(edits)
+  if (showUnitEncyclopedia.value) unitEncyclopediaRevision.value += 1
   showUnitDataModification.value = false
 }
 
@@ -462,7 +486,9 @@ const toggleSearchHighlight = async listName => {
 
 const shortcutsBlocked = () => (
   showGameDataModification.value
+  || showDiagnostics.value
   || showUnitDataModification.value
+  || showUnitEncyclopedia.value
   || showSettings.value
   || showShare.value
   || showTypeManager.value
@@ -879,9 +905,74 @@ const importOfficialProfile = async ({ mode, subscribeMissing }) => {
   } catch { /* shared toast */ }
 }
 
+const refreshDiagnostics = async (open = true) => {
+  if (!supportsPackActions.value || diagnosticsPolling) return
+  diagnosticsPolling = true
+  const revision = diagnosticsViewRevision
+  const game = activeGame.value
+  try {
+    const session = await store.getModDiagnostics()
+    if (revision !== diagnosticsViewRevision || game !== activeGame.value) return
+    diagnosticSession.value = session
+    if (!session.running) {
+      const diagnosis = await store.getCrashDiagnosis()
+      const history = await store.getDiagnosticsHistory()
+      if (revision !== diagnosticsViewRevision || game !== activeGame.value) return
+      crashDiagnosis.value = diagnosis
+      diagnosticHistory.value = history
+    }
+    if (open || session.running || crashDiagnosis.value.should_notify) showDiagnostics.value = true
+  } catch (error) {
+    if (open) store.notify(error.message, 'error')
+  } finally { diagnosticsPolling = false }
+}
+
+const diagnosticAction = async action => {
+  if (diagnosticsBusy.value) return
+  diagnosticsBusy.value = true
+  try { await action(); await refreshDiagnostics(true) }
+  catch (error) { store.notify(error.message, 'error') }
+  finally { diagnosticsBusy.value = false }
+}
+
+const startDiagnostics = mode => diagnosticAction(async () => {
+  diagnosticSession.value = await store.startModDiagnostics(mode)
+})
+const confirmDiagnosticTrial = result => diagnosticAction(async () => {
+  diagnosticSession.value = await store.confirmDiagnosticTrial(result)
+})
+const cancelDiagnostics = () => diagnosticAction(() => store.cancelModDiagnostics())
+const applyDiagnosticResult = async (run, restore = false) => {
+  const confirmed = await requestConfirmation({
+    message: restore ? t('diagnostics.restoreConfirm')
+      : t('diagnostics.applyConfirm', { count: run.excluded_ids?.length || 0 }),
+    confirmLabel: t(restore ? 'diagnostics.restore' : 'diagnostics.apply'),
+  })
+  if (confirmed) await diagnosticAction(() => store.applyDiagnosticsResult(run.id, restore))
+}
+const closeDiagnostics = () => {
+  if (diagnosticSession.value.running) return
+  diagnosticsViewRevision += 1
+  showDiagnostics.value = false
+  void store.dismissCrashDiagnosis().catch(() => {})
+}
+watch(() => store.runtime.running, (running, previous) => {
+  if (previous && !running && !diagnosticSession.value.running) void refreshDiagnostics(false)
+})
+watch(activeGame, () => {
+  diagnosticsViewRevision += 1
+  showDiagnostics.value = false
+  diagnosticSession.value = { status: 'idle', running: false }
+  crashDiagnosis.value = {}
+  diagnosticHistory.value = []
+})
+
 onMounted(() => {
   initialize()
-  runtimeTimer = window.setInterval(() => store.refreshRuntime(), 1000)
+  runtimeTimer = window.setInterval(() => {
+    void store.refreshRuntime()
+    if (showDiagnostics.value || diagnosticSession.value.running) void refreshDiagnostics(false)
+  }, 1000)
   window.addEventListener('keydown', handleGlobalShortcut)
 })
 
@@ -1059,6 +1150,9 @@ onBeforeUnmount(() => {
 
     <footer class="action-footer">
       <div class="footer-left">
+        <button v-if="supportsPackActions" type="button" class="secondary-button sync-data-button"
+          :disabled="!!store.busy || !store.pathHealth.game_ready" data-testid="mod-diagnostics-button"
+          @click="refreshDiagnostics(true)">{{ t('diagnostics.title') }}</button>
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
           {{ t('app.rescan') }}
         </button>
@@ -1092,6 +1186,16 @@ onBeforeUnmount(() => {
           v-if="supportsWh3Tools"
           type="button"
           class="secondary-button sync-data-button"
+          :disabled="!!store.busy || store.orderSaving || store.dirty || !store.pathHealth.game_ready"
+          data-testid="unit-encyclopedia-button"
+          @click="showUnitEncyclopedia = true"
+        >
+          {{ t('encyclopedia.title') }}
+        </button>
+        <button
+          v-if="supportsWh3Tools"
+          type="button"
+          class="secondary-button sync-data-button"
           :disabled="!!store.busy || store.runtime.running"
           data-testid="compatibility-patch-button"
           @click="openCompatibilityPatch"
@@ -1102,7 +1206,8 @@ onBeforeUnmount(() => {
           v-if="supportsPackActions"
           type="button"
           class="secondary-button sync-data-button"
-          :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
+          :disabled="!!store.busy || store.runtime.running || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
+          :title="store.runtime.running ? t('context.gameRunningBlocked') : ''"
           @click="syncWorkshopToData"
         >
           {{ t('app.syncData') }}
@@ -1172,16 +1277,35 @@ onBeforeUnmount(() => {
       @save="saveGameDataSettings"
     />
 
+    <UnitEncyclopediaModal
+      v-if="supportsWh3Tools" :open="showUnitEncyclopedia"
+      :suspended="showUnitDataModification || confirmationDialog.open"
+      :edit-disabled="!!store.busy || store.orderSaving || store.runtime.running || openingUnitDataModification"
+      :refresh-key="unitEncyclopediaRevision"
+      @edit-unit="(key, token) => openUnitDataModification(null, key, token)"
+      @close="showUnitEncyclopedia = false"
+    />
+
     <UnitDataModificationModal
       v-if="supportsUnitDataTools"
       :open="showUnitDataModification"
       :busy="store.busy"
       :game-id="activeGame"
       :initial-search="unitDataSearch"
+      :initial-unit-key="unitDataUnitKey"
+      :snapshot-token="unitDataSnapshotToken"
       @close="showUnitDataModification = false"
       @save="saveUnitData"
     />
 
+    <ModDiagnosticsModal
+      :open="showDiagnostics" :session="diagnosticSession" :diagnosis="crashDiagnosis"
+      :history="diagnosticHistory" :busy="diagnosticsBusy" :game-running="store.runtime.running"
+      :enabled-count="store.activeIds.length"
+      @close="closeDiagnostics" @refresh="refreshDiagnostics(true)" @start="startDiagnostics"
+      @confirm-trial="confirmDiagnosticTrial" @cancel="cancelDiagnostics"
+      @apply="applyDiagnosticResult($event)" @restore="applyDiagnosticResult($event, true)"
+    />
     <CompatibilityPatchModal
       v-if="supportsWh3Tools"
       :open="showCompatibilityPatch"

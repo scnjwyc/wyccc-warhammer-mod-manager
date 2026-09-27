@@ -4,9 +4,7 @@ import hashlib
 import json
 import os
 import re
-import struct
 import time
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
@@ -24,75 +22,14 @@ from .constants import (
     SOURCE_WORKSHOP,
 )
 from .models import GamePaths, ModAsset, ScanResult
+from .pack_reader import read_pack_layout, read_pack_index
 from .steam_paths import candidate_steam_roots, game_last_updated_at
 from .workshop import WorkshopMetadataService
 
 _MANIFEST_FILE_RE = re.compile(r"^\s*([^\s]+)")
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _STEAM_KEYVALUES_TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
-_PACK_MAGICS = {b"PFH2", b"PFH3", b"PFH4", b"PFH5", b"PFH6"}
 _PACK_TYPE_MASK = 0x0F
-_PACK_FLAG_INDEX_TIMESTAMPS = 0x40
-_PACK_FLAG_ENCRYPTED_INDEX = 0x80
-_PACK_FLAG_EXTENDED_HEADER = 0x100
-_MAX_PACK_INDEX_SIZE = 64 * 1024 * 1024
-
-
-@dataclass(frozen=True)
-class _PackLayout:
-    magic: bytes
-    type_and_flags: int
-    dependency_count: int
-    dependency_size: int
-    file_count: int
-    file_index_size: int
-    header_size: int
-
-
-def _read_pack_layout(path: Path) -> _PackLayout | None:
-    """Read the common PFH2-PFH6 index layout without loading Pack payloads."""
-    try:
-        file_size = path.stat().st_size
-        with path.open("rb") as stream:
-            prefix = stream.read(12)
-            magic_offset = 8 if prefix[:3] == b"MFH" and prefix[8:12] in _PACK_MAGICS else 0
-            magic = prefix[magic_offset:magic_offset + 4]
-            if magic not in _PACK_MAGICS:
-                return None
-            stream.seek(magic_offset + 4)
-            type_and_flags_data = stream.read(4)
-            index_fields = stream.read(16)
-            if len(type_and_flags_data) != 4 or len(index_fields) != 16:
-                return None
-            type_and_flags = struct.unpack("<I", type_and_flags_data)[0]
-            dependency_count, dependency_size, file_count, file_index_size = struct.unpack(
-                "<4I", index_fields
-            )
-            timestamp_size = 8 if magic in {b"PFH2", b"PFH3"} else 4
-            if len(stream.read(timestamp_size)) != timestamp_size:
-                return None
-    except OSError:
-        return None
-
-    extra_header_size = 280 if magic == b"PFH6" else (
-        20 if type_and_flags & _PACK_FLAG_EXTENDED_HEADER else 0
-    )
-    header_size = magic_offset + 4 + 4 + 16 + timestamp_size + extra_header_size
-    if (
-        dependency_size > _MAX_PACK_INDEX_SIZE
-        or file_index_size > _MAX_PACK_INDEX_SIZE
-        or header_size + dependency_size + file_index_size > file_size
-    ):
-        return None
-    return _PackLayout(
-        magic=magic,
-        type_and_flags=type_and_flags,
-        dependency_count=dependency_count,
-        dependency_size=dependency_size,
-        file_count=file_count,
-        file_index_size=file_index_size,
-        header_size=header_size,
-    )
 
 
 def _parse_steam_keyvalues(text: str) -> dict[str, object]:
@@ -219,7 +156,7 @@ def _steam_subscription_times(paths: GamePaths) -> dict[str, int]:
 
 
 def read_pack_type(path: Path) -> str:
-    layout = _read_pack_layout(path)
+    layout = read_pack_layout(path)
     if layout is None:
         return PACK_TYPE_UNKNOWN
     pack_type = layout.type_and_flags & _PACK_TYPE_MASK
@@ -228,7 +165,7 @@ def read_pack_type(path: Path) -> str:
 
 def read_pack_dependencies(path: Path) -> list[str]:
     """Read the NUL-separated dependency block from a PFH2-PFH6 Pack header."""
-    layout = _read_pack_layout(path)
+    layout = read_pack_layout(path)
     if layout is None or layout.dependency_size <= 0:
         return []
     try:
@@ -257,35 +194,10 @@ def read_pack_dependencies(path: Path) -> list[str]:
 
 def read_pack_entry_names(path: Path) -> list[str]:
     """Read PFH2-PFH6 entry names without loading or decompressing payloads."""
-    layout = _read_pack_layout(path)
-    if layout is None or layout.type_and_flags & _PACK_FLAG_ENCRYPTED_INDEX:
-        return []
     try:
-        with path.open("rb") as stream:
-            stream.seek(layout.header_size + layout.dependency_size)
-            index = stream.read(layout.file_index_size)
-            if len(index) != layout.file_index_size:
-                return []
-    except OSError:
+        return [entry.name for entry in read_pack_index(path)]
+    except (OSError, ValueError):
         return []
-
-    names: list[str] = []
-    cursor = 0
-    timestamp_size = (
-        8 if layout.magic in {b"PFH2", b"PFH3"} else 4
-    ) if layout.type_and_flags & _PACK_FLAG_INDEX_TIMESTAMPS else 0
-    compression_flag_size = 1 if layout.magic in {b"PFH5", b"PFH6"} else 0
-    fixed_entry_size = 4 + timestamp_size + compression_flag_size
-    for _ in range(layout.file_count):
-        if cursor + fixed_entry_size > len(index):
-            return []
-        cursor += fixed_entry_size
-        terminator = index.find(b"\0", cursor)
-        if terminator < 0:
-            return []
-        names.append(index[cursor:terminator].decode("utf-8", errors="replace"))
-        cursor = terminator + 1
-    return names
 
 
 def read_unit_data_tables(path: Path) -> list[str]:
@@ -316,20 +228,31 @@ def _asset_id(source: str, path: Path, workshop_id: str = "") -> str:
     return f"local:{source}:{_path_fingerprint(path)}"
 
 
-def _find_preview(directory: Path, pack_name: str, workshop: bool) -> str:
-    stem = Path(pack_name).stem.casefold()
-    try:
-        files = [item for item in directory.iterdir() if item.is_file()]
-    except OSError:
-        return ""
-    for item in files:
-        if item.suffix.casefold() in _IMAGE_SUFFIXES and item.stem.casefold() == stem:
-            return str(item.resolve(strict=False))
-    if workshop:
-        for item in files:
-            if item.suffix.casefold() in _IMAGE_SUFFIXES:
-                return str(item.resolve(strict=False))
-    return ""
+def _preview_index(files: Iterable[Path]) -> tuple[dict[str, str], str]:
+    images = sorted(
+        (item for item in files if item.suffix.casefold() in _IMAGE_SUFFIXES),
+        key=lambda item: (_IMAGE_SUFFIXES.index(item.suffix.casefold()), item.name.casefold()),
+    )
+    by_stem: dict[str, str] = {}
+    fallback = ""
+    for item in images:
+        path = str(item.resolve(strict=False))
+        by_stem.setdefault(item.stem.casefold(), path)
+        fallback = fallback or path
+    return by_stem, fallback
+
+
+def _find_preview(
+    directory: Path, pack_name: str, workshop: bool,
+    index: tuple[dict[str, str], str] | None = None,
+) -> str:
+    if index is None:
+        try:
+            index = _preview_index(item for item in directory.iterdir() if item.is_file())
+        except OSError:
+            return ""
+    by_stem, fallback = index
+    return by_stem.get(Path(pack_name).stem.casefold(), fallback if workshop else "")
 
 
 def _valid_feral_manifest_entry(item: object) -> bool:
@@ -526,7 +449,7 @@ class ModScanner:
 
     @staticmethod
     def _merge_data_workshop_duplicates(assets: dict[str, ModAsset]) -> None:
-        """Collapse an exact Data/Workshop pack-name collision into the Data asset."""
+        """Merge only an unambiguous one-to-one Data/Workshop pair."""
         by_pack_name: dict[str, list[ModAsset]] = {}
         for asset in assets.values():
             by_pack_name.setdefault(asset.pack_name.casefold(), []).append(asset)
@@ -540,6 +463,14 @@ class ModScanner:
                 (asset for asset in matches if asset.source == SOURCE_WORKSHOP),
                 key=lambda asset: (asset.workshop_id, asset.id),
             )
+            if len(workshop_assets) > 1 or len(data_assets) > 1:
+                for asset in matches:
+                    asset.warnings.append({
+                        "code": "duplicate_pack_name",
+                        "severity": "warning",
+                        "message": "存在多个同名 Pack，已保留为独立项目；请只启用一个来源",
+                    })
+                continue
             if not data_assets or not workshop_assets:
                 continue
 
@@ -770,12 +701,13 @@ class ModScanner:
             return
         result.scanned_roots.append(str(directory.resolve(strict=False)))
         try:
+            files = [item for item in directory.iterdir() if item.is_file()]
+            previews = _preview_index(files)
             pack_paths = sorted(
                 (
                     item
-                    for item in directory.iterdir()
-                    if item.is_file()
-                    and item.suffix.casefold() == ".pack"
+                    for item in files
+                    if item.suffix.casefold() == ".pack"
                     and item.name.casefold() not in excluded
                 ),
                 key=lambda item: item.name.casefold(),
@@ -784,7 +716,7 @@ class ModScanner:
             result.warnings.append(f"无法扫描目录 {directory}：{exc}")
             return
         for pack_path in pack_paths:
-            asset = self._make_asset(pack_path, source)
+            asset = self._make_asset(pack_path, source, preview_index=previews)
             assets[asset.id] = asset
 
     def _scan_workshop_item(
@@ -795,11 +727,13 @@ class ModScanner:
         result: ScanResult,
     ) -> None:
         try:
+            files = [item for item in directory.iterdir() if item.is_file()]
+            previews = _preview_index(files)
             pack_paths = sorted(
                 (
                     item
-                    for item in directory.iterdir()
-                    if item.is_file() and item.suffix.casefold() == ".pack"
+                    for item in files
+                    if item.suffix.casefold() == ".pack"
                 ),
                 key=lambda item: item.name.casefold(),
             )
@@ -809,7 +743,7 @@ class ModScanner:
         if not pack_paths:
             return
         for pack_path in pack_paths:
-            asset = self._make_asset(pack_path, SOURCE_WORKSHOP, workshop_id)
+            asset = self._make_asset(pack_path, SOURCE_WORKSHOP, workshop_id, preview_index=previews)
             assets[asset.id] = asset
 
     @staticmethod
@@ -929,7 +863,10 @@ class ModScanner:
         assets[asset.id] = asset
 
     @staticmethod
-    def _make_asset(pack_path: Path, source: str, workshop_id: str = "") -> ModAsset:
+    def _make_asset(
+        pack_path: Path, source: str, workshop_id: str = "",
+        *, preview_index: tuple[dict[str, str], str] | None = None,
+    ) -> ModAsset:
         entry_names = read_pack_entry_names(pack_path)
         try:
             stat = pack_path.lstat()
@@ -949,7 +886,7 @@ class ModScanner:
             directory=str(directory.resolve(strict=False)),
             source=source,
             workshop_id=workshop_id,
-            preview_path=_find_preview(directory, pack_path.name, source == SOURCE_WORKSHOP),
+            preview_path=_find_preview(directory, pack_path.name, source == SOURCE_WORKSHOP, preview_index),
             workshop_url=(
                 f"https://steamcommunity.com/sharedfiles/filedetails/?id={workshop_id}"
                 if workshop_id

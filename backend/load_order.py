@@ -105,6 +105,13 @@ class LoadOrderService:
         if missing_ids:
             raise ValueError(f"以下启用项已不存在：{', '.join(missing_ids[:5])}")
 
+        selected_names: set[str] = set()
+        for asset in selected:
+            key = asset.pack_name.casefold()
+            if key in selected_names:
+                raise ValueError(f"不能同时启用多个同名 Pack：{asset.pack_name}")
+            selected_names.add(key)
+
         data_root = Path(data_path).resolve(strict=False) if data_path else Path()
         working_directories: list[str] = []
         seen_directories: set[str] = set()
