@@ -1,38 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.1.5",
-  "published_at": "2026-09-27",
+  "version": "1.1.6",
+  "published_at": "2026-09-28",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.5/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.5/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.5/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "1973b15be23b779300b6e915a089a86b46fd9bac58118ebe85328bc58fbb5e3b",
-    "size": 63000142
+    "sha256": "e7c8b7f849f590f3eba01a35bf551fbac56672896a7d526fee36ac5fdb65c562",
+    "size": 62998626
   },
   "changelog": [
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "新增 MOD 启动排查功能，可自动排查当前 MOD 列表中导致游戏无法正常启动的 MOD，感谢热心群友 @Boss 的贡献。"
-        },
-        {
-          "type": "feature",
-          "text": "新增单位图鉴，可直观浏览当前 MOD 列表中的所有单位，并直接修改单位属性。"
-        }
-      ]
-    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "修复一些零散的小问题。"
+          "text": "修复单位图鉴存在的兼容性问题。"
         }
       ]
     }
