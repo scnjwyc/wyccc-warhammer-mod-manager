@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.6",
+        "date": "2026-09-28",
+        "entries": (
+            (
+                "v116_fixed_title",
+                (("fix", "v116_unit_encyclopedia_compatibility"),),
+            ),
+        ),
+    },
+    {
         "version": "1.1.5",
         "date": "2026-09-27",
         "entries": (
@@ -610,6 +620,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v116_fixed_title": "修复",
+        "v116_unit_encyclopedia_compatibility": "修复单位图鉴存在的兼容性问题。",
         "v115_added_title": "新增",
         "v115_mod_diagnostics": "新增 MOD 启动排查功能，可自动排查当前 MOD 列表中导致游戏无法正常启动的 MOD，感谢热心群友 @Boss 的贡献。",
         "v115_unit_encyclopedia": "新增单位图鉴，可直观浏览当前 MOD 列表中的所有单位，并直接修改单位属性。",
@@ -830,6 +842,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v116_fixed_title": "Fixed",
+        "v116_unit_encyclopedia_compatibility": "Fixed a compatibility issue in the Unit Encyclopedia.",
         "v115_added_title": "Added",
         "v115_mod_diagnostics": "Added MOD startup diagnostics to identify MODs in the current list that prevent the game from launching. Contributed by community member @Boss.",
         "v115_unit_encyclopedia": "Added a Unit Encyclopedia to browse units from the current MOD list and edit their attributes directly.",
@@ -1050,6 +1064,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v116_fixed_title": "수정",
+        "v116_unit_encyclopedia_compatibility": "유닛 도감의 호환성 문제를 수정했습니다.",
         "v115_added_title": "추가",
         "v115_mod_diagnostics": "현재 MOD 목록에서 게임 실행을 방해하는 MOD를 찾아내는 MOD 시작 문제 진단 기능을 추가했습니다. 기능을 제공해 주신 커뮤니티 회원 @Boss 님께 감사드립니다.",
         "v115_unit_encyclopedia": "현재 MOD 목록의 모든 유닛을 한눈에 살펴보고 유닛 속성을 바로 수정할 수 있는 유닛 도감을 추가했습니다.",
@@ -1270,6 +1286,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v116_fixed_title": "Исправлено",
+        "v116_unit_encyclopedia_compatibility": "Исправлена проблема совместимости в энциклопедии отрядов.",
         "v115_added_title": "Добавлено",
         "v115_mod_diagnostics": "Добавлена диагностика запуска MOD: она помогает найти MOD из текущего списка, мешающие запуску игры. Функция предоставлена участником сообщества @Boss.",
         "v115_unit_encyclopedia": "Добавлен справочник отрядов: он позволяет просматривать все отряды из текущего списка MOD и сразу изменять их свойства.",
@@ -1490,6 +1508,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v116_fixed_title": "修正",
+        "v116_unit_encyclopedia_compatibility": "ユニット図鑑の互換性問題を修正しました。",
         "v115_added_title": "追加",
         "v115_mod_diagnostics": "ゲームの起動を妨げている MOD を現在の MOD リストから特定する、MOD 起動診断機能を追加しました。コミュニティメンバー @Boss さんのご協力に感謝します。",
         "v115_unit_encyclopedia": "現在の MOD リストに含まれる全ユニットを見やすく閲覧し、属性を直接編集できるユニット図鑑を追加しました。",
@@ -1710,6 +1730,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v116_fixed_title": "Corregido",
+        "v116_unit_encyclopedia_compatibility": "Se corrigió un problema de compatibilidad en la enciclopedia de unidades.",
         "v115_added_title": "Añadido",
         "v115_mod_diagnostics": "Se añadió el diagnóstico de inicio de MOD para localizar los MOD de la lista actual que impiden iniciar el juego. Función aportada por @Boss, miembro de la comunidad.",
         "v115_unit_encyclopedia": "Se añadió una enciclopedia de unidades para consultar las unidades de la lista actual de MOD y editar sus atributos directamente.",

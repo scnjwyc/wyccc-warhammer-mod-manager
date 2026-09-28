@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import lzma
 import struct
 import tempfile
 import unittest
@@ -60,6 +61,28 @@ def loc_payload(rows):
 
 
 class CatalogueTests(unittest.TestCase):
+    def test_catalogue_reads_lzma_compressed_mod_localisation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            name = "land_units_onscreen_name_custom_unit"
+            payload = loc_payload([(name, "Compressed unit name")])
+            filters = [{"id": lzma.FILTER_LZMA1, "dict_size": 8 * 1024 * 1024,
+                        "lc": 3, "lp": 0, "pb": 2}]
+            compressed = (struct.pack("<I", len(payload)) + b"\x5d"
+                          + struct.pack("<I", 8 * 1024 * 1024)
+                          + lzma.compress(payload, format=lzma.FORMAT_RAW, filters=filters))
+            pack = write_pack(root / "compressed.pack", entries=[
+                ("text\\compressed.loc", compressed),
+            ])
+            content = bytearray(pack.read_bytes())
+            content[32] = 1  # PFH5 first index entry's compression flag.
+            pack.write_bytes(content)
+
+            self.assertEqual(
+                collect_catalogue_loc(root, [pack], "cn")[name],
+                "Compressed unit name",
+            )
+
     def test_culture_crest_follows_related_factions_flags_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = "ui/flags/custom_banner/mon_64.png"

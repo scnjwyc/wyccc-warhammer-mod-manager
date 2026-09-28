@@ -81,7 +81,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.5',
+    appVersion: '1.1.6',
     settings: {},
     paths: {},
     gameContextRevision: 0,

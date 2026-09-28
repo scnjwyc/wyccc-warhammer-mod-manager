@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import lzma
 import math
 import os
 import struct
@@ -217,6 +218,30 @@ def _decompress_payload(raw: bytes, name: str) -> bytes:
             try:
                 return zlib.decompress(raw[offset:], window_bits)
             except zlib.error as exc:
+                last_error = exc
+    # Older PFH5 entries use a four-byte uncompressed size, followed by the
+    # five LZMA1 filter properties and a raw LZMA stream.
+    if len(raw) >= 10:
+        declared_size = struct.unpack_from("<I", raw)[0]
+        properties = raw[4]
+        dictionary_size = struct.unpack_from("<I", raw, 5)[0]
+        if (0 < declared_size <= 512 * 1024 * 1024
+                and properties < 225
+                and 0 < dictionary_size <= 512 * 1024 * 1024):
+            filters = [{
+                "id": lzma.FILTER_LZMA1,
+                "dict_size": dictionary_size,
+                "lc": properties % 9,
+                "lp": (properties // 9) % 5,
+                "pb": properties // 45,
+            }]
+            try:
+                decompressor = lzma.LZMADecompressor(format=lzma.FORMAT_RAW, filters=filters)
+                decoded = decompressor.decompress(raw[9:], max_length=declared_size + 1)
+                if len(decoded) == declared_size and not decompressor.unused_data:
+                    return decoded
+                last_error = ValueError("LZMA 解压长度与 Pack 声明不一致")
+            except (lzma.LZMAError, ValueError) as exc:
                 last_error = exc
     raise ValueError(f"无法解压 Pack 条目 {name}：{last_error or '未知压缩格式'}")
 
