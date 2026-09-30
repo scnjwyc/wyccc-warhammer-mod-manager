@@ -96,7 +96,7 @@ class StorageContractTests(unittest.TestCase):
                 schema_version = connection.execute(
                     "SELECT value FROM system_info WHERE key = 'schema_version'"
                 ).fetchone()[0]
-            self.assertEqual(schema_version, "10")
+            self.assertEqual(schema_version, "11")
 
     def test_legacy_global_hidden_flags_are_copied_into_each_playset(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -434,6 +434,8 @@ class StorageContractTests(unittest.TestCase):
                     "playsets",
                     "playset_items",
                     "playset_hidden_mods",
+                    "mod_folders",
+                    "mod_folder_items",
                     "load_order_backups",
                     "data_sync_items",
                 },

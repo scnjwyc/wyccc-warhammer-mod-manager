@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { localizeBackendMessage, t } from '../languages'
 import SortMenu from './SortMenu.vue'
 import TagSearchBox from './TagSearchBox.vue'
@@ -30,6 +30,8 @@ const props = defineProps({
   searchFocusId: { type: String, default: '' },
   dragSource: { type: Object, default: null },
   unitDataModIds: { type: Array, default: () => [] },
+  folders: { type: Array, default: () => [] },
+  busy: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -51,11 +53,47 @@ const emit = defineEmits([
   'update:sort-mode',
   'update:sort-descending',
   'open-unit-data',
+  'toggle-folder',
+  'rename-folder',
+  'delete-folder',
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
 const dropPreview = ref(null)
 const rowElements = new Map()
+const displayGroups = computed(() => {
+  const membership = new Map()
+  for (const folder of props.folders) {
+    for (const id of folder.mod_ids || []) if (!membership.has(id)) membership.set(id, folder)
+  }
+  const groups = []
+  const folderGroups = new Map()
+  for (const mod of props.mods) {
+    const folder = membership.get(mod.id)
+    if (!folder) {
+      groups.push({ key: `mod:${mod.id}`, folder: null, mods: [mod] })
+      continue
+    }
+    if (!folderGroups.has(folder.id)) {
+      const group = { key: `folder:${folder.id}`, folder, mods: [] }
+      folderGroups.set(folder.id, group)
+      groups.push(group)
+    }
+    folderGroups.get(folder.id).mods.push(mod)
+  }
+  const searching = props.searchTokens.length > 0 || props.searchActive || props.warningsOnly
+  if (!searching) {
+    for (const folder of props.folders) {
+      if (!folder.mod_ids?.length) groups.push({ key: `folder:${folder.id}`, folder, mods: [] })
+    }
+  }
+  return groups.map(group => {
+    const collapsed = Boolean(group.folder?.[props.active ? 'collapsed_active' : 'collapsed_inactive'])
+    const expanded = !collapsed || searching || group.mods.some(mod => mod.id === props.searchFocusId)
+    return { ...group, expanded, visibleMods: expanded ? group.mods : [] }
+  })
+})
+const visibleMods = computed(() => displayGroups.value.flatMap(group => group.visibleMods))
 
 const positionOf = modId => props.orderIds.indexOf(modId) + 1
 const sourcesOf = mod => [...new Set(mod.sources?.length ? mod.sources : [mod.source])]
@@ -103,7 +141,7 @@ const selectMod = (event, mod) => {
     ctrlKey: Boolean(event.ctrlKey),
     metaKey: Boolean(event.metaKey),
     shiftKey: Boolean(event.shiftKey),
-    orderedIds: props.mods.map(item => item.id),
+    orderedIds: visibleMods.value.map(item => item.id),
   })
 }
 
@@ -127,9 +165,9 @@ const isEditableTarget = target => {
 
 const onKeydown = event => {
   if (!event.ctrlKey || event.altKey || event.key.toLocaleLowerCase() !== 'a') return
-  if (isEditableTarget(event.target) || !props.mods.length) return
+  if (isEditableTarget(event.target) || !visibleMods.value.length) return
   event.preventDefault()
-  emit('select-all', props.mods.map(mod => mod.id))
+  emit('select-all', visibleMods.value.map(mod => mod.id))
 }
 
 const clearDragging = () => {
@@ -140,7 +178,7 @@ const clearDragging = () => {
 }
 
 const onDragStart = (event, sourceId) => {
-  const visibleOrder = props.mods.map(mod => mod.id)
+  const visibleOrder = visibleMods.value.map(mod => mod.id)
   const visibleIds = new Set(visibleOrder)
   const selected = new Set([...props.selectedIds, props.selectedId].filter(Boolean))
   draggingIds.value = selected.has(sourceId)
@@ -203,7 +241,7 @@ const onDrop = (event, targetId = '') => {
       source: props.active ? 'active' : 'inactive',
       ids: [...draggingIds.value],
       draggedId: draggingOriginId.value,
-      sourceOrder: props.mods.map(mod => mod.id),
+      sourceOrder: visibleMods.value.map(mod => mod.id),
     }
   }
   if (payload?.ids?.length) {
@@ -214,7 +252,7 @@ const onDrop = (event, targetId = '') => {
       ...payload,
       target: props.active ? 'active' : 'inactive',
       targetId,
-      targetOrder: props.mods.map(mod => mod.id),
+      targetOrder: visibleMods.value.map(mod => mod.id),
       ...(placement ? { placement } : {}),
     })
   }
@@ -300,132 +338,157 @@ watch(
       @dragleave="onListDragLeave"
       @drop.prevent="onDrop($event)"
     >
-      <div
-        v-for="mod in mods"
-        :key="mod.id"
-        :ref="element => setRowElement(mod.id, element)"
-        class="mod-row"
-        :class="{
-          selected: isSelected(mod.id),
-          dragging: draggingIds.includes(mod.id),
-          'source-duplicate': mod.cross_source_duplicate,
-          'hidden-mod': mod.hidden,
-          'visual-sorted': visualSorted,
-          'search-match': isSearchMatch(mod.id),
-          'search-muted': isSearchMuted(mod.id),
-          'drop-before': dropPreview?.targetId === mod.id && dropPreview?.placement === 'before',
-          'drop-after': dropPreview?.targetId === mod.id && dropPreview?.placement === 'after',
-        }"
-        role="button"
-        tabindex="0"
-        :aria-selected="isSelected(mod.id)"
-        draggable="true"
-        @click="selectMod($event, mod)"
-        @dblclick="onDoubleClick($event, mod)"
-        @keydown.enter="selectMod($event, mod)"
-        @keydown.space.prevent="selectMod($event, mod)"
-        @contextmenu.prevent.stop="onContextMenu($event, mod)"
-        @dragstart="onDragStart($event, mod.id)"
-        @dragend="clearDragging"
-        @dragover.prevent.stop="onRowDragOver($event, mod.id)"
-        @drop.prevent.stop="onDrop($event, mod.id)"
-      >
-        <span class="mod-thumbnail">
-          <img
-            v-if="thumbnails[mod.id]"
-            :src="thumbnails[mod.id]"
-            :alt="t('list.previewAlt', { name: mod.effective_name })"
-            loading="lazy"
-          />
-          <span v-else class="mod-thumbnail-placeholder" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4 5.5h16v13H4zM6.5 16l3.5-4 2.5 2.7 2.2-2.2 2.8 3.5M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-            </svg>
+      <template v-for="group in displayGroups" :key="group.key">
+        <div v-if="group.folder" class="mod-folder-row" :data-testid="`mod-folder-${group.folder.id}`"
+          @dragover.stop @drop.prevent.stop>
+          <button
+            type="button"
+            class="mod-folder-toggle"
+            :aria-expanded="group.expanded"
+            :disabled="busy"
+            :title="t('folders.orderHelp')"
+            @click="emit('toggle-folder', group.folder.id, active ? 'active' : 'inactive')"
+          >
+            <span class="mod-folder-chevron" aria-hidden="true">{{ group.expanded ? '▾' : '▸' }}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3z" /></svg>
+            <span class="mod-folder-name" :title="group.folder.name">{{ group.folder.name }}</span>
+            <span class="count-badge">{{ group.mods.length }}</span>
+          </button>
+          <button type="button" class="icon-button" :disabled="busy"
+            :title="t('folders.rename')" :aria-label="t('folders.rename')"
+            @click="emit('rename-folder', group.folder)">✎</button>
+          <button type="button" class="icon-button danger" :disabled="busy"
+            :title="t('folders.deleteHelp')" :aria-label="t('folders.delete')"
+            @click="emit('delete-folder', group.folder)">×</button>
+        </div>
+        <div
+          v-for="mod in group.visibleMods"
+          :key="mod.id"
+          :ref="element => setRowElement(mod.id, element)"
+          class="mod-row"
+          :class="{
+            selected: isSelected(mod.id),
+            dragging: draggingIds.includes(mod.id),
+            'source-duplicate': mod.cross_source_duplicate,
+            'hidden-mod': mod.hidden,
+            'visual-sorted': visualSorted,
+            'search-match': isSearchMatch(mod.id),
+            'search-muted': isSearchMuted(mod.id),
+            'drop-before': dropPreview?.targetId === mod.id && dropPreview?.placement === 'before',
+            'drop-after': dropPreview?.targetId === mod.id && dropPreview?.placement === 'after',
+            'in-folder': !!group.folder,
+          }"
+          role="button"
+          tabindex="0"
+          :aria-selected="isSelected(mod.id)"
+          draggable="true"
+          @click="selectMod($event, mod)"
+          @dblclick="onDoubleClick($event, mod)"
+          @keydown.enter="selectMod($event, mod)"
+          @keydown.space.prevent="selectMod($event, mod)"
+          @contextmenu.prevent.stop="onContextMenu($event, mod)"
+          @dragstart="onDragStart($event, mod.id)"
+          @dragend="clearDragging"
+          @dragover.prevent.stop="onRowDragOver($event, mod.id)"
+          @drop.prevent.stop="onDrop($event, mod.id)"
+        >
+          <span class="mod-thumbnail">
+            <img
+              v-if="thumbnails[mod.id]"
+              :src="thumbnails[mod.id]"
+              :alt="t('list.previewAlt', { name: mod.effective_name })"
+              loading="lazy"
+            />
+            <span v-else class="mod-thumbnail-placeholder" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 5.5h16v13H4zM6.5 16l3.5-4 2.5 2.7 2.2-2.2 2.8 3.5M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+              </svg>
+            </span>
+            <span v-if="active" class="thumbnail-order">{{ positionOf(mod.id) }}</span>
           </span>
-          <span v-if="active" class="thumbnail-order">{{ positionOf(mod.id) }}</span>
-        </span>
 
-        <span class="row-copy">
-          <span class="row-title" :title="mod.effective_name">{{ mod.effective_name }}</span>
-          <span class="row-subtitle" :title="mod.pack_name">{{ mod.pack_name }}</span>
-          <span class="row-badges">
-            <span
-              v-for="source in sourcesOf(mod)"
-              :key="source"
-              class="source-badge"
-              :class="`source-${source}`"
-            >
-              {{ sourceLabel(source) }}
-            </span>
-            <span v-if="mod.pack_type === 'movie'" class="movie-badge">{{ t('list.movie') }}</span>
-            <span v-for="typeId in typesOf(mod)" :key="typeId" class="mod-type-badge">
-              {{ typeMap[typeId] || typeId }}
-            </span>
-            <span
-              v-if="warningsOf(mod).length"
-              class="mod-warning-badge"
-              :class="{ error: warningsOf(mod).some(item => item.code === 'missing_dependency' || item.severity === 'error') }"
-              :title="warningsOf(mod).map(item => localizeBackendMessage(item.message || item, 'warnings.genericScan')).join('\n')"
-              data-testid="mod-warning-badge"
-            >
-              {{ warningsOf(mod).some(item => item.code === 'missing_dependency') ? t('list.missingDependency') : t('list.warning') }}
-            </span>
-            <span v-if="mod.hidden" class="hidden-badge">{{ t('list.hidden') }}</span>
-            <span class="mod-author" :class="{ muted: !mod.author }" :title="authorOf(mod)">
-              {{ authorOf(mod) }}
+          <span class="row-copy">
+            <span class="row-title" :title="mod.effective_name">{{ mod.effective_name }}</span>
+            <span class="row-subtitle" :title="mod.pack_name">{{ mod.pack_name }}</span>
+            <span class="row-badges">
+              <span
+                v-for="source in sourcesOf(mod)"
+                :key="source"
+                class="source-badge"
+                :class="`source-${source}`"
+              >
+                {{ sourceLabel(source) }}
+              </span>
+              <span v-if="mod.pack_type === 'movie'" class="movie-badge">{{ t('list.movie') }}</span>
+              <span v-for="typeId in typesOf(mod)" :key="typeId" class="mod-type-badge">
+                {{ typeMap[typeId] || typeId }}
+              </span>
+              <span
+                v-if="warningsOf(mod).length"
+                class="mod-warning-badge"
+                :class="{ error: warningsOf(mod).some(item => item.code === 'missing_dependency' || item.severity === 'error') }"
+                :title="warningsOf(mod).map(item => localizeBackendMessage(item.message || item, 'warnings.genericScan')).join('\n')"
+                data-testid="mod-warning-badge"
+              >
+                {{ warningsOf(mod).some(item => item.code === 'missing_dependency') ? t('list.missingDependency') : t('list.warning') }}
+              </span>
+              <span v-if="mod.hidden" class="hidden-badge">{{ t('list.hidden') }}</span>
+              <span class="mod-author" :class="{ muted: !mod.author }" :title="authorOf(mod)">
+                {{ authorOf(mod) }}
+              </span>
             </span>
           </span>
-        </span>
 
-        <span v-if="active" class="row-actions">
-          <button
-            v-if="canOpenUnitData(mod)"
-            type="button"
-            class="icon-button unit-data-action"
-            :title="t('list.openUnitData')"
-            :aria-label="t('list.openUnitData')"
-            :data-testid="`open-unit-data-${mod.id}`"
-            @click.stop="emit('open-unit-data', mod)"
-          >⚙</button>
-          <button
-            type="button"
-            class="icon-button"
-            :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveUp')"
-            :disabled="visualSorted || positionOf(mod.id) <= 1"
-            @click.stop="emit('move', mod.id, -1)"
-          >↑</button>
-          <button
-            type="button"
-            class="icon-button"
-            :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveDown')"
-            :disabled="visualSorted || positionOf(mod.id) >= orderIds.length"
-            @click.stop="emit('move', mod.id, 1)"
-          >↓</button>
-          <button
-            type="button"
-            class="icon-button danger"
-            :title="t('list.disable')"
-            @click.stop="emit('disable', mod.id)"
-          >−</button>
-        </span>
-        <span v-else class="row-actions">
-          <button
-            v-if="canOpenUnitData(mod)"
-            type="button"
-            class="icon-button unit-data-action"
-            :title="t('list.openUnitData')"
-            :aria-label="t('list.openUnitData')"
-            :data-testid="`open-unit-data-${mod.id}`"
-            @click.stop="emit('open-unit-data', mod)"
-          >⚙</button>
-          <button
-            type="button"
-            class="enable-button"
-            :title="t('list.enable')"
-            @click.stop="emit('enable', mod.id)"
-          >＋</button>
-        </span>
-      </div>
+          <span v-if="active" class="row-actions">
+            <button
+              v-if="canOpenUnitData(mod)"
+              type="button"
+              class="icon-button unit-data-action"
+              :title="t('list.openUnitData')"
+              :aria-label="t('list.openUnitData')"
+              :data-testid="`open-unit-data-${mod.id}`"
+              @click.stop="emit('open-unit-data', mod)"
+            >⚙</button>
+            <button
+              type="button"
+              class="icon-button"
+              :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveUp')"
+              :disabled="visualSorted || positionOf(mod.id) <= 1"
+              @click.stop="emit('move', mod.id, -1)"
+            >↑</button>
+            <button
+              type="button"
+              class="icon-button"
+              :title="visualSorted ? t('list.prioritySortRequired') : t('list.moveDown')"
+              :disabled="visualSorted || positionOf(mod.id) >= orderIds.length"
+              @click.stop="emit('move', mod.id, 1)"
+            >↓</button>
+            <button
+              type="button"
+              class="icon-button danger"
+              :title="t('list.disable')"
+              @click.stop="emit('disable', mod.id)"
+            >−</button>
+          </span>
+          <span v-else class="row-actions">
+            <button
+              v-if="canOpenUnitData(mod)"
+              type="button"
+              class="icon-button unit-data-action"
+              :title="t('list.openUnitData')"
+              :aria-label="t('list.openUnitData')"
+              :data-testid="`open-unit-data-${mod.id}`"
+              @click.stop="emit('open-unit-data', mod)"
+            >⚙</button>
+            <button
+              type="button"
+              class="enable-button"
+              :title="t('list.enable')"
+              @click.stop="emit('enable', mod.id)"
+            >＋</button>
+          </span>
+        </div>
+      </template>
 
       <div
         v-if="dropPreview?.targetId === '' && dropPreview?.placement === 'after'"
@@ -433,7 +496,7 @@ watch(
         aria-hidden="true"
       ></div>
 
-      <div v-if="mods.length === 0" class="empty-state">
+      <div v-if="displayGroups.length === 0" class="empty-state">
         <span class="empty-mark">W</span>
         <p>{{ active ? t('list.emptyActive') : t('list.emptyFiltered') }}</p>
       </div>

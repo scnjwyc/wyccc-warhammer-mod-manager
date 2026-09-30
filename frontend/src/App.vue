@@ -5,6 +5,7 @@ import { executeKeyboardShortcut, isUndoShortcut, resolveKeyboardShortcut } from
 import { useAppStore } from './store'
 import { GAME_OPTIONS } from './games'
 import ConfirmationModal from './components/ConfirmationModal.vue'
+import FolderNameModal from './components/FolderNameModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import CompatibilityPatchModal from './components/CompatibilityPatchModal.vue'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
@@ -58,6 +59,7 @@ const unitDataSnapshotToken = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
 const confirmationDialog = reactive({ open: false, message: '', confirmLabel: '', danger: false })
+const folderDialog = reactive({ open: false, rename: false, folderId: '', name: '', modIds: [], error: '' })
 const modDragSource = ref(null)
 let runtimeTimer = 0
 let updateTimer = 0
@@ -500,6 +502,7 @@ const shortcutsBlocked = () => (
   || updateDialog.open
   || contextMenu.open
   || confirmationDialog.open
+  || folderDialog.open
   || workshopPublish.open
 )
 
@@ -549,11 +552,43 @@ const closeModContextMenu = () => {
   contextMenu.open = false
 }
 
+const toggleModFolder = async (folderId, listName) => {
+  try { await store.toggleModFolder(folderId, listName) } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+const renameModFolder = folder => {
+  Object.assign(folderDialog, { open: true, rename: true, folderId: folder.id, name: folder.name, modIds: [], error: '' })
+}
+const submitModFolderName = async name => {
+  folderDialog.error = ''
+  try {
+    const result = folderDialog.rename
+      ? await store.renameModFolder(folderDialog.folderId, name)
+      : await store.createModFolder(name, folderDialog.modIds)
+    if (result) folderDialog.open = false
+  } catch (error) {
+    folderDialog.error = error.message || String(error)
+  }
+}
+const deleteModFolder = async folder => {
+  if (!await requestConfirmation({ message: t('folders.deleteConfirm', { name: folder.name }), confirmLabel: t('folders.delete') })) return
+  try { await store.deleteModFolder(folder.id) } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
 const handleContextAction = async ({ action, value, mod }) => {
   if (!mod) return
   const actionIds = [...selectedActionIds(mod.id)]
   try {
-    if (action === 'toggle-active') {
+    if (action === 'create-folder') {
+      Object.assign(folderDialog, { open: true, rename: false, folderId: '', name: '', modIds: actionIds, error: '' })
+    } else if (action === 'add-to-folder') {
+      await store.assignModFolder(actionIds, value)
+    } else if (action === 'remove-from-folder') {
+      await store.assignModFolder(actionIds)
+    } else if (action === 'toggle-active') {
       if (store.activeIds.includes(mod.id)) disableSelected(mod.id)
       else enableSelected(mod.id)
     } else if (action === 'toggle-type') {
@@ -965,7 +1000,9 @@ watch(activeGame, () => {
   diagnosticSession.value = { status: 'idle', running: false }
   crashDiagnosis.value = {}
   diagnosticHistory.value = []
+  folderDialog.open = false
 })
+watch(() => store.currentPlaysetId, () => { folderDialog.open = false })
 
 onMounted(() => {
   initialize()
@@ -1066,6 +1103,9 @@ onBeforeUnmount(() => {
       <ModList
         :title="t('app.inactiveMods')"
         :mods="store.inactiveMods"
+        :folders="store.modFolders"
+        :busy="!!store.busy"
+        :warnings-only="store.warningsOnly"
         :selected-id="store.selectedId"
         :selected-ids="store.selectedIds"
         :order-ids="store.inactiveOrderIds"
@@ -1093,6 +1133,9 @@ onBeforeUnmount(() => {
         @drag-start="startModDrag"
         @drag-end="endModDrag"
         @context-menu="openModContextMenu"
+        @toggle-folder="toggleModFolder"
+        @rename-folder="renameModFolder"
+        @delete-folder="deleteModFolder"
         @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
         @update:search-tokens="store.setInactiveSearchTokens"
@@ -1106,6 +1149,8 @@ onBeforeUnmount(() => {
         :title="t('app.activeMods')"
         active
         :mods="store.activeMods"
+        :folders="store.modFolders"
+        :busy="!!store.busy"
         :selected-id="store.selectedId"
         :selected-ids="store.selectedIds"
         :order-ids="store.activeIds"
@@ -1135,6 +1180,9 @@ onBeforeUnmount(() => {
         @drag-start="startModDrag"
         @drag-end="endModDrag"
         @move="store.move"
+        @toggle-folder="toggleModFolder"
+        @rename-folder="renameModFolder"
+        @delete-folder="deleteModFolder"
         @context-menu="openModContextMenu"
         @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
@@ -1150,9 +1198,18 @@ onBeforeUnmount(() => {
 
     <footer class="action-footer">
       <div class="footer-left">
-        <button v-if="supportsPackActions" type="button" class="secondary-button sync-data-button"
-          :disabled="!!store.busy || !store.pathHealth.game_ready" data-testid="mod-diagnostics-button"
-          @click="refreshDiagnostics(true)">{{ t('diagnostics.title') }}</button>
+        <button
+          v-if="supportsPackActions"
+          type="button"
+          class="secondary-button sync-data-button footer-sync-button"
+          :disabled="!!store.busy || store.runtime.running || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
+          :title="store.runtime.running ? t('context.gameRunningBlocked') : ''"
+          data-testid="sync-data-button"
+          @click="syncWorkshopToData"
+        >
+          {{ t('app.syncData') }}
+        </button>
+
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
           {{ t('app.rescan') }}
         </button>
@@ -1165,7 +1222,7 @@ onBeforeUnmount(() => {
         <button
           v-if="supportsWh3Tools"
           type="button"
-          class="secondary-button sync-data-button"
+          class="secondary-button sync-data-button footer-edit-button"
           :disabled="!!store.busy || store.runtime.running"
           data-testid="game-data-modification-button"
           @click="openGameDataModification"
@@ -1175,7 +1232,7 @@ onBeforeUnmount(() => {
         <button
           v-if="supportsUnitDataTools"
           type="button"
-          class="secondary-button sync-data-button"
+          class="secondary-button sync-data-button footer-edit-button"
           :disabled="!!store.busy || store.runtime.running"
           data-testid="unit-data-modification-button"
           @click="openUnitDataModification"
@@ -1202,16 +1259,9 @@ onBeforeUnmount(() => {
         >
           {{ t('app.compatibilityPatch') }}
         </button>
-        <button
-          v-if="supportsPackActions"
-          type="button"
-          class="secondary-button sync-data-button"
-          :disabled="!!store.busy || store.runtime.running || store.workshopRefreshing || !store.pathHealth.game_ready || !store.pathHealth.workshop_path_exists"
-          :title="store.runtime.running ? t('context.gameRunningBlocked') : ''"
-          @click="syncWorkshopToData"
-        >
-          {{ t('app.syncData') }}
-        </button>
+        <button v-if="supportsPackActions" type="button" class="secondary-button sync-data-button footer-diagnostics-button"
+          :disabled="!!store.busy || !store.pathHealth.game_ready" data-testid="mod-diagnostics-button"
+          @click="refreshDiagnostics(true)">{{ t('diagnostics.title') }}</button>
       </div>
 
       <div class="footer-status" :class="`status-${statusDisplay.kind}`">
@@ -1416,6 +1466,7 @@ onBeforeUnmount(() => {
       :game-running="store.runtime.running"
       :keyboard-shortcuts="store.settings.keyboard_shortcuts"
       :pack-actions="supportsPackActions"
+      :folders="store.modFolders"
       @close="closeModContextMenu"
       @action="handleContextAction"
     />
@@ -1426,6 +1477,16 @@ onBeforeUnmount(() => {
       :busy="store.busy"
       @close="showDeleteMods = false"
       @confirm="confirmDeleteMods"
+    />
+
+    <FolderNameModal
+      :open="folderDialog.open"
+      :rename="folderDialog.rename"
+      :initial-name="folderDialog.name"
+      :busy="!!store.busy"
+      :error="folderDialog.error"
+      @close="folderDialog.open = false"
+      @submit="submitModFolderName"
     />
 
     <ConfirmationModal

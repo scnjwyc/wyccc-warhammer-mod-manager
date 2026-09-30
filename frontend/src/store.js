@@ -81,13 +81,15 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.6',
+    appVersion: '1.1.7',
     settings: {},
     paths: {},
     gameContextRevision: 0,
     pathHealth: {},
     mods: [],
     modTypes: [],
+    modFolders: [],
+    modFolderRevision: 0,
     activeIds: [],
     inactiveOrderIds: [],
     inactiveOrderCustomized: false,
@@ -381,6 +383,7 @@ export const useAppStore = defineStore('app', {
       this.currentPlaysetId = data.current_playset?.id || 'default'
       this.backups = data.backups
       this.modTypes = data.mod_types || []
+      this.modFolders = data.mod_folders || []
       this.orderToken = data.order_token
       this.runtime = data.runtime
       this.modRevision = Number(data.runtime?.mod_revision || 0)
@@ -425,6 +428,7 @@ export const useAppStore = defineStore('app', {
     },
     clearGameContextData() {
       this.mods = []
+      this.modFolders = []
       this.thumbnails = {}
       this.replaceActiveIds([])
       this.inactiveOrderIds = []
@@ -492,6 +496,7 @@ export const useAppStore = defineStore('app', {
         this.modRevision = Number(data.mod_revision ?? this.modRevision)
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+        this.modFolders = data.mod_folders || []
         if (!this.selectedId || !installed.has(this.selectedId)) {
           this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
         }
@@ -514,6 +519,7 @@ export const useAppStore = defineStore('app', {
     async refreshWorkshopInBackground() {
       if (this.workshopRefreshing || this.runtime.running) return
       const revision = this.gameContextRevision
+      const folderRevision = this.modFolderRevision
       await this.flushPlaysetUpdates()
       if (revision !== this.gameContextRevision) return
       this.workshopRefreshing = true
@@ -536,6 +542,9 @@ export const useAppStore = defineStore('app', {
         this.modRevision = Number(data.mod_revision ?? this.modRevision)
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+        if (folderRevision === this.modFolderRevision && Array.isArray(data.mod_folders)) {
+          this.modFolders = data.mod_folders
+        }
         if (!this.selectedId || !installed.has(this.selectedId)) {
           this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
         }
@@ -654,6 +663,7 @@ export const useAppStore = defineStore('app', {
     applyPlaysetPayload(data, replaceOrder = true) {
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+      this.modFolders = data.mod_folders || []
       if (Array.isArray(data.current_playset?.hidden_mod_ids)) {
         const hiddenIds = new Set(data.current_playset.hidden_mod_ids)
         for (const mod of this.mods) mod.hidden = hiddenIds.has(mod.id)
@@ -665,6 +675,36 @@ export const useAppStore = defineStore('app', {
         this.replaceActiveIds(data.ordered_mod_ids || [])
         this.missingEnabledIds = [...(data.missing_mod_ids || [])]
       }
+    },
+    async updateModFolders(method, ...args) {
+      if (this.busy) return null
+      this.modFolderRevision += 1
+      const revision = this.gameContextRevision
+      const gameId = this.settings.selected_game || 'warhammer3'
+      const playsetId = this.currentPlaysetId
+      return this.withBusy(t('folders.saving'), async () => {
+        const data = await invoke(method, ...args, gameId, playsetId)
+        if (revision === this.gameContextRevision && data.game_id === gameId && this.currentPlaysetId === playsetId
+          && data.playset_id === playsetId) this.modFolders = data.mod_folders || []
+        return data
+      })
+    },
+    createModFolder(name, modIds) {
+      return this.updateModFolders('create_mod_folder', name, [...modIds])
+    },
+    assignModFolder(modIds, folderId = '') {
+      return this.updateModFolders('assign_mod_folder', [...modIds], folderId)
+    },
+    renameModFolder(folderId, name) {
+      return this.updateModFolders('rename_mod_folder', folderId, name)
+    },
+    deleteModFolder(folderId) {
+      return this.updateModFolders('delete_mod_folder', folderId)
+    },
+    toggleModFolder(folderId, listName) {
+      const folder = this.modFolders.find(item => item.id === folderId)
+      if (!folder) return Promise.resolve()
+      return this.updateModFolders('set_mod_folder_collapsed', folderId, listName, !folder[`collapsed_${listName}`])
     },
     recordCurrentPlaysetChange() {
       this.refreshMissingDependencyWarnings()
@@ -1736,7 +1776,9 @@ export const useAppStore = defineStore('app', {
         }
       }
     },
-    async applyExternalScan(data, { forcePlaysetOrder = false, revision = this.gameContextRevision } = {}) {
+    async applyExternalScan(data, {
+      forcePlaysetOrder = false, revision = this.gameContextRevision, folderRevision = this.modFolderRevision,
+    } = {}) {
       if (!this.isCurrentGameResult(data, revision)) return
       const previousIds = [...this.activeIds]
       const installed = new Set((data.mods || []).map(mod => mod.id))
@@ -1754,6 +1796,9 @@ export const useAppStore = defineStore('app', {
       this.modRevision = Number(data.mod_revision ?? this.modRevision)
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+      if (folderRevision === this.modFolderRevision && Array.isArray(data.mod_folders)) {
+        this.modFolders = data.mod_folders
+      }
       if (!installed.has(this.selectedId)) this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
       this.selectedIds = this.selectedIds.filter(id => installed.has(id))
       if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
@@ -1764,6 +1809,7 @@ export const useAppStore = defineStore('app', {
     },
     async refreshModsInBackground() {
       const revision = this.gameContextRevision
+      const folderRevision = this.modFolderRevision
       if (
         this.liveModRefreshing
         || this.workshopRefreshing
@@ -1791,7 +1837,7 @@ export const useAppStore = defineStore('app', {
         }
         const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
         const previousActiveIds = [...this.activeIds]
-        await this.applyExternalScan(data, { forcePlaysetOrder, revision })
+        await this.applyExternalScan(data, { forcePlaysetOrder, revision, folderRevision })
         if (!this.isCurrentGameResult(data, revision)) return null
         if (forcePlaysetOrder) {
           this.updateCollectionImportProgress(data)

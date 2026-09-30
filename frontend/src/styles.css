@@ -1343,6 +1343,82 @@ textarea {
   cursor: grab;
 }
 
+.mod-row.in-folder {
+  margin-left: 22px;
+  border-left: 2px solid #65502f;
+}
+
+.mod-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-bottom: 5px;
+  padding: 4px 8px;
+  border: 1px solid #65502f;
+  border-radius: 4px;
+  background: #211a15;
+  color: var(--gold-bright);
+}
+
+.mod-folder-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mod-folder-toggle svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.mod-folder-chevron {
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.mod-folder-name,
+.folder-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-folder-name {
+  flex: 1;
+  font-weight: 700;
+}
+
+.folder-name-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.folder-name-modal input {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.folder-name-help {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.folder-name-error {
+  color: #ff7777;
+}
+
 .mod-row:hover {
   border-color: #3d2e2b;
   background: var(--panel-hover);
@@ -3388,6 +3464,18 @@ button.context-menu-item {
   border-color: #65502f;
   color: #d9bd89;
   font-weight: 800;
+}
+
+.sync-data-button.footer-sync-button {
+  color: #ff7777;
+}
+
+.sync-data-button.footer-diagnostics-button {
+  color: #79d99b;
+}
+
+.sync-data-button.footer-edit-button {
+  color: #79b8ff;
 }
 
 .switch-row {

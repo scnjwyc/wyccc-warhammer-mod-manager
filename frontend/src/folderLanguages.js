@@ -1,0 +1,18 @@
+export const folderEntries = {
+  'folders.name': ['文件夹名称', 'Folder name', '폴더 이름', 'Имя папки', 'フォルダー名', 'Nombre de carpeta'],
+  'folders.addTo': ['添加到文件夹', 'Add to folder', '폴더에 추가', 'Добавить в папку', 'フォルダーに追加', 'Añadir a carpeta'],
+  'folders.create': ['创建文件夹', 'Create folder', '폴더 만들기', 'Создать папку', 'フォルダーを作成', 'Crear carpeta'],
+  'folders.removeFrom': ['移出文件夹', 'Remove from folder', '폴더에서 제거', 'Убрать из папки', 'フォルダーから取り出す', 'Quitar de la carpeta'],
+  'folders.rename': ['重命名文件夹', 'Rename folder', '폴더 이름 변경', 'Переименовать папку', 'フォルダー名を変更', 'Renombrar carpeta'],
+  'folders.delete': ['删除文件夹', 'Delete folder', '폴더 삭제', 'Удалить папку', 'フォルダーを削除', 'Eliminar carpeta'],
+  'folders.deleteHelp': ['删除文件夹，MOD 返回普通列表', 'Delete folder and return MODs to the list', '폴더를 삭제하고 MOD를 목록으로 되돌리기', 'Удалить папку и вернуть моды в список', 'フォルダーを削除しMODを通常の一覧に戻す', 'Eliminar carpeta y devolver los MODs a la lista'],
+  'folders.deleteConfirm': ['删除文件夹“{name}”？其中的 MOD 将返回普通列表，MOD 文件和启用状态保持不变。', 'Delete folder “{name}”? Its MODs will return to the list. MOD files and enabled states will be preserved.', '“{name}” 폴더를 삭제할까요? MOD는 목록으로 돌아갑니다. MOD 파일과 활성화 상태는 유지됩니다.', 'Удалить папку «{name}»? Моды вернутся в список. Файлы и состояние включения сохранятся.', 'フォルダー「{name}」を削除しますか？MODは通常の一覧に戻ります。ファイルと有効状態は維持されます。', '¿Eliminar la carpeta «{name}»? Sus MODs volverán a la lista. Se conservarán los archivos y su estado de activación.'],
+  'folders.promptCreate': ['请输入文件夹名称（1–80 个字符）：', 'Enter a folder name (1–80 characters):', '폴더 이름을 입력하세요 (1–80자):', 'Введите имя папки (1–80 символов):', 'フォルダー名を入力してください（1〜80文字）：', 'Introduce un nombre de carpeta (1–80 caracteres):'],
+  'folders.orderHelp': ['文件夹只收纳列表项目；实际加载顺序以 MOD 序号为准。搜索时自动展开。', 'Folders organize the list. MOD numbers show the actual load order. Search expands folders automatically.', '폴더는 목록을 정리합니다. MOD 번호가 실제 로드 순서를 나타냅니다. 검색 시 폴더가 자동으로 펼쳐집니다.', 'Папки упорядочивают список. Номера модов показывают порядок загрузки. При поиске папки раскрываются.', 'フォルダーは一覧を整理します。実際の読み込み順序はMODの番号で確認できます。検索時は自動的に展開されます。', 'Las carpetas organizan la lista. Los números de los MODs indican el orden real de carga. La búsqueda expande las carpetas automáticamente.'],
+  'folders.saving': ['正在保存文件夹', 'Saving folders', '폴더 저장 중', 'Сохранение папок', 'フォルダーを保存中', 'Guardando carpetas'],
+  'folders.invalidName': ['文件夹名称必须为 1–80 个字符', 'Folder names must contain 1–80 characters', '폴더 이름은 1–80자여야 합니다', 'Имя папки должно содержать 1–80 символов', 'フォルダー名は1〜80文字で入力してください', 'El nombre de la carpeta debe tener entre 1 y 80 caracteres'],
+  'folders.duplicateName': ['当前配置中已存在同名文件夹', 'A folder with this name already exists in this playset', '현재 플레이셋에 같은 이름의 폴더가 있습니다', 'В этом наборе уже есть папка с таким именем', '現在のプレイセットに同名のフォルダーがあります', 'Ya existe una carpeta con este nombre en este conjunto'],
+  'folders.notFound': ['当前配置中找不到该文件夹', 'Folder not found in the current playset', '현재 플레이셋에서 폴더를 찾을 수 없습니다', 'Папка не найдена в текущем наборе', '現在のプレイセットにフォルダーがありません', 'No se encuentra la carpeta en el conjunto actual'],
+  'folders.invalidList': ['无效的 MOD 列表', 'Invalid MOD list', '잘못된 MOD 목록', 'Недопустимый список модов', '無効なMOD一覧です', 'Lista de MODs no válida'],
+  'folders.contextChanged': ['游戏或配置已切换，请重试文件夹操作', 'The game or playset changed. Please retry the folder operation.', '게임 또는 플레이셋이 변경되었습니다. 폴더 작업을 다시 시도하세요.', 'Игра или набор изменились. Повторите операцию с папкой.', 'ゲームまたはプレイセットが変更されました。もう一度操作してください。', 'El juego o conjunto ha cambiado. Vuelve a intentar la operación con la carpeta.'],
+}

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { encyclopediaEntries } from './encyclopediaLanguages'
 import { diagnosticsEntries } from './diagnosticsLanguages'
+import { folderEntries } from './folderLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -1796,6 +1797,11 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
+for (const [key, variants] of Object.entries(folderEntries)) {
+  entries[key] = variants.slice(0, 5)
+  spanishEntries[key] = variants[5]
+}
+
 for (const [key, variants] of Object.entries(encyclopediaEntries)) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
@@ -1877,6 +1883,7 @@ const scanNoticeEnglish = value => {
 export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
   const value = String(message || '').trim()
   if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
+  if (Object.prototype.hasOwnProperty.call(folderEntries, value)) return t(value)
   const language = normalizeLanguage(interfaceLanguage.value)
   if (!value) return t(fallbackKey)
   const knownMessages = {

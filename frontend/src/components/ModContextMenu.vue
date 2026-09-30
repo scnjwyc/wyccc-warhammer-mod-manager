@@ -17,13 +17,14 @@ const props = defineProps({
   gameRunning: { type: Boolean, default: false },
   keyboardShortcuts: { type: Object, default: () => ({}) },
   packActions: { type: Boolean, default: true },
+  folders: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = (props.mod?.workshop_id ? 540 : 500) + (showAiGenerate.value ? 44 : 0)
+  const height = (props.mod?.workshop_id ? 580 : 540) + (showAiGenerate.value ? 44 : 0)
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -80,6 +81,9 @@ const selectedTypes = computed(() => new Set(
   props.mod?.mod_types?.length ? props.mod.mod_types : [props.mod?.mod_type || 'unknown'],
 ))
 const ignoredWarningCodes = computed(() => new Set(props.mod?.ignored_warning_codes || []))
+const hasFolder = computed(() => props.folders.some(folder => (
+  folder.mod_ids?.some(id => selectedModIds.value.includes(id) || id === props.mod?.id)
+)))
 const shortcutLabel = action => shortcutForAction(action, props.keyboardShortcuts)
 
 const run = (action, value = null, close = true) => {
@@ -102,6 +106,31 @@ const run = (action, value = null, close = true) => {
         <span>{{ batchLabel(active ? t('list.disable') : t('list.enable')) }}</span>
         <kbd class="context-menu-shortcut">{{ shortcutLabel('toggle-active') }}</kbd>
       </button>
+
+      <div class="context-menu-parent" data-testid="context-folder-menu" role="menuitem" tabindex="0" aria-haspopup="menu">
+        <span class="context-menu-icon">▣</span>
+        <span>{{ batchLabel(t('folders.addTo')) }}</span>
+        <span class="context-menu-arrow">›</span>
+        <div class="context-submenu folder-submenu" role="menu">
+          <button type="button" class="context-menu-item" role="menuitem"
+            data-testid="context-create-folder" @click.stop="run('create-folder')">
+            <span class="context-menu-icon">＋</span><span>{{ t('folders.create') }}</span>
+          </button>
+          <div v-if="folders.length" class="context-menu-divider"></div>
+          <button v-for="folder in folders" :key="folder.id" type="button" class="context-menu-item"
+            role="menuitem" :data-testid="`context-add-folder-${folder.id}`"
+            @click.stop="run('add-to-folder', folder.id)">
+            <span class="context-menu-icon">▣</span><span class="folder-menu-name" :title="folder.name">{{ folder.name }}</span>
+          </button>
+          <template v-if="hasFolder">
+            <div class="context-menu-divider"></div>
+            <button type="button" class="context-menu-item" role="menuitem"
+              data-testid="context-remove-folder" @click.stop="run('remove-from-folder')">
+              <span class="context-menu-icon">−</span><span>{{ t('folders.removeFrom') }}</span>
+            </button>
+          </template>
+        </div>
+      </div>
 
       <div class="context-menu-parent" data-testid="context-type-menu">
         <span class="context-menu-icon">◆</span>

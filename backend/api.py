@@ -275,6 +275,11 @@ class API:
             "set_playset_show_hidden_mods": self._set_playset_show_hidden_mods,
             "delete_playset": self._delete_playset,
             "switch_playset": self._switch_playset,
+            "create_mod_folder": self._create_mod_folder,
+            "assign_mod_folder": self._assign_mod_folder,
+            "rename_mod_folder": self._rename_mod_folder,
+            "delete_mod_folder": self._delete_mod_folder,
+            "set_mod_folder_collapsed": self._set_mod_folder_collapsed,
             "list_backups": self._list_backups,
             "export_share": self._export_share,
             "preview_import_share": self._preview_import_share,
@@ -429,6 +434,7 @@ class API:
             "enabled_order": current_playset["mod_ids"],
             "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current_playset,
+            "mod_folders": self._mod_folders_payload(game_id, current_playset["id"]),
             "backups": self.state_repository.list_backups(),
             "mod_types": self.state_repository.list_mod_types(),
             "order_token": self._last_order_token,
@@ -1159,6 +1165,9 @@ class API:
                         "order_token": self._last_order_token,
                         "playsets": self.state_repository.list_playsets(game_id),
                         "current_playset": self.state_repository.get_current_playset(game_id),
+                        "mod_folders": self._mod_folders_payload(
+                            game_id, self.state_repository.get_current_playset_id(game_id)
+                        ),
                         # A filesystem event arriving during this scan must remain
                         # visible to the frontend so it schedules one follow-up scan.
                         "mod_revision": scan_revision,
@@ -1990,6 +1999,81 @@ class API:
     def _list_playsets(self) -> list[dict[str, Any]]:
         return self.state_repository.list_playsets(self._active_game().id)
 
+    def _mod_folders_payload(self, game_id: str, playset_id: str) -> list[dict[str, Any]]:
+        folders = self.state_repository.list_mod_folders(playset_id, game_id)
+        seen: set[str] = set()
+        for folder in folders:
+            ids = self._canonicalize_mod_ids(folder["mod_ids"])
+            folder["mod_ids"] = [mod_id for mod_id in ids if mod_id not in seen]
+            seen.update(folder["mod_ids"])
+        return folders
+
+    def _mod_folder_context(self, expected_game_id: str, expected_playset_id: str) -> tuple[str, str]:
+        game_id = self._active_game().id
+        playset_id = self.state_repository.get_current_playset_id(game_id)
+        if ((expected_game_id and expected_game_id != game_id)
+                or (expected_playset_id and expected_playset_id != playset_id)):
+            raise ValueError("folders.contextChanged")
+        return game_id, playset_id
+
+    def _mod_folder_result(self, game_id: str, playset_id: str) -> dict[str, Any]:
+        return {"game_id": game_id, "playset_id": playset_id,
+                "mod_folders": self._mod_folders_payload(game_id, playset_id)}
+
+    def _folder_assignment_ids(self, mod_ids: list[str]) -> list[str]:
+        ids = self._canonicalize_mod_ids(mod_ids)
+        canonical = set(ids)
+        aliases = [alias for alias, target in self._asset_aliases.items() if target in canonical]
+        return list(dict.fromkeys([*ids, *aliases]))
+
+    def _create_mod_folder(
+        self, name: str, mod_ids: list[str], expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.create_mod_folder(
+                playset_id, name, self._folder_assignment_ids(mod_ids), game_id
+            )
+            return self._mod_folder_result(game_id, playset_id)
+
+    def _assign_mod_folder(
+        self, mod_ids: list[str], folder_id: str = "",
+        expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            # Remove historical aliases as well, so a source change cannot restore old membership.
+            ids = self._folder_assignment_ids(mod_ids)
+            self.state_repository.assign_mod_folder(playset_id, ids, folder_id, game_id)
+            return self._mod_folder_result(game_id, playset_id)
+
+    def _rename_mod_folder(
+        self, folder_id: str, name: str, expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.rename_mod_folder(playset_id, folder_id, name, game_id)
+            return self._mod_folder_result(game_id, playset_id)
+
+    def _delete_mod_folder(
+        self, folder_id: str, expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.delete_mod_folder(playset_id, folder_id, game_id)
+            return self._mod_folder_result(game_id, playset_id)
+
+    def _set_mod_folder_collapsed(
+        self, folder_id: str, list_name: str, collapsed: bool,
+        expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.set_mod_folder_collapsed(
+                playset_id, folder_id, list_name, collapsed, game_id
+            )
+            return self._mod_folder_result(game_id, playset_id)
+
     def _apply_playset_hidden_mods(self, playset_id: str, game_id: str) -> list[str]:
         hidden_mod_ids = self.state_repository.get_playset_hidden_mod_ids(playset_id, game_id)
         if not self._assets:
@@ -2020,6 +2104,7 @@ class API:
         return {
             "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current,
+            "mod_folders": self._mod_folders_payload(game_id, current["id"]),
             "ordered_mod_ids": present,
             "missing_mod_ids": missing,
             "missing_dependency_warnings": self._missing_dependency_warnings_payload(),

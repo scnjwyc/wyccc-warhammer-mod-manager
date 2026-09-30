@@ -22,7 +22,7 @@ from .mod_types import (
 
 DEFAULT_PLAYSET_ID = "default"
 DEFAULT_PLAYSET_NAME = "默认"
-PLAYSET_SCHEMA_VERSION = "10"
+PLAYSET_SCHEMA_VERSION = "11"
 MOD_TYPE_ORDER_STATE_KEY = "mod_type_order"
 
 
@@ -188,6 +188,30 @@ class StateRepository:
                 )
             self._ensure_data_sync_schema(connection)
             self._ensure_playset_schema(connection)
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS mod_folders (
+                    id TEXT PRIMARY KEY,
+                    playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    collapsed_active INTEGER NOT NULL DEFAULT 0,
+                    collapsed_inactive INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE (playset_id, name),
+                    UNIQUE (playset_id, id)
+                );
+
+                CREATE TABLE IF NOT EXISTS mod_folder_items (
+                    playset_id TEXT NOT NULL,
+                    mod_id TEXT NOT NULL,
+                    folder_id TEXT NOT NULL,
+                    PRIMARY KEY (playset_id, mod_id),
+                    FOREIGN KEY (playset_id, folder_id)
+                        REFERENCES mod_folders(playset_id, id) ON DELETE CASCADE
+                );
+
+                """
+            )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS playset_hidden_mods (
@@ -1016,6 +1040,130 @@ class StateRepository:
             raise ValueError("播放集不存在")
         if str(row["game_id"]) != game_id:
             raise ValueError("播放集不属于当前游戏")
+
+    @staticmethod
+    def _folder_name(name: str) -> str:
+        clean = name.strip() if isinstance(name, str) else ""
+        if not clean or len(clean) > 80:
+            raise ValueError("folders.invalidName")
+        return clean
+
+    @staticmethod
+    def _require_mod_folder(connection: sqlite3.Connection, playset_id: str, folder_id: str) -> None:
+        if not connection.execute(
+            "SELECT 1 FROM mod_folders WHERE id = ? AND playset_id = ?",
+            (folder_id, playset_id),
+        ).fetchone():
+            raise ValueError("folders.notFound")
+
+    @staticmethod
+    def _ensure_folder_name_available(
+        connection: sqlite3.Connection, playset_id: str, name: str, excluded_id: str = "",
+    ) -> None:
+        names = connection.execute(
+            "SELECT name FROM mod_folders WHERE playset_id = ? AND id <> ?",
+            (playset_id, excluded_id),
+        ).fetchall()
+        if any(str(row["name"]).casefold() == name.casefold() for row in names):
+            raise ValueError("folders.duplicateName")
+
+    @staticmethod
+    def _assign_folder_items(
+        connection: sqlite3.Connection, playset_id: str, mod_ids: list[str], folder_id: str,
+    ) -> None:
+        ids = list(dict.fromkeys(str(item).strip() for item in mod_ids if str(item).strip()))
+        connection.executemany(
+            "DELETE FROM mod_folder_items WHERE playset_id = ? AND mod_id = ?",
+            [(playset_id, mod_id) for mod_id in ids],
+        )
+        if folder_id:
+            connection.executemany(
+                "INSERT INTO mod_folder_items(playset_id, mod_id, folder_id) VALUES(?, ?, ?)",
+                [(playset_id, mod_id, folder_id) for mod_id in ids],
+            )
+
+    def list_mod_folders(self, playset_id: str, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            rows = connection.execute(
+                "SELECT * FROM mod_folders WHERE playset_id = ? ORDER BY created_at, rowid",
+                (playset_id,),
+            ).fetchall()
+            items = connection.execute(
+                "SELECT folder_id, mod_id FROM mod_folder_items WHERE playset_id = ? ORDER BY mod_id",
+                (playset_id,),
+            ).fetchall()
+        grouped: dict[str, list[str]] = {}
+        for item in items:
+            grouped.setdefault(item["folder_id"], []).append(item["mod_id"])
+        return [
+            {"id": row["id"], "name": row["name"], "mod_ids": grouped.get(row["id"], []),
+             "collapsed_active": bool(row["collapsed_active"]),
+             "collapsed_inactive": bool(row["collapsed_inactive"])}
+            for row in rows
+        ]
+
+    def create_mod_folder(
+        self, playset_id: str, name: str, mod_ids: list[str], game_id: str = DEFAULT_GAME_ID,
+    ) -> str:
+        game_id = _normalized_game_id(game_id)
+        clean = self._folder_name(name)
+        folder_id = uuid.uuid4().hex
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            self._ensure_folder_name_available(connection, playset_id, clean)
+            connection.execute(
+                "INSERT INTO mod_folders(id, playset_id, name, created_at) VALUES(?, ?, ?, ?)",
+                (folder_id, playset_id, clean, int(time.time())),
+            )
+            self._assign_folder_items(connection, playset_id, mod_ids, folder_id)
+        return folder_id
+
+    def assign_mod_folder(
+        self, playset_id: str, mod_ids: list[str], folder_id: str, game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            if folder_id:
+                self._require_mod_folder(connection, playset_id, folder_id)
+            self._assign_folder_items(connection, playset_id, mod_ids, folder_id)
+
+    def rename_mod_folder(
+        self, playset_id: str, folder_id: str, name: str, game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        game_id = _normalized_game_id(game_id)
+        clean = self._folder_name(name)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            self._require_mod_folder(connection, playset_id, folder_id)
+            self._ensure_folder_name_available(connection, playset_id, clean, folder_id)
+            connection.execute("UPDATE mod_folders SET name = ? WHERE id = ?", (clean, folder_id))
+
+    def delete_mod_folder(
+        self, playset_id: str, folder_id: str, game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            self._require_mod_folder(connection, playset_id, folder_id)
+            connection.execute("DELETE FROM mod_folders WHERE id = ?", (folder_id,))
+
+    def set_mod_folder_collapsed(
+        self, playset_id: str, folder_id: str, list_name: str, collapsed: bool,
+        game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        if list_name not in {"active", "inactive"}:
+            raise ValueError("folders.invalidList")
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            self._require_mod_folder(connection, playset_id, folder_id)
+            connection.execute(
+                f"UPDATE mod_folders SET collapsed_{list_name} = ? WHERE id = ?",
+                (int(bool(collapsed)), folder_id),
+            )
 
     def list_playsets(self, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
         game_id = _normalized_game_id(game_id)

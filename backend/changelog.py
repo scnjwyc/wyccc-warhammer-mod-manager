@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.7",
+        "date": "2026-09-30",
+        "entries": (
+            (
+                "v117_added_title",
+                (("feature", "v117_mod_folders"),),
+            ),
+        ),
+    },
+    {
         "version": "1.1.6",
         "date": "2026-09-28",
         "entries": (
@@ -620,6 +630,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v117_added_title": "新增",
+        "v117_mod_folders": "新增文件夹功能，可以在MOD列表中将MOD添加到不同的文件夹进行分组管理",
         "v116_fixed_title": "修复",
         "v116_unit_encyclopedia_compatibility": "修复单位图鉴存在的兼容性问题。",
         "v115_added_title": "新增",
@@ -842,6 +854,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v117_added_title": "Added",
+        "v117_mod_folders": "Added folders for grouping MODs in different folders in the MOD list.",
         "v116_fixed_title": "Fixed",
         "v116_unit_encyclopedia_compatibility": "Fixed a compatibility issue in the Unit Encyclopedia.",
         "v115_added_title": "Added",
@@ -1064,6 +1078,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v117_added_title": "추가",
+        "v117_mod_folders": "폴더 기능을 추가했습니다. MOD 목록에서 MOD를 서로 다른 폴더에 넣어 그룹별로 관리할 수 있습니다.",
         "v116_fixed_title": "수정",
         "v116_unit_encyclopedia_compatibility": "유닛 도감의 호환성 문제를 수정했습니다.",
         "v115_added_title": "추가",
@@ -1286,6 +1302,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v117_added_title": "Добавлено",
+        "v117_mod_folders": "Добавлены папки: теперь моды в списке можно распределять по разным папкам для управления группами.",
         "v116_fixed_title": "Исправлено",
         "v116_unit_encyclopedia_compatibility": "Исправлена проблема совместимости в энциклопедии отрядов.",
         "v115_added_title": "Добавлено",
@@ -1508,6 +1526,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v117_added_title": "追加",
+        "v117_mod_folders": "フォルダー機能を追加しました。MOD一覧でMODを異なるフォルダーに追加して、グループごとに管理できます。",
         "v116_fixed_title": "修正",
         "v116_unit_encyclopedia_compatibility": "ユニット図鑑の互換性問題を修正しました。",
         "v115_added_title": "追加",
@@ -1730,6 +1750,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v117_added_title": "Añadido",
+        "v117_mod_folders": "Se añadieron carpetas para agrupar y gestionar los MODs en distintas carpetas dentro de la lista de MODs.",
         "v116_fixed_title": "Corregido",
         "v116_unit_encyclopedia_compatibility": "Se corrigió un problema de compatibilidad en la enciclopedia de unidades.",
         "v115_added_title": "Añadido",

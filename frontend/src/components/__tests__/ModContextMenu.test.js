@@ -237,7 +237,7 @@ describe('ModContextMenu', () => {
         props: { open: true, x: 100, y: 740, mod, active: true, types },
       })
 
-      expect(wrapper.get('nav').attributes('style')).toContain('top: 212px')
+      expect(wrapper.get('nav').attributes('style')).toContain('top: 172px')
     } finally {
       Object.defineProperty(window, 'innerHeight', { value: originalHeight, configurable: true })
     }
