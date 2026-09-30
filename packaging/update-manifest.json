@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.1.6",
-  "published_at": "2026-09-28",
+  "version": "1.1.7",
+  "published_at": "2026-09-30",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc%27s%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.7/Wyccc%27s%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc%27s%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.6/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.7/Wyccc%27s%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.7/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "e7c8b7f849f590f3eba01a35bf551fbac56672896a7d526fee36ac5fdb65c562",
-    "size": 62998626
+    "sha256": "ae2d80c99fbbdf46e19c6855994686bf79ee9f2261c186705250dc74edd7e419",
+    "size": 63052948
   },
   "changelog": [
     {
-      "title": "修复",
+      "title": "新增",
       "changes": [
         {
-          "type": "fix",
-          "text": "修复单位图鉴存在的兼容性问题。"
+          "type": "feature",
+          "text": "新增文件夹功能，可以在MOD列表中将MOD添加到不同的文件夹进行分组管理"
         }
       ]
     }
