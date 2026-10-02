@@ -14,7 +14,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'refresh', 'start', 'confirm-trial', 'cancel', 'apply', 'restore'])
 const mode = ref('bisect')
 const copied = ref(false)
-const confirming = computed(() => ['confirm_menu', 'confirm_exit'].includes(props.session.phase))
+const confirming = computed(() => ['confirm_menu', 'confirm_exit', 'confirm_dump'].includes(props.session.phase))
 const modLabel = id => props.session.mods?.[id]?.name || id
 const close = () => { if (!props.session.running && !props.busy) emit('close') }
 const copyReport = async () => {

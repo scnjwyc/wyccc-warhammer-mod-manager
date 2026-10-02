@@ -49,10 +49,15 @@ class StateRepository:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._transaction = threading.local()
         self._initialize()
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
+        current = getattr(self._transaction, "connection", None)
+        if current is not None:
+            yield current
+            return
         connection = sqlite3.connect(self.database_path, timeout=15)
         try:
             connection.row_factory = sqlite3.Row
@@ -66,6 +71,21 @@ class StateRepository:
             raise
         finally:
             connection.close()
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Keep related repository writes and reads on one rollback-capable connection."""
+        with self._lock:
+            if getattr(self._transaction, "connection", None) is not None:
+                yield
+                return
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                self._transaction.connection = connection
+                try:
+                    yield
+                finally:
+                    del self._transaction.connection
 
     def _initialize(self) -> None:
         with self._lock, self._connect() as connection:

@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { encyclopediaEntries } from './encyclopediaLanguages'
 import { diagnosticsEntries } from './diagnosticsLanguages'
 import { folderEntries } from './folderLanguages'
+import { schemaEntries } from './schemaLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -1797,7 +1798,7 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
-for (const [key, variants] of Object.entries(folderEntries)) {
+for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries })) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
 }
@@ -1884,6 +1885,11 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   const value = String(message || '').trim()
   if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(folderEntries, value)) return t(value)
+  if (Object.prototype.hasOwnProperty.call(schemaEntries, value)) return t(value)
+  const schemaError = value.match(/^(.*?): (schemaUpdate\.[A-Za-z]+)$/)
+  if (schemaError && Object.prototype.hasOwnProperty.call(schemaEntries, schemaError[2])) {
+    return `${schemaError[1]}: ${t(schemaError[2])}`
+  }
   const language = normalizeLanguage(interfaceLanguage.value)
   if (!value) return t(fallbackKey)
   const knownMessages = {

@@ -6,6 +6,20 @@ from pathlib import Path
 from backend.models import ModAsset
 
 
+def write_minidump(path: Path, pid: int, *, created_at: int = 0, flags: int = 3) -> Path:
+    """A small exception stream plus MINIDUMP_MISC_INFO for ownership checks."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = bytearray(248)
+    payload[:4] = b"MDMP"
+    struct.pack_into("<II", payload, 8, 2, 32)
+    struct.pack_into("<III", payload, 32, 6, 168, 56)
+    struct.pack_into("<III", payload, 44, 15, 24, 224)
+    struct.pack_into("<I", payload, 64, 0xC0000005)
+    struct.pack_into("<IIII", payload, 224, 24, flags, pid, created_at)
+    path.write_bytes(payload)
+    return path
+
+
 def write_pack(
     path: Path,
     byte_mask: int = 0,

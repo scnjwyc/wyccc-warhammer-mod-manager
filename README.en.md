@@ -4,7 +4,7 @@
 
 A lightweight mod manager for every Total War game with Steam Workshop support, covering both CA Pack files and ROME REMASTERED directory mods.
 
-The current version is `1.1.7`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `1.1.8`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 
@@ -23,6 +23,7 @@ The current version is `1.1.7`. It brings mods, playsets, the Steam Workshop, an
 - Total War: WARHAMMER III can import presets from the official game launcher to quickly create a new playset or replace the current one.
 - Total War: WARHAMMER III can dynamically adjust unit sizes together with formation rank depth; regular single-entity monsters can adjust by health or scale, and unit and spell friendly fire can be disabled. THREE KINGDOMS also supports unit-data editing for unit size, safely derivable hit points, recruitment/upkeep, attributes, and weapon/projectile data; shared weapons and projectiles are cloned so unedited units are unaffected. THREE KINGDOMS does not expose game-data editing, compatibility patches, or official-playset import; the other games do not expose these advanced tools. ROME REMASTERED validates `modinfo.json`, `filelist.json`, and the `data` directory, then hands actual activation and ordering to the official Feral mod manager instead of writing an undocumented enabled-mod configuration.
 - Copy MOD paths from the context menu; Pack MODs can also be moved safely to the Recycle Bin. Unsubscribing cleans the matching Workshop folder, and these file operations are blocked while the game runs.
+- Right-click Pack MODs and choose “Update table schemas” to migrate outdated DB tables in one action, including multi-selection batches, without installing RPFM. Uses the installed game's vanilla table versions, backs up original Packs, and reports updates, skipped tables and failures per MOD.
 - Automatically switches to a static low-consumption page while the game runs, pausing scanning and directory monitoring until the game exits.
 - Automatically checks for new versions and lets you view release notes, download updates, and install them from within the application.
 - Built-in support for Simplified Chinese, English, Korean, Russian, Japanese, and Spanish.
@@ -167,6 +168,8 @@ The data directory may contain:
 - `state.db`: Playsets and enabled order, personal labels, mod categories, and local Workshop associations.
 - `workshop_cache.json`: Previously retrieved public Workshop metadata.
 - `backups/`: Load-manifest backups created before saving.
+- `backups/table-schemas/<game_id>/`: Original Pack backups made before schema updates; the result panel shows each path.
+- `schemas/`: Complete per-game RPFM schemas, checked online on each update; an offline cache fallback is explicitly reported.
 - `updates/`: Verified update EXEs, replacement scripts, and failed rollback logs.
 - `logs/app.log`: The manager's own runtime log.
 

@@ -4,10 +4,12 @@ import hashlib
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 from .constants import SOURCE_DATA
@@ -40,6 +42,35 @@ def current_order_path(game_path: str, preferred_name: str = "") -> Path:
 class LoadOrderService:
     def __init__(self, backup_dir: Path):
         self.backup_dir = Path(backup_dir)
+
+    @contextmanager
+    def rollback_on_error(self, game_path: str):
+        """Restore both possible order files, including their tokens, if saving fails."""
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="order-rollback-", dir=self.backup_dir) as directory:
+            snapshots = {}
+            for name in ("used_mods.txt", "my_mods.txt"):
+                target = Path(game_path) / name
+                snapshot = Path(directory) / name
+                if target.is_file():
+                    shutil.copy2(target, snapshot)
+                snapshots[target] = snapshot
+            try:
+                yield
+            except Exception:
+                for target, snapshot in snapshots.items():
+                    if snapshot.is_file():
+                        if file_token(target) == file_token(snapshot):
+                            continue
+                        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.rollback")
+                        try:
+                            shutil.copy2(snapshot, temporary)
+                            os.replace(temporary, target)
+                        finally:
+                            temporary.unlink(missing_ok=True)
+                    else:
+                        target.unlink(missing_ok=True)
+                raise
 
     def import_disk_order(
         self,

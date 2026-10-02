@@ -9,10 +9,34 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.launcher import _windows_process_entries, is_game_running, launch_game, terminate_game
+from backend.launcher import (
+    _windows_process_entries, forget_launched_game, is_game_running,
+    launch_game, launched_game_exit_code, terminate_game,
+)
 
 
 class LauncherProcessTests(unittest.TestCase):
+    def test_retains_exit_status_when_game_exits_before_process_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            (game / "Warhammer3.exe").write_bytes(b"fixture")
+            order = game / "used_mods.txt"
+            order.write_text("")
+            with (
+                patch("backend.launcher.is_game_running", return_value=False),
+                patch("backend.launcher.subprocess.Popen") as popen,
+            ):
+                popen.return_value.pid = 98765
+                popen.return_value.poll.return_value = None
+                try:
+                    result = launch_game(str(game), str(order))
+                    self.assertIsNone(launched_game_exit_code(result["pid"]))
+                    popen.return_value.poll.return_value = 1
+                    self.assertEqual(launched_game_exit_code(result["pid"]), 1)
+                finally:
+                    forget_launched_game(98765)
+            self.assertIsNone(launched_game_exit_code(98765))
+
     @unittest.skipUnless(os.name == "nt", "Windows process snapshot APIs are required")
     def test_concurrent_windows_process_scans_keep_their_native_argument_types(self) -> None:
         before_first_entry = threading.Barrier(2, timeout=5)

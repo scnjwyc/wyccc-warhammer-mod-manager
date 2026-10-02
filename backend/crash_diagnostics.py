@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import time
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -57,35 +58,59 @@ def parse_launch_list(path: Path) -> tuple[list[str], list[str]]:
     return _DIRECTORY_LINE.findall(content), _MOD_LINE.findall(content)
 
 
-def read_dump_exception(path: Path) -> dict[str, Any]:
-    """Bounded reads of the minidump directory and exception stream."""
+def _dump_stream(path: Path, kind: int, length: int) -> bytes:
+    """Read only the requested bounded stream, never the entire crash dump."""
     try:
         size = path.stat().st_size
         with path.open("rb") as stream:
             header = stream.read(32)
             if len(header) != 32 or header[:4] != b"MDMP":
-                return {}
+                return b""
             count, directory = struct.unpack_from("<II", header, 8)
             if count > 4096 or directory + count * 12 > size:
-                return {}
+                return b""
             stream.seek(directory)
             entries = stream.read(count * 12)
             for index in range(count):
-                kind, length, offset = struct.unpack_from("<III", entries, index * 12)
-                if kind != 6 or length < 168 or offset + 168 > size:
+                stream_kind, stream_length, offset = struct.unpack_from("<III", entries, index * 12)
+                if stream_kind != kind or stream_length < length or offset + length > size:
                     continue
                 stream.seek(offset)
-                payload = stream.read(168)
-                code = struct.unpack_from("<I", payload, 8)[0]
-                address = struct.unpack_from("<Q", payload, 24)[0]
-                parameter_count = min(struct.unpack_from("<I", payload, 32)[0], 15)
-                return {
-                    "code": f"0x{code:08X}", "address": f"0x{address:X}",
-                    "parameters": list(struct.unpack_from(f"<{parameter_count}Q", payload, 40)),
-                }
+                return stream.read(length)
     except (OSError, ValueError, struct.error):
         pass
-    return {}
+    return b""
+
+
+def read_dump_exception(path: Path) -> dict[str, Any]:
+    payload = _dump_stream(path, 6, 168)
+    if len(payload) != 168:
+        return {}
+    code = struct.unpack_from("<I", payload, 8)[0]
+    address = struct.unpack_from("<Q", payload, 24)[0]
+    parameter_count = min(struct.unpack_from("<I", payload, 32)[0], 15)
+    return {"code": f"0x{code:08X}", "address": f"0x{address:X}",
+            "parameters": list(struct.unpack_from(f"<{parameter_count}Q", payload, 40))}
+
+
+def read_dump_process(path: Path) -> dict[str, int]:
+    # MINIDUMP_MISC_INFO: flags 1 and 2 identify valid PID and creation-time fields.
+    payload = _dump_stream(path, 15, 24)
+    if len(payload) != 24:
+        return {}
+    size, flags, pid, created_at = struct.unpack_from("<IIII", payload)
+    if size < 24 or not flags & 1 or not pid:
+        return {}
+    result = {"pid": pid}
+    if flags & 2:
+        result["created_at"] = created_at
+    return result
+
+
+def dump_belongs_to_launch(dump: dict, process_ids: set[int], started_at: float) -> bool:
+    identity = dump.get("process", {})
+    return (identity.get("pid") in process_ids
+            and ("created_at" not in identity or identity["created_at"] >= int(started_at)))
 
 
 def dump_snapshot(directory: Path) -> dict[str, list[int]]:
@@ -117,7 +142,7 @@ def collect_crash_dumps(
         except (OSError, ValueError):
             stack = []
         result.append({"name": path.name, "path": name, "at": stamp,
-                       "exception": read_dump_exception(path), "stack": stack})
+                       "exception": read_dump_exception(path), "process": read_dump_process(path), "stack": stack})
     return sorted(result, key=lambda row: row["at"], reverse=True)[:5]
 
 
@@ -157,6 +182,28 @@ def diagnose_launch(record: dict[str, Any], *, running: bool = False) -> dict[st
     }
     if not record or running:
         return result
+    if isinstance(record.get("final_diagnosis"), dict):
+        result = deepcopy(record["final_diagnosis"])
+        # Logs are frozen at exit, but that process's crash reporter can finish
+        # later. Accept only owned dumps until the next launch seals the record.
+        if record.get("process_ids") and not record.get("evidence_sealed"):
+            dumps = collect_crash_dumps(
+                Path(record["user_dir"]) / "crash_report", float(record["started_at"]),
+                record.get("dumps_before", {}),
+            )
+            owned = set(record["process_ids"])
+            known = {dump["path"] for dump in result["dumps"]}
+            delayed = [dump for dump in dumps if dump["path"] not in known
+                       and dump_belongs_to_launch(dump, owned, float(record["started_at"]))]
+            if delayed:
+                result["dumps"].extend(delayed)
+                result["crashed"] = True
+                result["report"] += "\n" + "\n".join(
+                    f"Dump: {dump['name']} {dump['exception']}" for dump in delayed
+                )
+                record["final_diagnosis"] = deepcopy(result)
+        result["should_notify"] = result["crashed"] and not record.get("acknowledged", False)
+        return result
     log = Path(record["user_dir"]) / "logs" / "modified.log"
     result["log_path"] = str(log)
     expected = [row for row in record.get("packs", []) if row["pack_type"] != "movie"]
@@ -167,6 +214,9 @@ def diagnose_launch(record: dict[str, Any], *, running: bool = False) -> dict[st
     result["dumps"] = collect_crash_dumps(
         log.parent.parent / "crash_report", started_at, record.get("dumps_before", {}),
     )
+    if record.get("process_ids"):
+        owned = set(record["process_ids"])
+        result["dumps"] = [dump for dump in result["dumps"] if dump_belongs_to_launch(dump, owned, started_at)]
     result["crashed"] = bool(result["dumps"])
     unclean = file_signature(log.parent / "no_clean_exit")
     result["no_clean_exit"] = bool(unclean and unclean != record.get("unclean_signature"))
@@ -195,4 +245,19 @@ def diagnose_launch(record: dict[str, Any], *, running: bool = False) -> dict[st
         *[f"Pending: {row['pack_name']}" for row in result["pending"]],
         *[f"Dump: {row['name']} {row['exception']}" for row in result["dumps"]],
     ])
+    # The caller has observed that the game stopped. Freeze meaningful evidence;
+    # a launcher that has not started yet must remain eligible for a later poll.
+    if result["status"] != "not_started" or result["crashed"]:
+        record["ended_at"] = time.time()
+        record["final_diagnosis"] = deepcopy(result)
     return result
+
+
+def freeze_launch(record: dict[str, Any]) -> None:
+    """Seal a previous launch before any new trial can overwrite shared evidence."""
+    if not record or record.get("evidence_sealed"):
+        return
+    result = diagnose_launch(record)
+    record.setdefault("ended_at", time.time())
+    record["final_diagnosis"] = deepcopy(result)
+    record["evidence_sealed"] = True

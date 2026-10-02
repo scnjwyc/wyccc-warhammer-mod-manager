@@ -62,6 +62,9 @@ from .models import GamePaths, ModAsset
 from .mod_types import workshop_category_for_mod_types
 from .mod_profiles import existing_profile_directory, parse_mod_profile
 from .mod_watcher import ModChangeMonitor
+from .pack_reader import read_pack_index, read_pack_layout
+from .schema_update import db_table_name, installed_definitions, update_mod_schema
+from .table_schema import load_latest_schema
 from .scanner import ModScanner
 from .save_games import SaveGameService
 from .share import (
@@ -305,6 +308,7 @@ class API:
             "get_workshop_publish_copy": self._get_workshop_publish_copy,
             "publish_workshop_item": self._publish_workshop_item,
             "open_mod_in_rpfm": self._open_mod_in_rpfm,
+            "update_mod_table_schemas": self._update_mod_table_schemas,
             "copy_mod_to_data": self._copy_mod_to_data,
             "sync_workshop_to_data": self._sync_workshop_to_data,
         }
@@ -2913,6 +2917,62 @@ class API:
             }
         self._open_path(pack_path)
         return {"opened": True, "path": str(pack_path.resolve(strict=False))}
+
+    @_requires_idle_game
+    def _update_mod_table_schemas(self, mod_ids: list[str], game_id: str = "") -> dict[str, Any]:
+        self._require_pack_mod_format("更新表结构")
+        active_game = self._active_game().id
+        if game_id and game_id != active_game:
+            raise ValueError("schemaUpdate.contextChanged")
+        if not isinstance(mod_ids, list) or not mod_ids:
+            raise ValueError("schemaUpdate.invalidSelection")
+        candidates, results, names, seen = [], [], set(), set()
+        for selection_index, mod_id in enumerate(dict.fromkeys(map(str, mod_ids))):
+            row = {"mod_id": mod_id, "name": mod_id, "selection_index": selection_index}
+            try:
+                asset = self._require_asset(mod_id)
+                path = Path(asset.path).resolve()
+                if str(path).casefold() in seen:
+                    continue
+                seen.add(str(path).casefold())
+                row.update(mod_id=asset.id, name=asset.effective_name, path=str(path))
+                layout = read_pack_layout(path)
+                if layout is None or layout.type_and_flags & 0xF < 3:
+                    raise ValueError("schemaUpdate.invalidPack")
+                if path.name.casefold() in {name.casefold() for name in INTERNAL_RUNTIME_PACK_NAMES}:
+                    raise ValueError("schemaUpdate.internalPack")
+                table_names = {db_table_name(entry.name) for entry in read_pack_index(path)} - {""}
+                if table_names:
+                    names.update(table_names)
+                    candidates.append((path, row))
+                else:
+                    results.append({**row, "status": "unchanged", "tables": [], "skipped": []})
+            except (ValueError, OSError) as exc:
+                results.append({**row, "status": "failed", "error": str(exc)})
+        schema_info = {"cached": False}
+        if candidates:
+            schemas, schema_info = load_latest_schema(active_game, self.data_dir / "schemas")
+            paths = self.settings_service.resolve_game_paths()
+            if not paths.data_path:
+                raise ValueError("schemaUpdate.gameDataMissing")
+            targets = installed_definitions(Path(paths.data_path), names, schemas)
+            for path, row in candidates:
+                try:
+                    outcome = update_mod_schema(path, schemas, targets, self.data_dir / "backups" / "table-schemas" / active_game)
+                    results.append({**row, **outcome})
+                except (ValueError, OSError) as exc:
+                    results.append({**row, "status": "failed", "error": str(exc)})
+        results.sort(key=lambda row: row["selection_index"])
+        for row in results:
+            row.pop("selection_index")
+        return {
+            "game_id": active_game, "results": results, "schema": schema_info,
+            "updated_count": sum(row["status"] == "updated" for row in results),
+            "unchanged_count": sum(row["status"] == "unchanged" for row in results),
+            "failed_count": sum(row["status"] == "failed" for row in results),
+            "partial_count": sum(row["status"] == "partial" for row in results),
+            "scan": self._scan_mods(False),
+        }
 
     @_requires_idle_game
     def _copy_mod_to_data(self, mod_id: str) -> dict[str, Any]:

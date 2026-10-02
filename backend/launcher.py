@@ -3,9 +3,26 @@ from __future__ import annotations
 import ctypes
 import os
 import subprocess
+import threading
 from pathlib import Path
 
 from .constants import WH3_EXECUTABLE, WH3_PROCESS_NAME
+
+_LAUNCHED_PROCESSES: dict[int, subprocess.Popen] = {}
+_LAUNCH_LOCK = threading.Lock()
+
+
+def launched_game_exit_code(process_id: int) -> int | None:
+    """Retain the Popen handle so even an exit before the first scan is observable."""
+    with _LAUNCH_LOCK:
+        process = _LAUNCHED_PROCESSES.get(process_id)
+        code = process.poll() if process is not None else None
+    return code if isinstance(code, int) else None
+
+
+def forget_launched_game(process_id: int) -> None:
+    with _LAUNCH_LOCK:
+        _LAUNCHED_PROCESSES.pop(process_id, None)
 
 
 def _windows_process_entries() -> list[tuple[int, str]]:
@@ -295,6 +312,11 @@ def launch_game(
         creationflags=creationflags,
         env=environment,
     )
+    with _LAUNCH_LOCK:
+        for pid, previous in list(_LAUNCHED_PROCESSES.items()):
+            if previous.poll() is not None:
+                del _LAUNCHED_PROCESSES[pid]
+        _LAUNCHED_PROCESSES[process.pid] = process
     return {
         "pid": process.pid,
         "argument": argument,

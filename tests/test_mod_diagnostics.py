@@ -16,6 +16,7 @@ from backend.crash_diagnostics import (
 )
 from backend.mod_diagnostics import DiagnosticSession, GameProbe, TrialStopped, dependency_groups
 from backend.models import GamePaths
+from backend.load_order import file_token
 from tests.helpers import make_asset, write_pack
 
 
@@ -120,7 +121,8 @@ def test_bisect_checks_failure_and_working_complement(tmp_path):
     assert result["status"] == "isolated" and result["can_apply"]
     assert result["suspect_ids"] == result["excluded_ids"] == ["c"]
     assert result["result_ids"] == ["a", "b", "d"]
-    assert result["rounds"][-2]["kind"] == "complement"
+    assert result["rounds"][-3]["kind"] == "complement"
+    assert [row["kind"] for row in result["rounds"][-2:]] == ["final", "final"]
     assert result["rounds"][-1]["kind"] == "final"
     assert DiagnosticSession(tmp_path / "sessions.json").history("warhammer3")[0]["result_ids"] == ["a", "b", "d"]
     assert session.history("three_kingdoms") == []
@@ -249,6 +251,7 @@ def diagnostic_api(tmp_path):
     api._assets = assets
     api.state_repository.update_current_playset(list("abc"), "warhammer3")
     (game / "used_mods.txt").write_bytes(b'original list\r\n')
+    api._last_order_token = file_token(game / "used_mods.txt")
     with patch.object(api.settings_service, "resolve_game_paths", return_value=paths), \
             patch.object(api, "detect_game_running", return_value=False):
         yield api, game
@@ -335,9 +338,13 @@ def test_api_trials_preserve_playset_and_disk_order_then_apply_and_restore(diagn
     assert not list(game.glob("wyccc_diagnostics_*.txt"))
     response = api.call("apply_diagnostics_result", [state["id"]])
     assert response["ok"], response
+    assert response["data"]["ordered_mod_ids"] == ["a", "c"]
+    assert response["data"]["order_token"] == file_token(game / "used_mods.txt")
+    assert parse_launch_list(game / "used_mods.txt")[1] == ["a.pack", "c.pack"]
     assert api.state_repository.get_current_playset()["mod_ids"] == ["a", "c"]
     assert api.call("apply_diagnostics_result", [state["id"], True])["ok"]
     assert api.state_repository.get_current_playset()["mod_ids"] == original
+    assert parse_launch_list(game / "used_mods.txt")[1] == ["a.pack", "b.pack", "c.pack"]
     Path(api._assets["b"].path).write_bytes(b"updated pack")
     response = api.call("apply_diagnostics_result", [state["id"]])
     assert not response["ok"] and response["error"]["message"] == "diagnostics.contextChanged"

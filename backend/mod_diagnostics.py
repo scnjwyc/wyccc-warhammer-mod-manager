@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import launcher
-from .crash_diagnostics import capture_evidence, collect_crash_dumps, file_signature, pack_basename
+from .crash_diagnostics import capture_evidence, collect_crash_dumps, dump_belongs_to_launch, file_signature, pack_basename
 from .json_store import AtomicJsonStore
 from .models import ModAsset
 
@@ -50,6 +50,42 @@ def dependency_groups(assets: dict[str, ModAsset], ordered_ids: list[str]) -> li
     for mod_id in ordered_ids:
         groups.setdefault(root(mod_id), []).append(mod_id)
     return list(groups.values())
+
+
+def fixed_movie_dependencies(
+    assets: dict[str, ModAsset], ordered_ids: list[str], movies: list[ModAsset],
+) -> set[str]:
+    """Keep the dependency closure of every actually loaded Movie in the background."""
+    by_pack = {assets[item].pack_name.casefold(): assets[item] for item in ordered_ids}
+    by_pack.update({movie.pack_name.casefold(): movie for movie in movies})
+    by_workshop: dict[str, list[ModAsset]] = {}
+    for asset in [*[assets[item] for item in ordered_ids], *movies]:
+        if asset.workshop_id:
+            by_workshop.setdefault(asset.workshop_id, []).append(asset)
+    selected = set(ordered_ids)
+    fixed: set[str] = set()
+    pending = list(movies)
+    visited: set[str] = set()
+    while pending:
+        asset = pending.pop()
+        key = str(Path(asset.path).resolve(strict=False)).casefold()
+        if key in visited:
+            continue
+        visited.add(key)
+        if asset.id in selected:
+            fixed.add(asset.id)
+        dependencies = [by_pack.get(pack_basename(name).casefold()) for name in asset.dependency_packs]
+        for item in asset.required_workshop_items:
+            dependencies.extend(by_workshop.get(str(item.get("workshop_id") or ""), [None]))
+        for dependency in dependencies:
+            if dependency is None:
+                if "missing_dependency" not in asset.ignored_warning_codes:
+                    raise ValueError("diagnostics.dependenciesMissing")
+                continue
+            if dependency.id in selected:
+                fixed.add(dependency.id)
+            pending.append(dependency)
+    return fixed
 
 
 def reduce_failure(candidates: list[int], test: Callable[[list[int], str], str]) -> list[int]:
@@ -156,12 +192,14 @@ class GameProbe:
         seen_process = False
         last_progress = ""
         result = {"verdict": "inconclusive", "evidence": "timeout"}
+        launched_pid = None
         try:
             launched = launcher.launch_game(
                 self.launch_root, list_path, executable_name=game.executable_name,
                 process_name=game.process_name, app_id=game.app_id,
             )
-            owned.add(int(launched["pid"]))
+            launched_pid = int(launched["pid"])
+            owned.add(launched_pid)
             while time.monotonic() - started < self.timeout:
                 if cancel.is_set():
                     raise TrialStopped("cancelled")
@@ -171,6 +209,8 @@ class GameProbe:
                 dumps = collect_crash_dumps(
                     self.user_dir / "crash_report", started_at, before["dumps_before"],
                 )
+                uncertain_dumps = [dump for dump in dumps if not dump.get("process", {}).get("pid")]
+                dumps = [dump for dump in dumps if dump_belongs_to_launch(dump, owned, started_at)]
                 dialog = find_crash_dialog(pids)
                 if dumps or dialog:
                     result = {"verdict": "crash", "evidence": "dump" if dumps else "dialog",
@@ -178,9 +218,13 @@ class GameProbe:
                     break
                 signature = file_signature(self.user_dir / "logs" / "modified.log")
                 advanced = bool(signature and signature != before["log_signature"])
-                if seen_process and not pids:
+                exited = launcher.launched_game_exit_code(launched_pid) is not None
+                can_confirm = seen_process or exited or bool(uncertain_dumps)
+                if (seen_process or exited) and not pids:
                     # A player closing the game is indistinguishable from a silent crash.
                     phase = "confirm_exit"
+                elif uncertain_dumps:
+                    phase = "confirm_dump"
                 elif pids:
                     phase = "confirm_menu"
                 else:
@@ -189,15 +233,20 @@ class GameProbe:
                     progress(phase)
                     last_progress = phase
                 verdict = manual()
-                if verdict in {"ok", "crash"} and seen_process:
-                    result = {"verdict": verdict, "evidence": "user", "log_advanced": advanced}
+                if verdict in {"ok", "crash"} and can_confirm:
+                    result = {"verdict": verdict, "evidence": "user", "log_advanced": advanced,
+                              "uncertain_dumps": uncertain_dumps}
                     break
-                if not seen_process and time.monotonic() - started >= 75:
+                if not can_confirm and time.monotonic() - started >= 75:
                     result = {"verdict": "inconclusive", "evidence": "not_started"}
                     break
                 cancel.wait(self.poll)
         finally:
-            launcher.terminate_game_processes(owned, executable, process_name=game.process_name)
+            try:
+                launcher.terminate_game_processes(owned, executable, process_name=game.process_name)
+            finally:
+                if launched_pid is not None:
+                    launcher.forget_launched_game(launched_pid)
         result["seconds"] = round(time.monotonic() - started, 1)
         return result
 
@@ -265,7 +314,7 @@ class DiagnosticSession:
             state = self._data["session"]
             if (not self.running or state["id"] != session_id
                     or state.get("round_number") != round_number
-                    or state.get("phase") not in {"confirm_menu", "confirm_exit"}
+                    or state.get("phase") not in {"confirm_menu", "confirm_exit", "confirm_dump"}
                     or verdict not in {"ok", "crash"} or self._manual):
                 raise ValueError("diagnostics.staleTrial")
             self._manual = verdict
@@ -290,6 +339,7 @@ class DiagnosticSession:
         state = self.status()
         fixed = state.get("fixed_ids", [])
         original = state["original_ids"]
+        observed: dict[tuple, str] = {}
 
         def test(indices: list[int], kind: str) -> str:
             if self._cancel.is_set():
@@ -313,11 +363,19 @@ class DiagnosticSession:
             verdict = result.get("verdict")
             if verdict not in {"ok", "crash"}:
                 raise TrialStopped("inconclusive")
+            # Final trials use the result's actual search directories; all other
+            # trials retain the original Movie environment.
+            key = (tuple(ids), "final" if kind == "final" else "original")
+            if key in observed and observed[key] != verdict:
+                raise TrialStopped("unstable")
+            observed[key] = verdict
             return verdict
 
         try:
             remaining = list(range(len(groups)))
-            if test(remaining, "baseline") == "ok" and test(remaining, "baseline") == "ok":
+            baseline = test(remaining, "baseline")
+            test(remaining, "baseline")
+            if baseline == "ok":
                 self._update(status="no_repro")
                 return
             if test([], "background") != "ok":
@@ -343,7 +401,7 @@ class DiagnosticSession:
                     # Validate the exact normal-launch search directories as well:
                     # removing the last MOD in an external directory can remove its
                     # automatically loaded Movie Packs from the final environment.
-                    if test(rest, "final") != "ok":
+                    if test(rest, "final") != "ok" or test(rest, "final") != "ok":
                         self._update(status="unstable", can_apply=False)
                         return
                     self._update(

@@ -15,6 +15,7 @@ const props = defineProps({
   eligibleUpdateIds: { type: Array, default: () => [] },
   aiEnabled: { type: Boolean, default: false },
   gameRunning: { type: Boolean, default: false },
+  busy: { type: Boolean, default: false },
   keyboardShortcuts: { type: Object, default: () => ({}) },
   packActions: { type: Boolean, default: true },
   folders: { type: Array, default: () => [] },
@@ -24,7 +25,7 @@ const emit = defineEmits(['close', 'action'])
 
 const menuStyle = computed(() => {
   const width = 246
-  const height = (props.mod?.workshop_id ? 580 : 540) + (showAiGenerate.value ? 44 : 0)
+  const height = (props.mod?.workshop_id ? 580 : 540) + (showAiGenerate.value ? 44 : 0) + (props.packActions ? 36 : 0)
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -343,6 +344,12 @@ const run = (action, value = null, close = true) => {
           <kbd class="context-menu-shortcut">{{ shortcutLabel('open-rpfm') }}</kbd>
           <span v-if="isBatchSelection" class="context-menu-unavailable">{{ t('common.singleOnly') }}</span>
         </span>
+      </button>
+      <button v-if="packActions" type="button" class="context-menu-item" role="menuitem"
+        :disabled="gameRunning || busy" :title="gameRunning ? t('context.gameRunningBlocked') : ''"
+        data-testid="context-update-schemas" @click="run('update-table-schemas')">
+        <span class="context-menu-icon">↻</span>
+        <span>{{ batchLabel(t('schemaUpdate.title')) }}</span>
       </button>
       <button type="button" class="context-menu-item" @click="run('toggle-hidden')">
         <span class="context-menu-icon">{{ mod.hidden ? '◉' : '◌' }}</span>

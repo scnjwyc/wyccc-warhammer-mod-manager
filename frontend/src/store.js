@@ -81,7 +81,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.7',
+    appVersion: '1.1.8',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -1062,10 +1062,15 @@ export const useAppStore = defineStore('app', {
     async applyDiagnosticsResult(runId, restore = false) {
       await this.flushPlaysetUpdates()
       return this.withBusy(t('diagnostics.apply'), async () => {
-        const result = await invoke('apply_diagnostics_result', runId, restore)
+        const result = await invoke('apply_diagnostics_result', runId, restore, this.orderToken)
+        if (!Array.isArray(result.ordered_mod_ids) || typeof result.order_token !== 'string' || !result.order_token) {
+          throw new Error(t('diagnostics.invalidResult'))
+        }
         this.applyPlaysetPayload(result)
-        this.dirty = true
-        await this.recordCurrentPlaysetChange()
+        this.orderToken = result.order_token
+        this.dirty = false
+        this.orderSaveError = ''
+        if (result.backup) this.backups.unshift(result.backup)
         return result
       })
     },
@@ -1967,6 +1972,18 @@ export const useAppStore = defineStore('app', {
           id: data.result.workshop_id,
           agreement: agreementNote,
         }))
+        return data
+      })
+    },
+    async updateModTableSchemas(modIds) {
+      const ids = [...new Set((modIds || []).map(String).filter(Boolean))]
+      const gameId = this.settings.selected_game || 'warhammer3'
+      return this.withBusy(t('schemaUpdate.working'), async () => {
+        const data = await invoke('update_mod_table_schemas', ids, gameId)
+        await this.applyExternalScan(data.scan)
+        this.notify(t('schemaUpdate.summary', { updated: data.updated_count, unchanged: data.unchanged_count,
+          partial: data.partial_count, failed: data.failed_count }),
+        data.failed_count || data.partial_count || data.schema?.cached ? 'warning' : 'success')
         return data
       })
     },

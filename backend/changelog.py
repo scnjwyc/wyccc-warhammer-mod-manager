@@ -9,6 +9,20 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.8",
+        "date": "2026-10-02",
+        "entries": (
+            (
+                "v118_fixed_title",
+                (("fix", "v118_mod_diagnostics"),),
+            ),
+            (
+                "v118_added_title",
+                (("feature", "v118_table_schema_update"),),
+            ),
+        ),
+    },
+    {
         "version": "1.1.7",
         "date": "2026-09-30",
         "entries": (
@@ -630,6 +644,10 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v118_fixed_title": "修复",
+        "v118_mod_diagnostics": "MOD启动排障存在的问题",
+        "v118_added_title": "新增",
+        "v118_table_schema_update": "更新表结构功能，在MOD上右键选择，可以更新MOD表结构，这个操作能够使得8.X版本大部分过期的MOD直接恢复正常，但依然有估计五分之一的MOD无法通过这个方式修复",
         "v117_added_title": "新增",
         "v117_mod_folders": "新增文件夹功能，可以在MOD列表中将MOD添加到不同的文件夹进行分组管理",
         "v116_fixed_title": "修复",
@@ -854,6 +872,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v118_fixed_title": "Fixed",
+        "v118_mod_diagnostics": "Issues with MOD startup troubleshooting.",
+        "v118_added_title": "Added",
+        "v118_table_schema_update": "Table schema updates: right-click a MOD to update its table schemas. This can restore most outdated MODs from version 8.X, but an estimated one in five MODs still cannot be repaired this way.",
         "v117_added_title": "Added",
         "v117_mod_folders": "Added folders for grouping MODs in different folders in the MOD list.",
         "v116_fixed_title": "Fixed",
@@ -1078,6 +1100,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v118_fixed_title": "수정",
+        "v118_mod_diagnostics": "MOD 실행 문제 진단 기능의 문제를 수정했습니다.",
+        "v118_added_title": "추가",
+        "v118_table_schema_update": "테이블 구조 업데이트 기능을 추가했습니다. MOD를 오른쪽 클릭하여 테이블 구조를 업데이트할 수 있습니다. 이 작업으로 8.X 버전의 오래된 MOD 대부분을 다시 정상 작동시킬 수 있지만, 약 5분의 1은 이 방법으로 복구할 수 없습니다.",
         "v117_added_title": "추가",
         "v117_mod_folders": "폴더 기능을 추가했습니다. MOD 목록에서 MOD를 서로 다른 폴더에 넣어 그룹별로 관리할 수 있습니다.",
         "v116_fixed_title": "수정",
@@ -1302,6 +1328,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v118_fixed_title": "Исправлено",
+        "v118_mod_diagnostics": "Проблемы с диагностикой запуска MOD.",
+        "v118_added_title": "Добавлено",
+        "v118_table_schema_update": "Обновление структуры таблиц: нажмите правой кнопкой на MOD, чтобы обновить его таблицы. Это может восстановить работу большинства устаревших MOD для версии 8.X, но, по оценке, около одной пятой MOD таким способом исправить нельзя.",
         "v117_added_title": "Добавлено",
         "v117_mod_folders": "Добавлены папки: теперь моды в списке можно распределять по разным папкам для управления группами.",
         "v116_fixed_title": "Исправлено",
@@ -1526,6 +1556,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v118_fixed_title": "修正",
+        "v118_mod_diagnostics": "MOD起動トラブル診断の問題を修正しました。",
+        "v118_added_title": "追加",
+        "v118_table_schema_update": "テーブル構造の更新機能を追加しました。MODを右クリックしてテーブル構造を更新できます。これにより8.X版の古いMODの多くが再び正常に動作しますが、推定で約5分の1のMODはこの方法では修復できません。",
         "v117_added_title": "追加",
         "v117_mod_folders": "フォルダー機能を追加しました。MOD一覧でMODを異なるフォルダーに追加して、グループごとに管理できます。",
         "v116_fixed_title": "修正",
@@ -1750,6 +1784,10 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v118_fixed_title": "Corregido",
+        "v118_mod_diagnostics": "Problemas con el diagnóstico de inicio de MODs.",
+        "v118_added_title": "Añadido",
+        "v118_table_schema_update": "Actualización de la estructura de tablas: haz clic derecho en un MOD para actualizar sus tablas. Esto puede restaurar la mayoría de los MODs obsoletos de la versión 8.X, aunque se estima que uno de cada cinco MODs no puede repararse de esta forma.",
         "v117_added_title": "Añadido",
         "v117_mod_folders": "Se añadieron carpetas para agrupar y gestionar los MODs en distintas carpetas dentro de la lista de MODs.",
         "v116_fixed_title": "Corregido",

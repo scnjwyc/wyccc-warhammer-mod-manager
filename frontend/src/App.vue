@@ -14,6 +14,7 @@ import UnitEncyclopediaModal from './components/UnitEncyclopediaModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModDiagnosticsModal from './components/ModDiagnosticsModal.vue'
+import SchemaUpdateModal from './components/SchemaUpdateModal.vue'
 import ModList from './components/ModList.vue'
 import OfficialProfileImportModal from './components/OfficialProfileImportModal.vue'
 import SaveGamesModal from './components/SaveGamesModal.vue'
@@ -51,6 +52,7 @@ const showOfficialProfileImport = ref(false)
 const officialProfilePreview = ref(null)
 const showDeleteMods = ref(false)
 const deleteModsPreview = ref(null)
+const schemaUpdate = reactive({ open: false, pending: false, report: null, error: '' })
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const unitDataSearch = ref('')
@@ -499,6 +501,7 @@ const shortcutsBlocked = () => (
   || showSaveModsComparison.value
   || showOfficialProfileImport.value
   || showDeleteMods.value
+  || schemaUpdate.open
   || updateDialog.open
   || contextMenu.open
   || confirmationDialog.open
@@ -678,6 +681,16 @@ const handleContextAction = async ({ action, value, mod }) => {
         return
       }
       await store.openModInRpfm(mod.id)
+    } else if (action === 'update-table-schemas') {
+      if (store.runtime.running || store.busy) return
+      Object.assign(schemaUpdate, { open: true, pending: true, report: null, error: '' })
+      try {
+        schemaUpdate.report = await store.updateModTableSchemas(actionIds)
+      } catch (error) {
+        schemaUpdate.error = error.message || String(error)
+      } finally {
+        schemaUpdate.pending = false
+      }
     } else if (action === 'toggle-hidden') {
       const hidden = !mod.hidden
       for (const modId of actionIds) {
@@ -1465,11 +1478,15 @@ onBeforeUnmount(() => {
       :ai-enabled="!!store.settings.ai_enabled"
       :game-running="store.runtime.running"
       :keyboard-shortcuts="store.settings.keyboard_shortcuts"
+      :busy="!!store.busy"
       :pack-actions="supportsPackActions"
       :folders="store.modFolders"
       @close="closeModContextMenu"
       @action="handleContextAction"
     />
+
+    <SchemaUpdateModal :open="schemaUpdate.open" :pending="schemaUpdate.pending"
+      :report="schemaUpdate.report" :error="schemaUpdate.error" @close="schemaUpdate.open = false" />
 
     <DeleteModsModal
       :open="showDeleteMods"
