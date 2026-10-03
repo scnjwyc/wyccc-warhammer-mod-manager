@@ -9,6 +9,15 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.2.0",
+        "date": "2026-10-03",
+        "entries": (
+            ("v120_fixed_title", (("fix", "v120_warning_filter"),)),
+            ("v120_added_title", (("feature", "v120_launch_history"),)),
+            ("v120_fixed_title", (("fix", "v120_steam_family_mods"),)),
+        ),
+    },
+    {
         "version": "1.1.9",
         "date": "2026-10-03",
         "entries": (
@@ -661,6 +670,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v120_fixed_title": "修复",
+        "v120_added_title": "新增",
+        "v120_warning_filter": "仅显示报警MOD模式下存在的问题",
+        "v120_launch_history": "启动记录功能，可以查看每一次游戏启动的MOD列表，支持和当前列表进行对比，也支持加载记录中的mod列表",
+        "v120_steam_family_mods": "当用户加入steam家庭组时，会显示家庭成员的MOD的问题",
         "v119_adjusted_title": "调整",
         "v119_workshop_refresh_speed": "优化新增MOD时，更新MOD信息的速度",
         "v119_table_schema_update": "优化更新表结构功能",
@@ -894,6 +908,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v120_fixed_title": "Fixed",
+        "v120_added_title": "Added",
+        "v120_warning_filter": "Issues in the mode that shows only MODs with warnings.",
+        "v120_launch_history": "Launch history: view the MOD list for each game launch, compare it with the current list, or load the list from a record.",
+        "v120_steam_family_mods": "An issue where joining a Steam Family caused family members' MODs to appear in the list.",
         "v119_adjusted_title": "Adjusted",
         "v119_workshop_refresh_speed": "Improved the speed of refreshing MOD information after subscribing to a new MOD.",
         "v119_table_schema_update": "Improved the table schema update feature.",
@@ -1127,6 +1146,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v120_fixed_title": "수정",
+        "v120_added_title": "추가",
+        "v120_warning_filter": "경고가 있는 MOD만 표시하는 모드의 문제를 수정했습니다.",
+        "v120_launch_history": "실행 기록 기능을 추가했습니다. 게임을 실행할 때마다 사용한 MOD 목록을 확인하고, 현재 목록과 비교하거나 기록의 목록을 불러올 수 있습니다.",
+        "v120_steam_family_mods": "Steam 가족에 가입하면 가족 구성원의 MOD가 목록에 표시되던 문제를 수정했습니다.",
         "v119_adjusted_title": "조정",
         "v119_workshop_refresh_speed": "새 MOD를 구독할 때 MOD 정보가 더 빠르게 갱신되도록 개선했습니다.",
         "v119_table_schema_update": "테이블 구조 업데이트 기능을 개선했습니다.",
@@ -1360,6 +1384,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v120_fixed_title": "Исправлено",
+        "v120_added_title": "Добавлено",
+        "v120_warning_filter": "Проблемы в режиме отображения только MOD с предупреждениями.",
+        "v120_launch_history": "История запусков: просмотр списка MOD для каждого запуска игры, сравнение с текущим списком и загрузка списка из записи.",
+        "v120_steam_family_mods": "Ошибка, из-за которой после вступления в семью Steam в списке отображались MOD других членов семьи.",
         "v119_adjusted_title": "Изменено",
         "v119_workshop_refresh_speed": "Ускорено обновление информации о MOD после подписки на новый MOD.",
         "v119_table_schema_update": "Улучшена функция обновления структуры таблиц.",
@@ -1593,6 +1622,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v120_fixed_title": "修正",
+        "v120_added_title": "追加",
+        "v120_warning_filter": "警告のあるMODのみ表示するモードの問題を修正しました。",
+        "v120_launch_history": "起動履歴機能を追加しました。ゲーム起動ごとのMOD一覧を確認し、現在の一覧と比較したり、履歴の一覧を読み込んだりできます。",
+        "v120_steam_family_mods": "Steamファミリーに参加すると、他のファミリーメンバーのMODが一覧に表示される問題を修正しました。",
         "v119_adjusted_title": "調整",
         "v119_workshop_refresh_speed": "新しいMODをサブスクライブした際のMOD情報の更新を高速化しました。",
         "v119_table_schema_update": "テーブル構造の更新機能を改善しました。",
@@ -1826,6 +1860,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v120_fixed_title": "Corregido",
+        "v120_added_title": "Añadido",
+        "v120_warning_filter": "Problemas en el modo que muestra solo los MODs con advertencias.",
+        "v120_launch_history": "Historial de inicios: consulta la lista de MODs de cada inicio del juego, compárala con la lista actual o carga la lista de un registro.",
+        "v120_steam_family_mods": "Un problema que hacía que los MODs de otros miembros aparecieran en la lista al unirse a una familia de Steam.",
         "v119_adjusted_title": "Ajustado",
         "v119_workshop_refresh_speed": "Se aceleró la actualización de la información de los MODs al suscribirse a uno nuevo.",
         "v119_table_schema_update": "Se mejoró la función de actualización de la estructura de tablas.",

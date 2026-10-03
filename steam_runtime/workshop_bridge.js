@@ -282,6 +282,12 @@ const main = async () => {
     }, 0);
     return;
   }
+  if (operation === "get_subscribed_items") {
+    const items = client.workshop.getSubscribedItems();
+    if (!Array.isArray(items)) throw new Error("Current Steam subscriptions are unavailable");
+    writeResultAndExit({ ok: true, subscribed_ids: items.map(value => value.toString()) }, 0);
+    return;
+  }
   if (operation === "query_subscriptions") {
     const ids = [...new Set((request?.ids || []).map(String))]
       .filter(value => /^\d+$/.test(value));

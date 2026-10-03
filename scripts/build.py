@@ -31,11 +31,16 @@ DEFAULT_RELEASE_DIR = (
 
 def run(command: list[str], *, cwd: Path = ROOT) -> None:
     printable = subprocess.list2cmdline(command)
-    print(f"> {printable}")
+    print(f"> {printable}", flush=True)
     subprocess.run(command, cwd=cwd, check=True)
 
 
 def find_pnpm() -> str:
+    override = os.environ.get("WMM_PNPM", "").strip()
+    if override:
+        if not Path(override).is_file():
+            raise SystemExit(f"WMM_PNPM 文件不存在：{override}")
+        return override
     names = ("pnpm.cmd", "pnpm") if os.name == "nt" else ("pnpm",)
     for name in names:
         candidate = shutil.which(name)
@@ -100,14 +105,21 @@ def find_node_for_packaging() -> Path | None:
 
 def build_frontend(*, install: bool, tests: bool) -> None:
     pnpm = find_pnpm()
+    command = [pnpm]
+    if Path(pnpm).suffix.lower() in {".cjs", ".mjs", ".js"}:
+        node = find_node_for_packaging()
+        if node is None:
+            raise SystemExit("找不到运行项目 pnpm 所需的 Node.js 22+。")
+        command = [str(node), pnpm]
     if install:
-        install_command = [pnpm, "install"]
+        install_command = [*command, "install"]
         if (FRONTEND / "pnpm-lock.yaml").is_file():
             install_command.append("--frozen-lockfile")
         run(install_command, cwd=FRONTEND)
     if tests:
-        run([pnpm, "test"], cwd=FRONTEND)
-    run([pnpm, "build"], cwd=FRONTEND)
+        # Bound test workers so packaging alongside a running game stays stable.
+        run([*command, "test", "--maxWorkers=2"], cwd=FRONTEND)
+    run([*command, "build"], cwd=FRONTEND)
 
 
 def validate_frontend_bundle(static_root: Path) -> None:
@@ -251,7 +263,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.skip_tests:
-        run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
+        run([sys.executable, "-m", "pytest", "tests", "-q"])
     build_frontend(install=not args.skip_install, tests=not args.skip_tests)
     if args.package:
         executable = package_desktop(Path(args.output_dir))

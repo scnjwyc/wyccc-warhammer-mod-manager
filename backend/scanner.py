@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -23,12 +24,13 @@ from .constants import (
 )
 from .models import GamePaths, ModAsset, ScanResult
 from .pack_reader import read_pack_layout, read_pack_index
-from .steam_paths import candidate_steam_roots, game_last_updated_at
+from .steam_paths import active_steam_account_id, game_last_updated_at, parse_vdf, workshop_steam_root
+from .steamworks_bridge import SteamworksBridgeError, get_subscribed_workshop_items
 from .workshop import WorkshopMetadataService
 
 _MANIFEST_FILE_RE = re.compile(r"^\s*([^\s]+)")
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
-_STEAM_KEYVALUES_TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
+logger = logging.getLogger(__name__)
 _PACK_TYPE_MASK = 0x0F
 _LAUNCHER_RUNTIME_DB_ENTRY_RE = re.compile(
     r"^db\\[^\\]+\\!+wyccc_(?:game_data|unit_data|dynamic_ror_compatibility)_v\d{4}$",
@@ -70,86 +72,51 @@ def _is_launcher_runtime_pack(entry_names: Iterable[str]) -> bool:
     )
 
 
-def _parse_steam_keyvalues(text: str) -> dict[str, object]:
-    """Parse the quoted-key subset used by Steam's appworkshop manifests."""
-    tokens = [
-        match.group(1).replace(r'\\"', '"').replace(r'\\\\', '\\')
-        if match.group(1) is not None
-        else match.group(2)
-        for match in _STEAM_KEYVALUES_TOKEN_RE.finditer(text)
-    ]
-
-    def parse_object(index: int) -> tuple[dict[str, object], int]:
-        values: dict[str, object] = {}
-        while index < len(tokens):
-            token = tokens[index]
-            if token == "}":
-                return values, index + 1
-            if token == "{":
-                index += 1
-                continue
-            key = token
-            index += 1
-            if index >= len(tokens):
-                break
-            if tokens[index] == "{":
-                child, index = parse_object(index + 1)
-                values[key] = child
-            else:
-                values[key] = tokens[index]
-                index += 1
-        return values, index
-
-    return parse_object(0)[0]
-
-
-def _read_subscription_file(subscription_path: Path, app_id: str) -> dict[str, int]:
+def _read_subscription_file(subscription_path: Path, app_id: str) -> dict[str, int] | None:
     try:
-        manifest = _parse_steam_keyvalues(
-            subscription_path.read_text(encoding="utf-8", errors="replace")
+        manifest = parse_vdf(
+            subscription_path.read_text(encoding="utf-8-sig", errors="replace")
         )
-    except OSError:
-        return {}
+    except (OSError, ValueError):
+        return None
     subscribed_files = manifest.get("subscribedfiles")
     if not isinstance(subscribed_files, dict):
-        return {}
+        return None
     if str(subscribed_files.get("appid") or "") != app_id:
-        return {}
+        return None
 
     subscription_times: dict[str, int] = {}
     for item in subscribed_files.values():
         if not isinstance(item, dict):
             continue
+        workshop_id = str(item.get("publishedfileid") or "")
+        if not workshop_id.isdigit():
+            return None
         try:
-            workshop_id = str(item.get("publishedfileid") or "")
             subscribed_at = int(str(item.get("time_subscribed") or "0"))
         except (TypeError, ValueError):
-            continue
-        if workshop_id.isdigit() and subscribed_at > 0:
-            subscription_times[workshop_id] = subscribed_at * 1000
+            subscribed_at = 0
+        subscription_times[workshop_id] = max(0, subscribed_at) * 1000
     return subscription_times
 
 
 def _steam_user_data_directories(steam_root: Path) -> list[Path]:
+    """Select one account; never fall through to another account's subscription file."""
     userdata_root = steam_root / "userdata"
+    active_id = active_steam_account_id(steam_root)
+    if active_id:
+        return [userdata_root / active_id]
     try:
-        directories = [path for path in userdata_root.iterdir() if path.is_dir() and path.name.isdigit()]
-    except OSError:
-        return []
-    by_name = {directory.name: directory for directory in directories}
-
-    active_ids: list[str] = []
-    try:
-        login_users = _parse_steam_keyvalues(
+        login_users = parse_vdf(
             (steam_root / "config" / "loginusers.vdf").read_text(
-                encoding="utf-8",
+                encoding="utf-8-sig",
                 errors="replace",
             )
         ).get("users")
-    except OSError:
+    except (OSError, ValueError):
         login_users = None
     if isinstance(login_users, dict):
-        ranked_users: list[tuple[int, int, str]] = []
+        ranked_users: list[tuple[int, int, int, str]] = []
         for steam_id, details in login_users.items():
             if not str(steam_id).isdigit() or not isinstance(details, dict):
                 continue
@@ -158,39 +125,27 @@ def _steam_user_data_directories(steam_root: Path) -> list[Path]:
                 timestamp = int(str(details.get("Timestamp") or "0"))
             except (TypeError, ValueError):
                 continue
-            is_active = str(details.get("AutoLogin") or details.get("MostRecent") or "") == "1"
-            ranked_users.append((int(is_active), timestamp, account_id))
-        active_ids = [account_id for _, _, account_id in sorted(ranked_users, reverse=True)]
-
-    ordered: list[Path] = []
-    for account_id in active_ids:
-        directory = by_name.pop(account_id, None)
-        if directory is not None:
-            ordered.append(directory)
-    return ordered + sorted(by_name.values(), key=lambda path: path.name)
+            most_recent = str(details.get("MostRecent") or "") == "1"
+            auto_login = str(details.get("AutoLogin") or "") == "1"
+            ranked_users.append((int(most_recent), int(auto_login), timestamp, account_id))
+        if ranked_users:
+            return [userdata_root / max(ranked_users)[3]]
+    return []
 
 
-def _steam_subscription_times(paths: GamePaths) -> dict[str, int]:
-    roots: list[Path] = []
-    if paths.steam_root:
-        roots.append(Path(paths.steam_root))
-    roots.extend(candidate_steam_roots())
-
-    seen_roots: set[str] = set()
+def _steam_subscription_times(paths: GamePaths) -> dict[str, int] | None:
+    steam_root = workshop_steam_root(paths)
+    if steam_root is None:
+        # A manually managed directory outside Steam has no account subscription scope.
+        return None
     app_id = paths.game_definition.app_id
-    for steam_root in roots:
-        root_key = str(steam_root.resolve(strict=False)).casefold()
-        if root_key in seen_roots:
-            continue
-        seen_roots.add(root_key)
-        for user_data in _steam_user_data_directories(steam_root):
-            subscription_times = _read_subscription_file(
-                user_data / "ugc" / f"{app_id}_subscriptions.vdf",
-                app_id,
-            )
-            if subscription_times:
-                return subscription_times
-    return {}
+    for user_data in _steam_user_data_directories(steam_root):
+        subscription_times = _read_subscription_file(
+            user_data / "ugc" / f"{app_id}_subscriptions.vdf", app_id,
+        )
+        if subscription_times is not None:
+            return subscription_times
+    return {workshop_id: 0 for workshop_id in get_subscribed_workshop_items(app_id=int(app_id))}
 
 
 def read_pack_type(path: Path) -> str:
@@ -345,12 +300,25 @@ class ModScanner:
             )
         workshop_ids: list[str] = []
         workshop_root: Path | None = None
+        subscription_times: dict[str, int] | None = None
         if paths.workshop_path:
             workshop_root = Path(paths.workshop_path)
             if workshop_root.is_dir():
+                try:
+                    subscription_times = _steam_subscription_times(paths)
+                except SteamworksBridgeError as exc:
+                    logger.warning("Current Steam Workshop subscriptions are unavailable: %s", exc)
+                    subscription_times = {}
+                    result.warnings.append({
+                        "code": "workshop_subscriptions_unavailable",
+                        "severity": "warning",
+                        "message": "无法读取当前 Steam 账号的订阅清单，已跳过工坊 MOD；请启动 Steam 后刷新",
+                    })
                 result.scanned_roots.append(str(workshop_root))
                 for child in sorted(workshop_root.iterdir(), key=lambda item: item.name.casefold()):
                     if not child.is_dir() or not child.name.isdigit():
+                        continue
+                    if subscription_times is not None and child.name not in subscription_times:
                         continue
                     workshop_ids.append(child.name)
                     if directory_mods:
@@ -368,8 +336,6 @@ class ModScanner:
 
         if directory_mods:
             self._scan_feral_local_mods(assets, result)
-
-        subscription_times = _steam_subscription_times(paths)
 
         interface_language = str(settings.get("language") or DEFAULT_LANGUAGE)
         metadata: dict[str, dict] = {}
@@ -406,7 +372,7 @@ class ModScanner:
 
         for asset in assets.values():
             if asset.workshop_id:
-                asset.subscribed_at = subscription_times.get(asset.workshop_id, 0)
+                asset.subscribed_at = (subscription_times or {}).get(asset.workshop_id, 0)
                 workshop_data = metadata.get(asset.workshop_id, {})
                 asset.display_name = str(workshop_data.get("title") or asset.display_name)
                 asset.description = str(workshop_data.get("description") or "")

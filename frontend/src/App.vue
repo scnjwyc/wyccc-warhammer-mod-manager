@@ -19,6 +19,8 @@ import ModList from './components/ModList.vue'
 import OfficialProfileImportModal from './components/OfficialProfileImportModal.vue'
 import SaveGamesModal from './components/SaveGamesModal.vue'
 import SaveModsComparisonModal from './components/SaveModsComparisonModal.vue'
+import LastLaunchComparisonModal from './components/LastLaunchComparisonModal.vue'
+import LaunchHistoryModal from './components/LaunchHistoryModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import ShareModal from './components/ShareModal.vue'
 import ThemedSelect from './components/ThemedSelect.vue'
@@ -28,6 +30,9 @@ import WarningModal from './components/WarningModal.vue'
 import WorkshopPublishModal from './components/WorkshopPublishModal.vue'
 
 const store = useAppStore()
+watch(() => store.warningCount, count => {
+  if (count === 0) store.warningsOnly = false
+}, { immediate: true })
 const showGameDataModification = ref(false)
 const showUnitDataModification = ref(false)
 const showUnitEncyclopedia = ref(false)
@@ -48,6 +53,14 @@ const showWarnings = ref(false)
 const showSaveGames = ref(false)
 const showSaveModsComparison = ref(false)
 const saveModsComparison = ref(null)
+const lastLaunchComparison = ref(null)
+const showLaunchHistory = ref(false)
+const selectedLaunchRecord = ref(null)
+watch(() => store.gameContextRevision, () => {
+  lastLaunchComparison.value = null
+  selectedLaunchRecord.value = null
+  showLaunchHistory.value = false
+})
 const showOfficialProfileImport = ref(false)
 const officialProfilePreview = ref(null)
 const showDeleteMods = ref(false)
@@ -499,6 +512,8 @@ const shortcutsBlocked = () => (
   || showWarnings.value
   || showSaveGames.value
   || showSaveModsComparison.value
+  || !!lastLaunchComparison.value
+  || showLaunchHistory.value
   || showOfficialProfileImport.value
   || showDeleteMods.value
   || schemaUpdate.open
@@ -931,6 +946,35 @@ const compareSaveMods = async saveName => {
   } catch { /* shared toast */ }
 }
 
+const selectLaunchRecord = async recordId => {
+  try {
+    selectedLaunchRecord.value = await store.getLaunchRecord(recordId)
+  } catch { /* shared toast */ }
+}
+
+const openLaunchHistory = async () => {
+  try {
+    const data = await store.loadLaunchHistory()
+    if (!data) return
+    showLaunchHistory.value = true
+    selectedLaunchRecord.value = null
+    if (data.items.length) await selectLaunchRecord(data.items[0].id)
+  } catch { /* shared toast */ }
+}
+
+const compareLaunchRecord = async recordId => {
+  try {
+    lastLaunchComparison.value = await store.compareLaunchRecord(recordId)
+  } catch { /* shared toast */ }
+}
+
+const loadLaunchRecord = async recordId => {
+  try {
+    const data = await store.loadLaunchRecord(recordId)
+    if (data) showLaunchHistory.value = false
+  } catch { /* shared toast */ }
+}
+
 const beginOfficialProfileImport = async () => {
   if (!supportsWh3Tools.value) return
   try {
@@ -1151,6 +1195,7 @@ onBeforeUnmount(() => {
         @delete-folder="deleteModFolder"
         @open-unit-data="openUnitDataModification"
         @select-all="store.selectAllMods"
+        @toggle-warnings-only="store.toggleWarningsOnly"
         @update:search-tokens="store.setInactiveSearchTokens"
         @update:search-logic="store.setInactiveSearchLogic"
         @toggle-search-highlight="toggleSearchHighlight('inactive')"
@@ -1284,10 +1329,21 @@ onBeforeUnmount(() => {
 
       <div class="footer-actions">
         <button
+          v-if="supportsPackActions"
+          type="button"
+          class="secondary-button save-list-button"
+          :disabled="!!store.busy"
+          data-testid="launch-history-button"
+          @click="openLaunchHistory"
+        >
+          {{ t('launchHistory.title') }}
+        </button>
+        <button
           v-if="supportsSaveGames"
           type="button"
           class="secondary-button save-list-button"
           :disabled="!!store.busy || !store.pathHealth.game_ready || store.runtime.running"
+          data-testid="save-list-button"
           @click="openSaveGames"
         >
           {{ t('app.saveList') }}
@@ -1411,6 +1467,23 @@ onBeforeUnmount(() => {
       :open="showSaveModsComparison"
       :comparison="saveModsComparison"
       @close="showSaveModsComparison = false"
+    />
+    <LaunchHistoryModal
+      :open="showLaunchHistory"
+      :records="store.launchHistory"
+      :selected="selectedLaunchRecord"
+      :busy="store.busy"
+      :running="store.runtime.running"
+      @close="showLaunchHistory = false"
+      @refresh="openLaunchHistory"
+      @select="selectLaunchRecord"
+      @compare="compareLaunchRecord"
+      @load="loadLaunchRecord"
+    />
+    <LastLaunchComparisonModal
+      :open="!!lastLaunchComparison"
+      :comparison="lastLaunchComparison"
+      @close="lastLaunchComparison = null"
     />
 
     <WarningModal

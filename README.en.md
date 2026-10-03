@@ -4,7 +4,7 @@
 
 A lightweight mod manager for every Total War game with Steam Workshop support, covering both CA Pack files and ROME REMASTERED directory mods.
 
-The current version is `1.1.9`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
+The current version is `1.2.0`. It brings mods, playsets, the Steam Workshop, and game launching together in one interface, with no complicated setup required.
 
 ## Features
 
@@ -59,7 +59,7 @@ Requirements:
 - Windows 10/11 (currently the primary target platform)
 - Python 3.11 or later
 - Node.js 22 or later
-- pnpm 11
+- pnpm (Windows one-click entry points prepare the project's pinned version)
 - Any supported Steam edition of Total War installed for real scanning and launching
 
 ### Windows One-Click Entry Points
@@ -69,7 +69,11 @@ Double-click either file in the project root:
 - `一键启动管理器.cmd`: Automatically prepares Python and frontend dependencies, builds the latest frontend, and launches the pywebview desktop window. The application does not provide a browser mode.
 - `一键打包发布版.cmd`: Runs backend and frontend tests, builds the frontend, and produces the single release file `Wyccc's Mod Manager.exe`. The default output directory is `G:\Wyccc's Mod Manager`.
 
-Both entry points share the project's `.venv-build` environment. The first run may need to download dependencies, so Python 3.11+, Node.js 22+, and pnpm 11+ must already be installed. After packaging succeeds, the window remains open and displays the result. A clean release directory contains only `Wyccc's Mod Manager.exe`.
+Both entry points share the project's `.venv-build` environment; an unusable environment is preserved and rebuilt automatically. Install Python 3.11+ and Node.js 22+ beforehand. The pnpm version pinned in `frontend/package.json` is downloaded into `.build-tools` and verified with SHA-512, without relying on global npm, pnpm, or Codex's cached pnpm. Initial dependency preparation needs a network connection; local tools are reused afterwards. After packaging succeeds, the window remains open and displays the result. A clean release directory contains only `Wyccc's Mod Manager.exe`.
+
+Full packaging logs are saved to `build/logs/release-*.log`. Only one packaging process may run at a time. Run `.\一键打包发布版.cmd -CheckOnly` to check and prepare the tool environment without generating or replacing a release file.
+
+The "Launch history" button, immediately left of "Save list", records MOD names, enabled lists, and load order for every game launch through the manager. Each dated record can be compared with the current list for additions, removals, and order changes, or loaded to restore its enabled list and order. Records are scoped to the game and installation directory; identical lists and zero-MOD launches are recorded separately. Saving a list or a failed launch does not create a record. When loading, missing or ambiguous MODs are preserved as missing entries with a notice, while only resolved MODs are enabled.
 
 To change the packaging directory, set `WMM_OUTPUT_DIR` before running the packaging entry point:
 

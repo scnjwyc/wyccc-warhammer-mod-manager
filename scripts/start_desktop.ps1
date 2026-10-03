@@ -11,7 +11,7 @@ $frontend = Join-Path $root "frontend"
 
 try {
     $python = Get-WmmPython -Root $root
-    $pnpm = Get-WmmPnpm
+    $pnpm = Get-WmmPnpm -Root $root
 
     Write-Host "Preparing the frontend..."
     Invoke-WmmCommand -FilePath $pnpm -ArgumentList @("install", "--frozen-lockfile") -WorkingDirectory $frontend

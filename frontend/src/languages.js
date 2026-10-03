@@ -3,6 +3,7 @@ import { encyclopediaEntries } from './encyclopediaLanguages'
 import { diagnosticsEntries } from './diagnosticsLanguages'
 import { folderEntries } from './folderLanguages'
 import { schemaEntries } from './schemaLanguages'
+import { launchComparisonEntries } from './launchComparisonLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -298,6 +299,7 @@ const entries = {
   'warnings.selectMod': ['在列表中选择 {name}', 'Select {name} in the list', '목록에서 {name} 선택', 'Выбрать {name} в списке', '一覧で {name} を選択'],
   'warnings.none': ['当前没有未忽略的问题', 'There are no unignored issues', '무시되지 않은 문제가 없습니다', 'Нет проблем, не добавленных в игнорирование', '未無視の問題はありません'],
   'warnings.genericScan': ['扫描过程中出现提示', 'A notice occurred while scanning', '검색 중 알림이 발생했습니다', 'Во время сканирования появилось сообщение', 'スキャン中に通知が発生しました'],
+  'warnings.workshopSubscriptionsUnavailable': ['无法读取当前 Steam 账号的订阅清单，已跳过工坊 MOD；请启动 Steam 后刷新', 'The current Steam account\'s subscriptions could not be read. Workshop MODs were skipped; start Steam and refresh.', '현재 Steam 계정의 구독 목록을 읽을 수 없어 창작마당 MOD를 제외했습니다. Steam을 실행한 후 새로 고침하세요.', 'Не удалось прочитать подписки текущего аккаунта Steam. Моды Мастерской пропущены; запустите Steam и обновите список.', '現在の Steam アカウントのサブスクリプション一覧を取得できないため、ワークショップ MOD を除外しました。Steam を起動して更新してください。'],
   'warnings.subscribeEnableDependencies': ['订阅并启用缺失依赖', 'Subscribe and enable missing dependencies', '누락된 종속성 구독 및 활성화', 'Подписать и включить недостающие зависимости', '不足している依存関係を購読して有効化'],
   'warnings.update': ['更新', 'Update', '업데이트', 'Обновить', '更新'],
   'warnings.updateAll': ['全部更新', 'Update all', '모두 업데이트', 'Обновить все', 'すべて更新'],
@@ -307,6 +309,9 @@ const entries = {
   'warnings.workshopUpdateMessage': ['Steam 创意工坊信息显示该 MOD 有新更新，请在工坊中确认并更新', 'Steam Workshop reports that this MOD has a newer update available; check the Workshop to update it.', 'Steam 창작마당에 이 MOD의 새 업데이트가 있습니다. 창작마당에서 확인하고 업데이트하세요.', 'Steam Workshop сообщает о доступном обновлении этого MOD; проверьте и обновите его в Мастерской.', 'Steam ワークショップにこの MOD の新しい更新があります。ワークショップで確認して更新してください。'],
   'warnings.missingMessage': ['缺少依赖：{names}', 'Missing dependencies: {names}', '누락된 종속성: {names}', 'Отсутствуют зависимости: {names}', '不足している依存関係：{names}'],
   'warnings.buttonHelp': ['左键查看警告详情；右键只显示有问题的 MOD', 'Left-click to view warning details; right-click to show only problematic MODs', '왼쪽 클릭: 경고 상세 보기 / 오른쪽 클릭: 문제 있는 MOD만 표시', 'ЛКМ — подробности предупреждений; ПКМ — показывать только MOD с проблемами', '左クリック：警告の詳細を表示／右クリック：問題のあるMODのみ表示'],
+  'warnings.filterActiveHelp': ['左键查看警告详情；右键恢复完整 MOD 列表', 'Left-click to view warning details; right-click to restore the full MOD list', '왼쪽 클릭: 경고 상세 보기 / 오른쪽 클릭: 전체 MOD 목록 복원', 'ЛКМ — подробности предупреждений; ПКМ — восстановить полный список MOD', '左クリック：警告の詳細を表示／右クリック：MODの全一覧に戻す'],
+  'warnings.noMatchingMods': ['没有符合当前筛选条件的报警 MOD', 'No MODs with warnings match the current filters', '현재 필터와 일치하는 경고 MOD가 없습니다', 'Нет MOD с предупреждениями, соответствующих текущим фильтрам', '現在の絞り込み条件に一致する警告付きMODはありません'],
+  'warnings.showAllMods': ['退出警报筛选', 'Exit warning filter', '경고 필터 해제', 'Отключить фильтр предупреждений', '警告の絞り込みを解除'],
 
   'update.unknownSize': ['未知大小', 'Unknown size', '알 수 없는 크기', 'Неизвестный размер', 'サイズ不明'],
   'update.typeFeature': ['新增', 'Added', '추가', 'Добавлено', '追加'],
@@ -1054,6 +1059,7 @@ const spanishEntries = {
   "warnings.selectMod": "Seleccione {name} en la lista",
   "warnings.none": "No hay problemas no ignorados",
   "warnings.genericScan": "Se produjo un aviso durante el escaneo.",
+  "warnings.workshopSubscriptionsUnavailable": "No se pudieron leer las suscripciones de la cuenta actual de Steam. Se omitieron los MODs del Taller; inicia Steam y actualiza la lista.",
   "warnings.subscribeEnableDependencies": "Suscribirse y activar las dependencias faltantes",
   "warnings.update": "Actualizar",
   "warnings.updateAll": "Actualizar todo",
@@ -1063,6 +1069,9 @@ const spanishEntries = {
   "warnings.workshopUpdateMessage": "Steam Workshop informa de que hay una actualización más reciente para este MOD; compruébala y actualízala en el Taller.",
   "warnings.missingMessage": "Dependencias faltantes: {names}",
   "warnings.buttonHelp": "Clic izquierdo: ver los detalles de las advertencias; clic derecho: mostrar solo los MOD con problemas",
+  "warnings.filterActiveHelp": "Clic izquierdo: ver los detalles de las advertencias; clic derecho: restaurar la lista completa de MODs",
+  "warnings.noMatchingMods": "Ningún MOD con advertencias coincide con los filtros actuales",
+  "warnings.showAllMods": "Salir del filtro de advertencias",
   "update.unknownSize": "Tamaño desconocido",
   "update.typeFeature": "Añadido",
   "update.typeFix": "Corregido",
@@ -1798,7 +1807,7 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
-for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries })) {
+for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries })) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
 }
@@ -1886,6 +1895,7 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(folderEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(schemaEntries, value)) return t(value)
+  if (Object.prototype.hasOwnProperty.call(launchComparisonEntries, value)) return t(value)
   const schemaError = value.match(/^(.*?): (schemaUpdate\.[A-Za-z]+)$/)
   if (schemaError && Object.prototype.hasOwnProperty.call(schemaEntries, schemaError[2])) {
     return `${schemaError[1]}: ${t(schemaError[2])}`
@@ -1897,6 +1907,7 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
     '分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入': 'share.wrongGame',
     '旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码': 'share.legacyGame',
     '存在多个同名 Pack，已保留为独立项目；请只启用一个来源': 'warnings.duplicatePack',
+    '无法读取当前 Steam 账号的订阅清单，已跳过工坊 MOD；请启动 Steam 后刷新': 'warnings.workshopSubscriptionsUnavailable',
   }
   if (knownMessages[value]) return t(knownMessages[value])
   const duplicate = value.match(/^不能同时启用多个同名 Pack：(.+)$/)

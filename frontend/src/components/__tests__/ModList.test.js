@@ -252,10 +252,21 @@ describe('ModList previews and source collisions', () => {
     const warningButton = wrapper.get('[data-testid="panel-warning-button"]')
     expect(warningButton.classes()).toContain('active')
     expect(warningButton.attributes('aria-pressed')).toBe('true')
-    expect(warningButton.attributes('title')).toContain('右键只显示有问题的 MOD')
+    expect(warningButton.attributes('title')).toContain('右键恢复完整 MOD 列表')
     await warningButton.trigger('contextmenu')
     expect(wrapper.emitted('toggle-warnings-only')).toHaveLength(1)
     expect(wrapper.emitted('show-warnings')).toBeUndefined()
+  })
+
+  it('keeps the filter exit available when the last warning disappears', async () => {
+    const wrapper = mount(ModList, {
+      props: { title: '已启用 MOD', active: true, mods: [], warningCount: 0, warningsOnly: true },
+    })
+
+    expect(wrapper.get('.empty-state').text()).toContain('没有符合当前筛选条件的报警 MOD')
+    await wrapper.get('[data-testid="panel-warning-button"]').trigger('contextmenu')
+    await wrapper.get('[data-testid="clear-warning-filter"]').trigger('click')
+    expect(wrapper.emitted('toggle-warnings-only')).toHaveLength(2)
   })
 
   it('keeps the warning entry out of the inactive-list heading even when that list has warnings', () => {

@@ -44,6 +44,8 @@ class ModDiagnosticsService:
             "get_mod_diagnostics", "confirm_diagnostic_trial", "cancel_mod_diagnostics",
             "get_crash_diagnosis", "dismiss_crash_diagnosis", "get_diagnostics_history",
             "get_runtime_status", "get_mod_thumbnails", "get_mod_preview", "exit_app",
+            "get_last_launch_mods",
+            "list_launch_history", "get_launch_record",
         }
         counted = method not in reads and method != "start_mod_diagnostics"
         with self.operation_lock:
@@ -71,6 +73,14 @@ class ModDiagnosticsService:
             return
         record = launch_record(paths.game_id, paths.game_path, before["directory"],
                                result["launch_plan"], before["at"], before["evidence"])
+        # Keep the user's enabled list separate from generated runtime Packs.
+        # This is captured after process creation, never when saving a playset.
+        record["mod_list"] = result.get("mod_snapshot") or [
+            {"id": mod_id, "pack_name": self.api._assets[mod_id].pack_name,
+             "effective_name": self.api._assets[mod_id].effective_name}
+            for mod_id in result.get("plan", result["launch_plan"])["ordered_mod_ids"]
+            if mod_id in self.api._assets
+        ]
         pid = result.get("process", {}).get("pid")
         if pid:
             record["process_ids"] = [int(pid)]
@@ -78,6 +88,23 @@ class ModDiagnosticsService:
             payload = self.launches.load()
             payload.setdefault("games", {})[paths.game_id] = record
             self.launches.save(payload)
+
+    def last_launch_mods(self) -> dict[str, Any]:
+        paths = self.api.settings_service.resolve_game_paths()
+        with self.operation_lock:
+            record = self.launches.load().get("games", {}).get(paths.game_id, {})
+            if not record or record.get("game_path") != paths.game_path:
+                return {"available": False, "game_id": paths.game_id, "mods": []}
+            mods = record.get("mod_list")
+            if mods is None:
+                # Records from earlier app versions already contain launch order.
+                mods = [
+                    {"pack_name": row["pack_name"], "effective_name": ""}
+                    for row in record.get("packs", [])
+                    if row["pack_name"].casefold() not in INTERNAL_RUNTIME_PACK_NAMES
+                ]
+            return {"available": True, "game_id": paths.game_id,
+                    "started_at": record["started_at"], "mods": deepcopy(mods)}
 
     def diagnosis(self) -> dict[str, Any]:
         paths = self.api.settings_service.resolve_game_paths()

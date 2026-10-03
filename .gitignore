@@ -4,6 +4,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 .venv-build/
+.venv-build.invalid-*/
+.build-tools/
 /dist/
 build/
 *.spec

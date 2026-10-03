@@ -278,13 +278,13 @@ watch(
           <h2>{{ title }}</h2>
         </div>
         <button
-          v-if="active && warningCount"
+          v-if="active && (warningCount || warningsOnly)"
           type="button"
           class="panel-warning-button"
           :class="{ active: warningsOnly }"
           data-testid="panel-warning-button"
-          :title="t('warnings.buttonHelp')"
-          :aria-label="t('warnings.buttonHelp')"
+          :title="t(warningsOnly ? 'warnings.filterActiveHelp' : 'warnings.buttonHelp')"
+          :aria-label="t(warningsOnly ? 'warnings.filterActiveHelp' : 'warnings.buttonHelp')"
           :aria-pressed="warningsOnly"
           @click="emit('show-warnings')"
           @contextmenu.prevent="emit('toggle-warnings-only')"
@@ -498,7 +498,14 @@ watch(
 
       <div v-if="displayGroups.length === 0" class="empty-state">
         <span class="empty-mark">W</span>
-        <p>{{ active ? t('list.emptyActive') : t('list.emptyFiltered') }}</p>
+        <p>{{ warningsOnly ? t('warnings.noMatchingMods') : active ? t('list.emptyActive') : t('list.emptyFiltered') }}</p>
+        <button
+          v-if="warningsOnly"
+          type="button"
+          class="secondary-button"
+          data-testid="clear-warning-filter"
+          @click="emit('toggle-warnings-only')"
+        >{{ t('warnings.showAllMods') }}</button>
       </div>
     </div>
   </section>

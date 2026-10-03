@@ -55,6 +55,7 @@ from .game_data_patch_state import (
     load_manifest_subscription_state,
 )
 from .launcher import is_game_running, launch_game, terminate_game
+from .launch_history import LaunchHistoryService
 from .launch_paths import LaunchPathAliases
 from .load_order import LoadOrderService, current_order_path, file_token
 from .games import GameDefinition
@@ -219,6 +220,7 @@ class API:
         self._exit_low_consumption_callback: Callable[[], bool] | None = None
         self._last_order_token = "missing"
         self.diagnostics = ModDiagnosticsService(self)
+        self.launch_history = LaunchHistoryService(self)
         self._rpc: dict[str, Callable[..., Any]] = {
             "get_crash_diagnosis": self.diagnostics.diagnosis,
             "dismiss_crash_diagnosis": self.diagnostics.dismiss,
@@ -270,6 +272,10 @@ class API:
             "continue_game": self._continue_game,
             "list_save_games": self._list_save_games,
             "get_save_mods": self._get_save_mods,
+            "get_last_launch_mods": self.diagnostics.last_launch_mods,
+            "list_launch_history": self.launch_history.list,
+            "get_launch_record": self.launch_history.get,
+            "load_launch_record": self.launch_history.load,
             "get_runtime_status": self._get_runtime_status,
             "exit_low_consumption_mode": self._exit_low_consumption_mode,
             "exit_app": self._exit_app,
@@ -1471,6 +1477,10 @@ class API:
                 save_name,
             )
             try:
+                self.launch_history.remember(result, before)
+            except Exception:
+                logger.exception("Unable to persist launch history")
+            try:
                 self.diagnostics.remember_launch(result, before)
             except (OSError, ValueError, KeyError):
                 logger.exception("Unable to persist launch diagnostics")
@@ -1489,6 +1499,13 @@ class API:
                 raise ValueError("当前游戏不支持从管理器直接载入存档")
             selected_save = self.save_games.require(save_name) if save_name else None
             saved = self._save_load_order_locked(ordered_mod_ids, expected_token)
+            saved["mod_snapshot"] = [
+                {"id": asset.id, "pack_name": asset.pack_name, "effective_name": asset.effective_name,
+                 "source": asset.source, "workshop_id": asset.workshop_id}
+                for mod_id in saved["plan"]["ordered_mod_ids"]
+                if (asset := self._assets.get(mod_id)) is not None
+            ]
+            saved["launch_playset_name"] = self.state_repository.get_current_playset(self._active_game().id)["name"]
             paths = self.settings_service.resolve_game_paths()
             path_map = self.launch_path_aliases.prepare(
                 paths.game_path,

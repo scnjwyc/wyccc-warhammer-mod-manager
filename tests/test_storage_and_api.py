@@ -437,6 +437,7 @@ class StorageContractTests(unittest.TestCase):
                     "mod_folders",
                     "mod_folder_items",
                     "load_order_backups",
+                    "launch_history",
                     "data_sync_items",
                 },
             )
@@ -840,6 +841,9 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(restored["data"]["current_playset"]["mod_ids"], [])
 
     def test_force_update_requires_the_workshop_download_to_finish(self) -> None:
+        idle = patch("backend.api.is_game_running", return_value=False)
+        idle.start()
+        self.addCleanup(idle.stop)
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / "state")
             asset = ModAsset(
@@ -868,6 +872,9 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn("未完成", result["error"]["message"])
 
     def test_force_update_translates_a_steam_request_that_never_starts(self) -> None:
+        idle = patch("backend.api.is_game_running", return_value=False)
+        idle.start()
+        self.addCleanup(idle.stop)
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / 'state')
             asset = ModAsset(
@@ -893,6 +900,9 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn('未开始下载', result['error']['message'])
 
     def test_force_update_translates_a_stalled_steam_download(self) -> None:
+        idle = patch("backend.api.is_game_running", return_value=False)
+        idle.start()
+        self.addCleanup(idle.stop)
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / 'state')
             asset = ModAsset(
@@ -918,6 +928,9 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn('已恢复原有文件', result['error']['message'])
 
     def test_force_update_translates_an_unrecognized_workshop_directory(self) -> None:
+        idle = patch("backend.api.is_game_running", return_value=False)
+        idle.start()
+        self.addCleanup(idle.stop)
         with tempfile.TemporaryDirectory() as temporary:
             api = API(Path(temporary) / 'state')
             asset = ModAsset(

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { compareModLists } from './modListComparison'
 import { gameLabelKey } from './games'
 import { invoke } from './bridge'
 import {
@@ -81,7 +82,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.9',
+    appVersion: '1.2.0',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -129,6 +130,7 @@ export const useAppStore = defineStore('app', {
     runtime: { running: false, mod_revision: 0 },
     modRevision: 0,
     saveGames: [],
+    launchHistory: [],
     saveGamesDirectory: '',
     changelog: [],
     updateInfo: null,
@@ -452,6 +454,7 @@ export const useAppStore = defineStore('app', {
       this.pendingWorkshopRefreshForce = false
       this.runtime = { running: false, mod_revision: 0 }
       this.saveGames = []
+      this.launchHistory = []
       this.saveGamesDirectory = ''
       this.unitDataFeature = defaultUnitDataFeature()
       this.variantSelectorFeature = defaultVariantSelectorFeature()
@@ -1148,6 +1151,51 @@ export const useAppStore = defineStore('app', {
           .map(mod => ({ packName: mod.pack_name, mod })),
         shared: saveEntries.filter(item => activeKeys.has(item.packName.toLocaleLowerCase())),
       }
+    },
+    async loadLaunchHistory() {
+      const revision = this.gameContextRevision
+      return this.withBusy(t('launchHistory.loading'), async () => {
+        const data = await invoke('list_launch_history')
+        if (!this.isCurrentGameResult(data, revision)) return null
+        this.launchHistory = data.items || []
+        return data
+      })
+    },
+    async getLaunchRecord(recordId) {
+      const revision = this.gameContextRevision
+      return this.withBusy(t('launchHistory.loading'), async () => {
+        const data = await invoke('get_launch_record', recordId)
+        return this.isCurrentGameResult(data, revision) ? data : null
+      })
+    },
+    async compareLaunchRecord(recordId) {
+      const snapshot = await this.getLaunchRecord(recordId)
+      if (snapshot) {
+        const active = this.activeIds.map(id => this.modMap.get(id)).filter(Boolean)
+        return compareModLists(snapshot, active)
+      }
+      return null
+    },
+    async loadLaunchRecord(recordId) {
+      await this.flushPlaysetUpdates()
+      const revision = this.gameContextRevision
+      return this.withBusy(t('launchHistory.restoring'), async () => {
+        const data = await invoke('load_launch_record', recordId, this.orderToken)
+        if (!this.isCurrentGameResult(data, revision)) return null
+        if (!Array.isArray(data.ordered_mod_ids) || typeof data.order_token !== 'string' || !data.order_token) {
+          throw new Error(t('diagnostics.invalidResult'))
+        }
+        this.applyPlaysetPayload(data)
+        this.orderToken = data.order_token
+        this.dirty = false
+        this.orderSaveError = ''
+        if (data.backup) this.backups.unshift(data.backup)
+        const missing = data.missing_mods || []
+        this.notify(missing.length
+          ? t('launchHistory.loadedMissing', { count: data.ordered_mod_ids.length, missing: missing.length })
+          : t('launchHistory.loaded', { count: data.ordered_mod_ids.length }), missing.length ? 'warning' : 'success')
+        return data
+      })
     },
     async createPlaysetFromSave(saveName) {
       const data = await this.readSaveMods(saveName)

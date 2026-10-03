@@ -137,6 +137,39 @@ def _library_roots(steam_root: Path) -> list[Path]:
     return unique
 
 
+def workshop_steam_root(paths: GamePaths) -> Path | None:
+    """Find the Steam client owning this Workshop library, including manual paths."""
+    if paths.steam_root:
+        return Path(paths.steam_root)
+    if not paths.workshop_path:
+        return None
+    workshop = Path(paths.workshop_path).resolve(strict=False)
+    for steam_root in candidate_steam_roots():
+        for library in _library_roots(steam_root):
+            expected = library / "steamapps" / "workshop" / "content" / paths.game_definition.app_id
+            if expected.resolve(strict=False) == workshop:
+                return steam_root
+    return None
+
+
+def active_steam_account_id(steam_root: Path) -> str:
+    """Prefer the running client's account over cached auto-login preferences."""
+    if os.name != "nt":
+        return ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+            registered_root, _ = winreg.QueryValueEx(key, "SteamPath")
+        if Path(str(registered_root)).resolve(strict=False) != steam_root.resolve(strict=False):
+            return ""
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam\ActiveProcess") as key:
+            account_id, _ = winreg.QueryValueEx(key, "ActiveUser")
+        return str(int(account_id)) if int(account_id) > 0 else ""
+    except (ImportError, OSError, TypeError, ValueError):
+        return ""
+
+
 def _read_install_dir(manifest_path: Path, default_install_dir: str) -> str:
     try:
         parsed = parse_vdf(manifest_path.read_text(encoding="utf-8-sig", errors="replace"))

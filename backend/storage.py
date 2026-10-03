@@ -157,6 +157,19 @@ class StateRepository:
                     ordered_mod_ids TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS launch_history (
+                    id TEXT PRIMARY KEY,
+                    game_id TEXT NOT NULL,
+                    game_path TEXT NOT NULL,
+                    started_at REAL NOT NULL,
+                    save_name TEXT NOT NULL DEFAULT '',
+                    playset_name TEXT NOT NULL DEFAULT '',
+                    mod_count INTEGER NOT NULL,
+                    mods TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS launch_history_game_time
+                    ON launch_history(game_id, game_path, started_at DESC);
+
                 CREATE TABLE IF NOT EXISTS data_sync_items (
                     pack_name TEXT PRIMARY KEY COLLATE NOCASE,
                     workshop_id TEXT NOT NULL,
@@ -1533,6 +1546,41 @@ class StateRepository:
                     json.dumps(default_ids, ensure_ascii=False),
                 )
         return self.get_current_playset(game_id)
+
+    def add_launch_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        record = dict(record, id=record.get("id") or uuid.uuid4().hex)
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT OR IGNORE INTO launch_history
+                   (id, game_id, game_path, started_at, save_name, playset_name, mod_count, mods)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (record["id"], record["game_id"], _sync_target_key(record["game_path"]),
+                 record["started_at"], record.get("save_name", ""), record.get("playset_name", ""),
+                 len(record["mods"]), json.dumps(record["mods"], ensure_ascii=False)),
+            )
+        return record
+
+    def list_launch_records(self, game_id: str, game_path: str) -> list[dict[str, Any]]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id, game_id, started_at, save_name, playset_name, mod_count
+                   FROM launch_history WHERE game_id = ? AND game_path = ?
+                   ORDER BY started_at DESC, rowid DESC""",
+                (game_id, _sync_target_key(game_path)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_launch_record(self, record_id: str, game_id: str, game_path: str) -> dict[str, Any] | None:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM launch_history WHERE id = ? AND game_id = ? AND game_path = ?",
+                (record_id, game_id, _sync_target_key(game_path)),
+            ).fetchone()
+        if row is None:
+            return None
+        record = dict(row)
+        record["mods"] = json.loads(record["mods"])
+        return record
 
     def add_backup(self, file_path: str, ordered_mod_ids: list[str]) -> dict[str, Any]:
         backup_id = uuid.uuid4().hex

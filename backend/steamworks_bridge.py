@@ -242,6 +242,24 @@ def query_workshop_dependencies(
     return result
 
 
+def get_subscribed_workshop_items(
+    *,
+    app_id: int = 1_142_710,
+    root: Path | None = None,
+    timeout_seconds: int = 10,
+) -> list[str]:
+    """Read the current user's subscriptions without requesting online item metadata."""
+    payload = _run_bridge_request(
+        {"operation": "get_subscribed_items", "appId": int(app_id)},
+        root=root,
+        timeout_seconds=timeout_seconds,
+    )
+    source = payload.get("subscribed_ids")
+    if not isinstance(source, list) or any(not str(value).isdigit() for value in source):
+        raise SteamworksBridgeError("Steamworks bridge result has invalid subscribed item data")
+    return list(dict.fromkeys(str(value) for value in source))
+
+
 def query_workshop_subscription_status(
     workshop_ids: list[str],
     language: str = "english",
