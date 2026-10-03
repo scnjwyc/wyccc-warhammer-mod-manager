@@ -1,34 +1,38 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.1.8",
-  "published_at": "2026-10-02",
+  "version": "1.1.9",
+  "published_at": "2026-10-03",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.8/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.8/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.8/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "2ffb75b2dd565a75c93be9dd5c31ec9e0a4b1a75cc59d9c0604c0515461ffa44",
-    "size": 63090577
+    "sha256": "DBB7A32D24C44505FCD01E408EE775A10A51F9EC8D3461F8F1AD37D215FE62A9",
+    "size": 65459131
   },
   "changelog": [
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "optimize",
+          "text": "优化新增MOD时，更新MOD信息的速度"
+        },
+        {
+          "type": "improvement",
+          "text": "优化更新表结构功能"
+        }
+      ]
+    },
     {
       "title": "修复",
       "changes": [
         {
           "type": "fix",
-          "text": "MOD启动排障存在的问题"
-        }
-      ]
-    },
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "更新表结构功能，在MOD上右键选择，可以更新MOD表结构，这个操作能够使得8.X版本大部分过期的MOD直接恢复正常，但依然有估计五分之一的MOD无法通过这个方式修复"
+          "text": "内置pack存在的隐患"
         }
       ]
     }
