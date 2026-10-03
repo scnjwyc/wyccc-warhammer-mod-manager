@@ -1,29 +1,34 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "published_at": "2026-10-03",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.1.9/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "DBB7A32D24C44505FCD01E408EE775A10A51F9EC8D3461F8F1AD37D215FE62A9",
-    "size": 65459131
+    "sha256": "EEE9D4866501C6A842349518A28172CBC78E172F8905CB3DF075B10FBD7B0331",
+    "size": 65473742
   },
   "changelog": [
     {
-      "title": "调整",
+      "title": "修复",
       "changes": [
         {
-          "type": "optimize",
-          "text": "优化新增MOD时，更新MOD信息的速度"
-        },
+          "type": "fix",
+          "text": "仅显示报警MOD模式下存在的问题"
+        }
+      ]
+    },
+    {
+      "title": "新增",
+      "changes": [
         {
-          "type": "improvement",
-          "text": "优化更新表结构功能"
+          "type": "feature",
+          "text": "启动记录功能，可以查看每一次游戏启动的MOD列表，支持和当前列表进行对比，也支持加载记录中的mod列表"
         }
       ]
     },
@@ -32,7 +37,7 @@
       "changes": [
         {
           "type": "fix",
-          "text": "内置pack存在的隐患"
+          "text": "当用户加入steam家庭组时，会显示家庭成员的MOD的问题"
         }
       ]
     }
