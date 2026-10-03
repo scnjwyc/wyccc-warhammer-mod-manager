@@ -10,6 +10,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from backend.table_schema import SCHEMA_NAMES  # noqa: E402
+
 FRONTEND = ROOT / "frontend"
 PACKAGING = ROOT / "packaging"
 STEAM_RUNTIME = ROOT / "steam_runtime"
@@ -151,6 +155,7 @@ def package_desktop(output_dir: Path) -> Path:
         raise SystemExit("找不到 Node.js，无法把 Steamworks 工坊查询运行时加入发布版。")
     bridge_script = STEAM_RUNTIME / "workshop_bridge.js"
     schema_path = ROOT / "backend" / "wh3_db_schema.json"
+    bundled_schemas = ROOT / "backend" / "schemas"
     native_binding = (
         STEAM_RUNTIME
         / "steamworks"
@@ -178,6 +183,11 @@ def package_desktop(output_dir: Path) -> Path:
         raise SystemExit("Steamworks 工坊查询运行时不完整，无法打包。")
     if not schema_path.is_file():
         raise SystemExit("缺少战锤 3 DB 架构资源，无法打包。")
+    if not all(
+        (bundled_schemas / name).is_file()
+        for name in ("LICENSE.txt", "manifest.json", *(f"schema_{game}.ron.gz" for game in SCHEMA_NAMES.values()))
+    ):
+        raise SystemExit("内置表结构资源不完整，无法打包。")
     run(
         [
             sys.executable,
@@ -200,6 +210,8 @@ def package_desktop(output_dir: Path) -> Path:
             f"{static_root}{separator}frontend/dist",
             "--add-data",
             f"{schema_path}{separator}backend",
+            "--add-data",
+            f"{bundled_schemas}{separator}backend/schemas",
             "--add-data",
             f"{STEAM_RUNTIME}{separator}steam_runtime",
             "--add-binary",

@@ -27,6 +27,7 @@ const close = () => { if (!props.pending) emit('close') }
           <strong>{{ t('schemaUpdate.summary', { updated: report.updated_count, unchanged: report.unchanged_count,
             partial: report.partial_count, failed: report.failed_count }) }}</strong>
           <p v-if="report.schema?.cached" role="alert">{{ t('schemaUpdate.cached') }}</p>
+          <p v-if="report.schema?.bundled">{{ t('schemaUpdate.bundled') }}</p>
           <article v-for="row in report.results" :key="row.mod_id" class="schema-result" :data-status="row.status">
             <h3>{{ row.name }} · {{ t(`schemaUpdate.${row.status}`) }}</h3>
             <p v-if="row.error" role="alert">{{ localizeBackendMessage(row.error) }}</p>

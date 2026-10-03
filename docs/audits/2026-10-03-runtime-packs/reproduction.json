@@ -1,0 +1,61 @@
+{
+  "legacy_lzma": {
+    "legacy_version": "1.1.5",
+    "legacy_started_processes": 0,
+    "legacy_error": {
+      "code": "VALUEERROR",
+      "message": "游戏数据来源 MOD \"old_lzma_mod\" [pack: old_lzma_mod.pack, source: Data] 读取失败：无法解压 Pack 条目 db\\main_units_tables\\!audit：Error -3 while decompressing data: unknown compression method"
+    },
+    "current_started_mock_processes": 1,
+    "current_unit_count": 160,
+    "current_safety_passed": true
+  },
+  "renamed_copy": {
+    "copied_file_hidden": true,
+    "base_count": 100,
+    "first_2x_count": 200,
+    "count_after_renamed_copy_enabled": 200,
+    "loaded_pack_names": [
+      "!!!!wyccc_game_data_patch.pack"
+    ],
+    "canonical_removed_when_disabled": true,
+    "renamed_copy_still_loaded_when_disabled": false,
+    "safety_passed": true
+  },
+  "atomic_and_fixed_names": {
+    "pack_families": 5,
+    "generated_types": [
+      "mod"
+    ],
+    "interrupted_output_preserved": true,
+    "leftover_temporary_files": 0,
+    "disabled_canonical_files_cleaned": true,
+    "safety_passed": true
+  },
+  "symlink_cleanup": {
+    "skipped": true,
+    "reason": "symlink creation unavailable: WinError 1314"
+  },
+  "unsupported_schema": {
+    "started_processes": 0,
+    "error": {
+      "code": "VALUEERROR",
+      "message": "读取 MOD \"unknown-schema\" [pack: unknown-schema.pack, source: Data] 中的 db\\main_units_tables\\audit 失败：不支持 main_units_tables 的 DB 版本 999；已支持版本：4, 6, 7, 33, 35, 36"
+    },
+    "safety_passed": true
+  },
+  "unit_source_changes_during_build": {
+    "started_mock_processes": 1,
+    "builder_calls": 2,
+    "requested_melee_attack": 50,
+    "generated_bonus_health": 2222,
+    "current_source_bonus_health": 2222,
+    "generated_entity_reference": "wyccc_audit_entity_new",
+    "current_source_entity_keys": [
+      "wyccc_audit_entity_new"
+    ],
+    "patch_entity_keys": [],
+    "unresolved_entity_reference": false,
+    "safety_passed": true
+  }
+}

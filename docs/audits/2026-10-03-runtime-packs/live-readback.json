@@ -1,0 +1,126 @@
+{
+  "inventory": [
+    {
+      "name": "!!!!wyccc_game_data_patch.pack",
+      "type": "mod",
+      "size": 530937,
+      "sha256": "8cca84d0137621ec277b6d583e328f1f9492d512f4a3cd2aad0d38e85b733163",
+      "entries": [
+        "db\\_kv_rules_tables\\!wyccc_game_data_v0000",
+        "db\\projectiles_tables\\!wyccc_game_data_v0053",
+        "db\\projectiles_explosions_tables\\!wyccc_game_data_v0019",
+        "db\\battle_vortexs_tables\\!wyccc_game_data_v0020"
+      ]
+    },
+    {
+      "name": "!!!!wyccc_runtime_options.pack",
+      "type": "mod",
+      "size": 1107,
+      "sha256": "ca254e9d2bc5cd6c87baae451e1883f3907fea4e00483622c26e6cadcec0c437",
+      "entries": [
+        "script\\enable_console_logging",
+        "movies\\epilepsy_warning\\epilepsy_warning_br.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_cn.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_cz.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_de.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_en.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_es.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_fr.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_it.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_kr.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_pl.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_ru.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_tr.ca_vp8",
+        "movies\\epilepsy_warning\\epilepsy_warning_zh.ca_vp8",
+        "movies\\gam_int.ca_vp8",
+        "movies\\startup_movie_01.ca_vp8",
+        "movies\\startup_movie_02.ca_vp8",
+        "movies\\startup_movie_03.ca_vp8",
+        "movies\\startup_movie_04.ca_vp8",
+        "movies\\startup_movie_05.ca_vp8",
+        "movies\\startup_movie_06.ca_vp8",
+        "movies\\startup_movie_07.ca_vp8",
+        "movies\\startup_movie_08.ca_vp8"
+      ]
+    },
+    {
+      "name": "wyccc_dynamic_unit_cap.pack",
+      "type": "mod",
+      "size": 245,
+      "sha256": "6608c17b59b4c8bf9ac157193d615899dc4bf6fa3a451c4a7c7d3f4b009625e4",
+      "entries": [
+        "wyccc_dynamic_feature\\manifest.json"
+      ]
+    },
+    {
+      "name": "wyccc_dynamic_units_modify.pack",
+      "type": "mod",
+      "size": 455,
+      "sha256": "d66e804b41de674bcc0a2080dfd61fb003f88a15a6d9afa48e780de84e287da4",
+      "entries": [
+        "dependencies_manager_v2.rpfm_reserved",
+        "notes.rpfm_reserved",
+        "settings.rpfm_reserved"
+      ]
+    },
+    {
+      "name": "wyccc_nanu_rors_patch.pack",
+      "type": "mod",
+      "size": 455,
+      "sha256": "49d249d588a0b3ad8670972d46a161ac34da74f88e9f7fa001de54eedaba571e",
+      "entries": [
+        "dependencies_manager_v2.rpfm_reserved",
+        "notes.rpfm_reserved",
+        "settings.rpfm_reserved"
+      ]
+    },
+    {
+      "name": "wyccc_variant_selector_patch.pack",
+      "type": "mod",
+      "size": 378,
+      "sha256": "96ef726a69283f45e1e1cfeec8384313e4e759e2b5a2a38dbcc376863a41b272",
+      "entries": [
+        "wyccc\\features\\variant_selector_patch.json"
+      ]
+    }
+  ],
+  "source_mods": 7,
+  "generated_tables": [
+    {
+      "table": "_kv_rules_tables",
+      "version": 0,
+      "rows": 4,
+      "installed_version": 0,
+      "rpfm_schema_version": 0
+    },
+    {
+      "table": "projectiles_tables",
+      "version": 53,
+      "rows": 1098,
+      "installed_version": 53,
+      "rpfm_schema_version": 53
+    },
+    {
+      "table": "projectiles_explosions_tables",
+      "version": 19,
+      "rows": 429,
+      "installed_version": 19,
+      "rpfm_schema_version": 19
+    },
+    {
+      "table": "battle_vortexs_tables",
+      "version": 20,
+      "rows": 313,
+      "installed_version": 20,
+      "rpfm_schema_version": 20
+    }
+  ],
+  "rebuilt_sha256": "8cca84d0137621ec277b6d583e328f1f9492d512f4a3cd2aad0d38e85b733163",
+  "live_data_sha256": "8cca84d0137621ec277b6d583e328f1f9492d512f4a3cd2aad0d38e85b733163",
+  "live_runtime_sha256": "8cca84d0137621ec277b6d583e328f1f9492d512f4a3cd2aad0d38e85b733163",
+  "manifest_sha256": "8cca84d0137621ec277b6d583e328f1f9492d512f4a3cd2aad0d38e85b733163",
+  "rebuilt_matches_live_data": true,
+  "unrelated_field_changes": 0,
+  "missing_original_rows": 0,
+  "live_data_unchanged_during_audit": true
+}

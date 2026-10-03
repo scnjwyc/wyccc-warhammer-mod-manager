@@ -1,0 +1,73 @@
+{
+  "repository": "https://github.com/Frodo45127/rpfm-schemas",
+  "revision": "57a23a849fcaa805ccf3afe743bf46fd14a1a43c",
+  "fetched_at": "2026-10-03T00:53:13.429562+00:00",
+  "games": {
+    "warhammer3": {
+      "file": "schema_wh3.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_wh3.ron",
+      "sha256": "f5fed7eb28deee26405643b37b8d2d2f77b1b2b95b804169edceef501351a83a",
+      "table_count": 1743
+    },
+    "warhammer2": {
+      "file": "schema_wh2.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_wh2.ron",
+      "sha256": "54efb0ffb49839c2e280fdeeb1dfd0bfb209e05345334930b2985530ba313580",
+      "table_count": 1092
+    },
+    "warhammer": {
+      "file": "schema_wh.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_wh.ron",
+      "sha256": "1bfb11e67f5c76fcc756c8f42c45c35cff69be7c58371b973677a47db40da8dc",
+      "table_count": 979
+    },
+    "three_kingdoms": {
+      "file": "schema_3k.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_3k.ron",
+      "sha256": "f09177fa05f981880e18f85654bd375216e3d002fc2af5cd3d21b6f124f7a614",
+      "table_count": 1819
+    },
+    "pharaoh_dynasties": {
+      "file": "schema_ph_dyn.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_ph_dyn.ron",
+      "sha256": "8ba9f0c49e9313c1be4ad055c949800a6caa8a96c736ca7b2e1e8ca98bb9e957",
+      "table_count": 1230
+    },
+    "pharaoh": {
+      "file": "schema_ph.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_ph.ron",
+      "sha256": "f8621d033a3ae23a02e5bf8e695443fce8721dc3500b80cedb774f62ab7070f2",
+      "table_count": 1211
+    },
+    "troy": {
+      "file": "schema_troy.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_troy.ron",
+      "sha256": "8332875a61825d0c67516ccbd155ab9c38c52f628e1ab664f91074cfbffa45e5",
+      "table_count": 1126
+    },
+    "thrones_of_britannia": {
+      "file": "schema_tob.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_tob.ron",
+      "sha256": "d5c056e34c5277662834c8e102b4127803012ee37f9fd3c4d08b1ff95cc3e3ba",
+      "table_count": 1079
+    },
+    "attila": {
+      "file": "schema_att.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_att.ron",
+      "sha256": "cad6fc7feeb74286ea3ecad31f1270b1288e19e8d49f28cb222bd9eab05957f8",
+      "table_count": 1069
+    },
+    "rome2": {
+      "file": "schema_rom2.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_rom2.ron",
+      "sha256": "cbdb4f74265958ea77da2789e15093c7d12c441a7660cf95cba09e3cf5d6eecf",
+      "table_count": 1121
+    },
+    "shogun2": {
+      "file": "schema_sho2.ron.gz",
+      "source_url": "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/57a23a849fcaa805ccf3afe743bf46fd14a1a43c/schema_sho2.ron",
+      "sha256": "fcfd34315b9a2ad0c85e17dd290a50b4305ae34edafa03fa32096d72ca72b9d5",
+      "table_count": 1245
+    }
+  }
+}

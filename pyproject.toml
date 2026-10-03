@@ -1,6 +1,6 @@
 [project]
 name = "wyccc-mod-manager"
-version = "1.1.8"
+version = "1.1.9"
 description = "A focused Total War mod manager."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,3 +42,6 @@ target-version = "py311"
 [tool.setuptools]
 packages = ["backend"]
 py-modules = ["main"]
+
+[tool.setuptools.package-data]
+backend = ["schemas/*.ron.gz", "schemas/*.json", "schemas/*.txt", "schemas/*.md"]

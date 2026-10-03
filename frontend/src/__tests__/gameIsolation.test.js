@@ -32,7 +32,7 @@ it.each(['refreshWorkshopInBackground', 'refreshModsInBackground', 'refreshColle
     const oldScan = deferred()
     const started = deferred()
     invokeMock.mockImplementation((name, changes) => {
-      if (name === 'scan_mods') { started.resolve(); return oldScan.promise }
+      if (name === 'scan_mods' || name === 'refresh_workshop_metadata') { started.resolve(); return oldScan.promise }
       if (name === 'save_settings') return Promise.resolve({
         settings: { selected_game: changes.selected_game, language: 'zh-CN' },
         paths: { game_id: changes.selected_game }, path_health: {},

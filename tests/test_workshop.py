@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import tempfile
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -575,6 +576,87 @@ class WorkshopMetadataTests(unittest.TestCase):
         self.assertEqual(item["description"], "English description")
         self.assertEqual(item["title_language"], "english")
         self.assertEqual(item["description_language"], "english")
+
+    def test_successful_english_fallback_is_cached_instead_of_queried_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            items = {"123": {"title": "English title", "description": "English description"}}
+            with patch(
+                "backend.workshop.query_workshop_languages",
+                return_value={"schinese": {"123": {"title": "English title", "description": "English description"}}},
+            ) as query:
+                service._refresh_localized_steamworks(items, ["123"], "schinese")
+                service._refresh_localized_steamworks(items, ["123"], "schinese")
+            self.assertEqual(query.call_count, 1)
+            self.assertFalse(items["123"]["localized"]["schinese"]["failed"])
+
+    def test_incremental_refresh_gets_english_and_chinese_in_one_steam_query(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            with (
+                patch("backend.workshop.urllib.request.urlopen", side_effect=AssertionError("unexpected HTTP")) as http,
+                patch("backend.workshop.query_workshop_languages", return_value={
+                    "english": {"123": {"title": "English title", "description": "English description", "updated_at": 123000}},
+                    "schinese": {"123": {"title": "中文标题", "description": "中文介绍", "updated_at": 123000}},
+                }) as query,
+            ):
+                item = service.refresh(["123"], "zh-CN", steamworks_first=True)["123"]
+            self.assertEqual(item["title"], "中文标题")
+            self.assertEqual(item["description"], "中文介绍")
+            self.assertEqual(service.get_many(["123"], "en-US")["123"]["title"], "English title")
+            self.assertEqual(item["updated_at"], 123000)
+            query.assert_called_once_with(["123"], ["english", "schinese"], app_id=1142710, timeout_seconds=20)
+            http.assert_not_called()
+
+    def test_incremental_steam_failure_falls_back_to_http_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            def english(items, ids, **kwargs):
+                items["123"] = {"title": "Fallback title", "description": "Fallback description"}
+            with (
+                patch("backend.workshop.query_workshop_languages", side_effect=SteamworksBridgeError("offline")) as query,
+                patch.object(service, "_refresh_english_details", side_effect=english) as http,
+            ):
+                item = service.refresh(["123"], "zh-CN", steamworks_first=True)["123"]
+            self.assertEqual(item["title"], "Fallback title")
+            self.assertEqual(query.call_count, 1)
+            http.assert_called_once()
+
+
+    def test_legacy_successful_english_fallback_does_not_need_a_new_query(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            now = int(time.time() * 1000)
+            items = {"123": {"title": "English title", "updated_at": now, "localized": {
+                "schinese": {"title": "", "description": "", "source": "steamworks", "failed": True,
+                    "last_error_at": 0, "fetched_at": now, "source_updated_at": now},
+            }}}
+            with patch("backend.workshop.query_workshop_languages") as query:
+                service._refresh_localized_steamworks(items, ["123"], "schinese")
+            query.assert_not_called()
+
+    def test_automatic_refresh_selects_stale_data_but_respects_failure_cooldowns(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            service = WorkshopMetadataService(Path(temporary) / "workshop_cache.json")
+            now = int(time.time() * 1000)
+            fresh = {"title": "Cached title", "fetched_at": now, "updated_at": 100,
+                "dependencies_fetched_at": now, "dependencies_language": "schinese",
+                "localized": {"schinese": {"source": "steamworks", "failed": False, "fetched_at": now,
+                    "source_updated_at": 100, "title": "", "description": ""}}}
+            cases = [(fresh, False), ({**fresh, "fetched_at": 1}, True),
+                ({**fresh, "updated_at": 200}, True),
+                ({**fresh, "dependencies_language": "english"}, True),
+                ({**fresh, "creator_id": "76561198000000002"}, True),
+                ({**fresh, "dependencies_fetched_at": 0, "dependencies_last_error_at": now}, False),
+                ({**fresh, "localized": {"schinese": {"failed": True, "last_error_at": now}}}, False),
+                ({**fresh, "result": 9, "title": ""}, False),
+                ({**fresh, "result": 9, "title": "", "fetched_at": 1}, True)]
+            for record, pending in cases:
+                with self.subTest(record=record):
+                    service.store.save({"schema_version": 7, "items": {"123": record}, "authors": {}})
+                    self.assertEqual(service.pending_refresh_ids(["123"], "zh-CN", app_id=1142710),
+                        ["123"] if pending else [])
+
 
     def test_dependency_refresh_failure_explains_the_cached_fallback(self) -> None:
         self.query_dependencies.side_effect = SteamworksBridgeError("Steam is unavailable")

@@ -9,6 +9,23 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.1.9",
+        "date": "2026-10-03",
+        "entries": (
+            (
+                "v119_adjusted_title",
+                (
+                    ("optimize", "v119_workshop_refresh_speed"),
+                    ("improvement", "v119_table_schema_update"),
+                ),
+            ),
+            (
+                "v119_fixed_title",
+                (("fix", "v119_runtime_pack_safety"),),
+            ),
+        ),
+    },
+    {
         "version": "1.1.8",
         "date": "2026-10-02",
         "entries": (
@@ -644,6 +661,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v119_adjusted_title": "调整",
+        "v119_workshop_refresh_speed": "优化新增MOD时，更新MOD信息的速度",
+        "v119_table_schema_update": "优化更新表结构功能",
+        "v119_fixed_title": "修复",
+        "v119_runtime_pack_safety": "内置pack存在的隐患",
         "v118_fixed_title": "修复",
         "v118_mod_diagnostics": "MOD启动排障存在的问题",
         "v118_added_title": "新增",
@@ -872,6 +894,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v119_adjusted_title": "Adjusted",
+        "v119_workshop_refresh_speed": "Improved the speed of refreshing MOD information after subscribing to a new MOD.",
+        "v119_table_schema_update": "Improved the table schema update feature.",
+        "v119_fixed_title": "Fixed",
+        "v119_runtime_pack_safety": "Fixed issues with the launcher's built-in Packs.",
         "v118_fixed_title": "Fixed",
         "v118_mod_diagnostics": "Issues with MOD startup troubleshooting.",
         "v118_added_title": "Added",
@@ -1100,6 +1127,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v119_adjusted_title": "조정",
+        "v119_workshop_refresh_speed": "새 MOD를 구독할 때 MOD 정보가 더 빠르게 갱신되도록 개선했습니다.",
+        "v119_table_schema_update": "테이블 구조 업데이트 기능을 개선했습니다.",
+        "v119_fixed_title": "수정",
+        "v119_runtime_pack_safety": "런처 내장 Pack의 문제를 수정했습니다.",
         "v118_fixed_title": "수정",
         "v118_mod_diagnostics": "MOD 실행 문제 진단 기능의 문제를 수정했습니다.",
         "v118_added_title": "추가",
@@ -1328,6 +1360,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v119_adjusted_title": "Изменено",
+        "v119_workshop_refresh_speed": "Ускорено обновление информации о MOD после подписки на новый MOD.",
+        "v119_table_schema_update": "Улучшена функция обновления структуры таблиц.",
+        "v119_fixed_title": "Исправлено",
+        "v119_runtime_pack_safety": "Исправлены проблемы встроенных Pack лаунчера.",
         "v118_fixed_title": "Исправлено",
         "v118_mod_diagnostics": "Проблемы с диагностикой запуска MOD.",
         "v118_added_title": "Добавлено",
@@ -1556,6 +1593,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v119_adjusted_title": "調整",
+        "v119_workshop_refresh_speed": "新しいMODをサブスクライブした際のMOD情報の更新を高速化しました。",
+        "v119_table_schema_update": "テーブル構造の更新機能を改善しました。",
+        "v119_fixed_title": "修正",
+        "v119_runtime_pack_safety": "ランチャー内蔵Packの問題を修正しました。",
         "v118_fixed_title": "修正",
         "v118_mod_diagnostics": "MOD起動トラブル診断の問題を修正しました。",
         "v118_added_title": "追加",
@@ -1784,6 +1826,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v119_adjusted_title": "Ajustado",
+        "v119_workshop_refresh_speed": "Se aceleró la actualización de la información de los MODs al suscribirse a uno nuevo.",
+        "v119_table_schema_update": "Se mejoró la función de actualización de la estructura de tablas.",
+        "v119_fixed_title": "Corregido",
+        "v119_runtime_pack_safety": "Se corrigieron problemas con los Packs integrados del lanzador.",
         "v118_fixed_title": "Corregido",
         "v118_mod_diagnostics": "Problemas con el diagnóstico de inicio de MODs.",
         "v118_added_title": "Añadido",

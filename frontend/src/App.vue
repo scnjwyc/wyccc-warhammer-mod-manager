@@ -1226,7 +1226,7 @@ onBeforeUnmount(() => {
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.scan(false)">
           {{ t('app.rescan') }}
         </button>
-        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.refreshWorkshopInBackground">
+        <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || store.workshopRefreshing || !store.pathHealth.game_ready" @click="store.refreshWorkshopInBackground(null, true)">
           {{ t('app.refreshWorkshop') }}
         </button>
         <button type="button" class="secondary-button sync-data-button" :disabled="!!store.busy || !store.pathHealth.game_ready" @click="store.openGameFolder">

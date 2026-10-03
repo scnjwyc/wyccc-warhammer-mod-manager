@@ -7,7 +7,7 @@ vi.mock('../bridge', () => ({ invoke: invokeMock }))
 import ModContextMenu from '../components/ModContextMenu.vue'
 import SchemaUpdateModal from '../components/SchemaUpdateModal.vue'
 import { useAppStore } from '../store'
-import { applyInterfaceLanguage, localizeBackendMessage } from '../languages'
+import { applyInterfaceLanguage, localizeBackendMessage, t } from '../languages'
 import App from '../App.vue'
 import ModList from '../components/ModList.vue'
 
@@ -99,6 +99,18 @@ describe('table schema update', () => {
     expect(wrapper.get('details').attributes('open')).toBeDefined()
   })
 
+  it('shows the bundled schema source without a network failure warning in every language', () => {
+    for (const language of ['zh-CN', 'en-US', 'ko-KR', 'ru-RU', 'ja-JP', 'es-ES']) {
+      applyInterfaceLanguage(language)
+      const wrapper = mount(SchemaUpdateModal, { props: { open: true,
+        report: { ...report, schema: { cached: false, bundled: true }, results: [] } } })
+      expect(wrapper.text()).toContain(t('schemaUpdate.bundled'))
+      expect(wrapper.text()).not.toContain(t('schemaUpdate.cached'))
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      wrapper.unmount()
+    }
+  })
+
   it('keeps a running update visible and closes only when it has finished', async () => {
     const wrapper = mount(SchemaUpdateModal, { props: { open: true, pending: true } })
     await wrapper.get('.modal-backdrop').trigger('mousedown')
@@ -116,6 +128,7 @@ describe('table schema update', () => {
       const error = localizeBackendMessage('db/test/x: schemaUpdate.unknownVersion')
       expect(error).toContain('db/test/x')
       expect(error).not.toContain('schemaUpdate.')
+      expect(localizeBackendMessage('schemaUpdate.bundledGameVersion')).toBe(t('schemaUpdate.bundledGameVersion'))
     }
     applyInterfaceLanguage('zh-CN')
   })

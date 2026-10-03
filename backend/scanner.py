@@ -30,6 +30,44 @@ _MANIFEST_FILE_RE = re.compile(r"^\s*([^\s]+)")
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _STEAM_KEYVALUES_TOKEN_RE = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
 _PACK_TYPE_MASK = 0x0F
+_LAUNCHER_RUNTIME_DB_ENTRY_RE = re.compile(
+    r"^db\\[^\\]+\\!+wyccc_(?:game_data|unit_data|dynamic_ror_compatibility)_v\d{4}$",
+    re.IGNORECASE,
+)
+_LAUNCHER_RUNTIME_ENTRY_NAMES = frozenset(
+    {
+        "script\\campaign\\mod\\wyccc_variant_selector_patch.lua",
+        "db\\units_custom_battle_permissions_tables\\!!!!wyccc_runtime",
+        "script\\enable_console_logging",
+    }
+)
+_LAUNCHER_RUNTIME_INTRO_MOVIE_ENTRIES = frozenset(
+    {
+        *(f"movies\\epilepsy_warning\\epilepsy_warning_{language}.ca_vp8" for language in (
+            "br", "cn", "cz", "de", "en", "es", "fr", "it", "kr", "pl", "ru", "tr", "zh",
+        )),
+        "movies\\gam_int.ca_vp8",
+        *(f"movies\\startup_movie_{index:02d}.ca_vp8" for index in range(1, 9)),
+    }
+)
+
+
+def _is_launcher_runtime_pack_entry(name: str) -> bool:
+    normalized = str(name).replace("/", "\\").casefold()
+    return (
+        normalized in _LAUNCHER_RUNTIME_ENTRY_NAMES
+        or bool(_LAUNCHER_RUNTIME_DB_ENTRY_RE.fullmatch(normalized))
+    )
+
+
+def _is_launcher_runtime_pack(entry_names: Iterable[str]) -> bool:
+    normalized = {
+        str(name).replace("/", "\\").casefold() for name in entry_names
+    }
+    return (
+        any(_is_launcher_runtime_pack_entry(name) for name in normalized)
+        or _LAUNCHER_RUNTIME_INTRO_MOVIE_ENTRIES.issubset(normalized)
+    )
 
 
 def _parse_steam_keyvalues(text: str) -> dict[str, object]:
@@ -756,6 +794,7 @@ class ModScanner:
             if (
                 pack_key in INTERNAL_FEATURE_PACK_NAMES
                 or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                or asset.is_launcher_runtime_pack
             ):
                 asset.hidden = True
             alias = internal_pack_display_name(asset.pack_name, language)
@@ -899,6 +938,7 @@ class ModScanner:
                 == "script\\campaign\\mod\\marthvariantselector.lua"
                 for name in entry_names
             ),
+            is_launcher_runtime_pack=_is_launcher_runtime_pack(entry_names),
             updated_at=updated_at,
             file_updated_at=updated_at,
             created_at=created_at,

@@ -69,6 +69,7 @@ class ModAsset:
     ignored_warning_codes: list[str] = field(default_factory=list)
     unit_data_tables: list[str] = field(default_factory=list)
     provides_variant_selector: bool = False
+    is_launcher_runtime_pack: bool = False
 
     @property
     def effective_name(self) -> str:
@@ -76,6 +77,7 @@ class ModAsset:
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        payload.pop("is_launcher_runtime_pack", None)
         selected_types = list(dict.fromkeys(self.mod_types or [self.mod_type or "unknown"]))
         if len(selected_types) > 1 and "unknown" in selected_types:
             selected_types.remove("unknown")

@@ -242,40 +242,63 @@ def ensure_unit_data_patch(
         if edits
         else None
     )
-    inputs = build_unit_data_inputs(
-        data_path,
-        assets,
-        active_ids,
-        playset_id,
-        settings,
-        edits,
-        snapshot,
-        game_id,
-    )
-    fingerprint = fingerprint_unit_data_inputs(inputs)
     store = _manifest_store(output_dir)
     previous = store.load()
-    if previous.get("fingerprint") == fingerprint and _manifest_output_is_valid(
-        previous, output_dir
-    ):
-        terminal_status = (
-            "zero_modification"
-            if previous.get("build_status") == "zero_modification"
-            else "reused"
-        )
-        return _result_from_manifest(previous, output_dir, terminal_status)
-
     patch_path = Path(output_dir) / UNIT_DATA_PATCH_NAME
-    if not edits:
-        patch_path.unlink(missing_ok=True)
-        build_status = "zero_modification"
-        output = None
-        result_payload: dict[str, Any] = {
-            "edited_unit_count": 0,
-            "disabled_unit_count": 0,
-            "entry_count": 0,
-        }
-    else:
+    for attempt in range(2):
+        inputs = build_unit_data_inputs(
+            data_path,
+            assets,
+            active_ids,
+            playset_id,
+            settings,
+            edits,
+            snapshot,
+            game_id,
+        )
+        fingerprint = fingerprint_unit_data_inputs(inputs)
+        if previous.get("fingerprint") == fingerprint and _manifest_output_is_valid(
+            previous, output_dir
+        ):
+            if not edits:
+                return _result_from_manifest(previous, output_dir, "zero_modification")
+            if snapshot is None:
+                raise ValueError("单位数据补丁数据源快照无效")
+            verified_snapshot = collect_game_data_source_snapshot(
+                data_path, assets, active_ids, game_id=game_id
+            )
+            verified_inputs = build_unit_data_inputs(
+                data_path,
+                assets,
+                active_ids,
+                playset_id,
+                settings,
+                edits,
+                verified_snapshot,
+                game_id,
+            )
+            if fingerprint_unit_data_inputs(verified_inputs) == fingerprint:
+                return _result_from_manifest(previous, output_dir, "reused")
+            if attempt:
+                raise ValueError(
+                    "单位数据来源在补丁生成期间连续变化，请等待 Steam 更新完成后重试"
+                )
+            snapshot = verified_snapshot
+            continue
+
+        if not edits:
+            patch_path.unlink(missing_ok=True)
+            build_status = "zero_modification"
+            output = None
+            result_payload: dict[str, Any] = {
+                "edited_unit_count": 0,
+                "disabled_unit_count": 0,
+                "entry_count": 0,
+            }
+            break
+
+        if snapshot is None:
+            raise ValueError("单位数据补丁数据源快照无效")
         built = build_unit_data_patch(
             output_dir,
             str(data_path),
@@ -286,7 +309,30 @@ def ensure_unit_data_patch(
             source_snapshot=snapshot,
             game_id=game_id,
         )
-        if built.get("path") and Path(str(built["path"])).is_file():
+        verified_snapshot = collect_game_data_source_snapshot(
+            data_path, assets, active_ids, game_id=game_id
+        )
+        verified_inputs = build_unit_data_inputs(
+            data_path,
+            assets,
+            active_ids,
+            playset_id,
+            settings,
+            edits,
+            verified_snapshot,
+            game_id,
+        )
+        if fingerprint_unit_data_inputs(verified_inputs) != fingerprint:
+            patch_path.unlink(missing_ok=True)
+            if attempt:
+                raise ValueError(
+                    "单位数据来源在补丁生成期间连续变化，请等待 Steam 更新完成后重试"
+                )
+            snapshot = verified_snapshot
+            continue
+
+        returned_path = Path(str(built.get("path") or "")).resolve(strict=False)
+        if built.get("path") and returned_path == patch_path.resolve(strict=False) and patch_path.is_file():
             build_status = "generated"
             output = _output_record(patch_path)
             result_payload = dict(built.get("stats", {}))
@@ -299,6 +345,9 @@ def ensure_unit_data_patch(
                 "disabled_unit_count": 0,
                 "entry_count": 0,
             }
+        break
+    else:  # pragma: no cover - the bounded loop either breaks or raises above.
+        raise ValueError("单位数据补丁生成未完成")
 
     manifest = {
         "schema_version": FINGERPRINT_SCHEMA_VERSION,

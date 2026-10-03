@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import struct
 import tempfile
 import unittest
@@ -22,7 +25,7 @@ from backend.schema_update import (
     update_mod_schema,
 )
 from backend.start_options import read_pack_entries
-from backend.table_schema import load_latest_schema, parse_schema
+from backend.table_schema import BUNDLED_SCHEMA_DIR, SCHEMA_NAMES, load_latest_schema, parse_schema
 from tests.helpers import make_asset, write_pack
 
 
@@ -294,6 +297,76 @@ class PackMigrationTests(unittest.TestCase):
 
 
 class SchemaLoaderTests(unittest.TestCase):
+    def test_bundled_schema_works_without_network_or_an_existing_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundled = root / "bundled"
+            bundled.mkdir()
+            (bundled / "schema_wh3.ron.gz").write_bytes(gzip.compress(RON.encode()))
+            with (
+                patch("backend.table_schema.BUNDLED_SCHEMA_DIR", bundled, create=True),
+                patch("backend.table_schema.urlopen", side_effect=AssertionError("unexpected network")) as fetch,
+            ):
+                schemas, info = load_latest_schema("warhammer3", root / "cache", prefer_bundled=True)
+            self.assertEqual(schemas, parse_schema(RON))
+            self.assertTrue(info["bundled"])
+            self.assertFalse(info["cached"])
+            fetch.assert_not_called()
+            self.assertFalse((root / "cache").exists())
+
+    def test_bundled_schema_ignores_an_old_or_corrupt_download_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundled = root / "bundled"
+            bundled.mkdir()
+            (bundled / "schema_wh3.ron.gz").write_bytes(gzip.compress(RON.encode()))
+            cache = root / "cache"
+            cache.mkdir()
+            for cached in (RON.replace("version:2", "version:1"), "corrupt cache"):
+                with self.subTest(cached=cached):
+                    (cache / "schema_wh3.ron").write_text(cached, encoding="utf-8")
+                    with (
+                        patch("backend.table_schema.BUNDLED_SCHEMA_DIR", bundled),
+                        patch("backend.table_schema.urlopen") as fetch,
+                    ):
+                        schemas, info = load_latest_schema("warhammer3", cache, prefer_bundled=True)
+                    self.assertEqual(schemas, parse_schema(RON))
+                    self.assertTrue(info["bundled"])
+                    fetch.assert_not_called()
+
+    def test_invalid_or_missing_bundle_does_not_attempt_network(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "schema_wh3.ron.gz"
+            for content in (None, b"not gzip", gzip.compress(b"invalid schema")):
+                with self.subTest(content=content):
+                    if content is not None:
+                        path.write_bytes(content)
+                    with (
+                        patch("backend.table_schema.BUNDLED_SCHEMA_DIR", root),
+                        patch("backend.table_schema.urlopen") as fetch,
+                        self.assertRaisesRegex(ValueError, "schemaUpdate.invalidSchema"),
+                    ):
+                        load_latest_schema("warhammer3", root / "cache", prefer_bundled=True)
+                    fetch.assert_not_called()
+
+    def test_shipped_bundles_cover_supported_games_and_match_the_upstream_manifest(self):
+        manifest = json.loads((BUNDLED_SCHEMA_DIR / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(manifest["games"]), set(SCHEMA_NAMES))
+        self.assertIn("MIT License", (BUNDLED_SCHEMA_DIR / "LICENSE.txt").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "cache"
+            with patch("backend.table_schema.urlopen", side_effect=AssertionError("unexpected network")) as fetch:
+                for game_id, snapshot in manifest["games"].items():
+                    with self.subTest(game_id=game_id):
+                        raw = gzip.decompress((BUNDLED_SCHEMA_DIR / snapshot["file"]).read_bytes())
+                        self.assertEqual(hashlib.sha256(raw).hexdigest(), snapshot["sha256"])
+                        schemas, info = load_latest_schema(game_id, cache, prefer_bundled=True)
+                        self.assertEqual(len(schemas), snapshot["table_count"])
+                        self.assertTrue(info["bundled"])
+                fetch.assert_not_called()
+            self.assertFalse(cache.exists())
+
     def test_ron_options_nested_sequences_patches_and_comments(self):
         result = parse_schema("// comment\n" + RON)
         self.assertEqual(result["example_tables"][0]["fields"][0]["default"], "patched")
@@ -326,6 +399,88 @@ class SchemaLoaderTests(unittest.TestCase):
 
 
 class BatchApiTests(unittest.TestCase):
+    def test_chinese_update_migrates_pack_offline_on_first_use(self):
+        ron = '''(version:5,definitions:{"example_tables":[
+            (version:2,fields:[(name:"count",field_type:I64),
+                (name:"added",field_type:Boolean,default_value:Some("true")),(name:"key",field_type:StringU8)]),
+            (version:1,fields:[(name:"key",field_type:StringU8),(name:"count",field_type:I32),
+                (name:"removed",field_type:Boolean)])]},patches:{})'''
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundled = root / "bundled"
+            bundled.mkdir()
+            (bundled / "schema_wh3.ron.gz").write_bytes(gzip.compress(ron.encode()))
+            game = root / "game"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "db.pack", 1, entries=[("db/example_tables/a", NEW_DATA)])
+            mod = write_pack(data / "mod.pack", 3, entries=[("db/example_tables/a", OLD_DATA)])
+            original = mod.read_bytes()
+            api = API(root / "state")
+            api.settings_service.save({"game_path": str(game), "fetch_workshop_metadata": False, "language": "zh-CN"})
+            api._assets = {"mod": make_asset(mod, "mod", "data")}
+            api.state_repository.update_current_playset(["mod"], "warhammer3")
+            before = api.state_repository.get_current_playset("warhammer3")
+            with (
+                patch("backend.api.is_game_running", return_value=False),
+                patch("backend.table_schema.BUNDLED_SCHEMA_DIR", bundled),
+                patch("backend.table_schema.urlopen", side_effect=AssertionError("unexpected network")) as fetch,
+                patch.object(api, "_scan_mods", return_value={"mods": []}),
+            ):
+                result = api.call("update_mod_table_schemas", [["mod"], "warhammer3"])
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["data"]["updated_count"], 1)
+            self.assertTrue(result["data"]["schema"]["bundled"])
+            self.assertEqual(read_pack_entries(mod)[0].payload, NEW_DATA)
+            self.assertEqual(Path(result["data"]["results"][0]["backup_path"]).read_bytes(), original)
+            self.assertEqual(api.state_repository.get_current_playset("warhammer3"), before)
+            self.assertFalse((api.data_dir / "schemas").exists())
+            fetch.assert_not_called()
+
+            # A later game update must fail before rewriting any MOD or backing it up again.
+            mod.write_bytes(original)
+            newer = NEW_DATA.replace(VERSION_MARKER + struct.pack("<i", 2), VERSION_MARKER + struct.pack("<i", 3))
+            write_pack(data / "db.pack", 1, entries=[("db/example_tables/a", newer)])
+            backups_before = list((api.data_dir / "backups").rglob("*"))
+            with (
+                patch("backend.api.is_game_running", return_value=False),
+                patch("backend.table_schema.BUNDLED_SCHEMA_DIR", bundled),
+                patch("backend.table_schema.urlopen", side_effect=AssertionError("unexpected network")) as fetch,
+                patch.object(api, "_scan_mods", return_value={"mods": []}),
+            ):
+                result = api.call("update_mod_table_schemas", [["mod"], "warhammer3"])
+            self.assertFalse(result["ok"], result)
+            self.assertEqual(result["error"]["message"], "schemaUpdate.bundledGameVersion")
+            self.assertEqual(mod.read_bytes(), original)
+            self.assertEqual(list((api.data_dir / "backups").rglob("*")), backups_before)
+            fetch.assert_not_called()
+
+    def test_interface_language_selects_bundled_schemas(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "game"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            write_pack(data / "db.pack", 1, entries=[("db/example_tables/a", NEW_DATA)])
+            mod = write_pack(data / "mod.pack", 3, entries=[("db/example_tables/a", NEW_DATA)])
+            api = API(root / "state")
+            api._assets = {"mod": make_asset(mod, "mod", "data")}
+            for language in ("zh-CN", "en-US", "ko-KR", "ru-RU", "ja-JP", "es-ES"):
+                with self.subTest(language=language):
+                    api.settings_service.save({"game_path": str(game), "language": language})
+                    with (
+                        patch("backend.api.is_game_running", return_value=False),
+                        patch("backend.api.load_latest_schema", return_value=(SCHEMAS, {"cached": False})) as loader,
+                        patch.object(api, "_scan_mods", return_value={"mods": []}),
+                    ):
+                        result = api.call("update_mod_table_schemas", [["mod"], "warhammer3"])
+                    self.assertTrue(result["ok"], result)
+                    loader.assert_called_once_with(
+                        "warhammer3", api.data_dir / "schemas", prefer_bundled=language == "zh-CN"
+                    )
+
     def test_batch_continues_after_a_failure_deduplicates_paths_and_preserves_playset(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

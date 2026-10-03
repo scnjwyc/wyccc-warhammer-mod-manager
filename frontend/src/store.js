@@ -81,7 +81,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.1.8',
+    appVersion: '1.1.9',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -116,6 +116,9 @@ export const useAppStore = defineStore('app', {
     orderSaveError: '',
     busy: '',
     workshopRefreshing: false,
+    pendingWorkshopRefreshIds: [],
+    pendingWorkshopRefreshAll: false,
+    pendingWorkshopRefreshForce: false,
     liveModRefreshing: false,
     collectionImportSync: null,
     warnings: [],
@@ -444,6 +447,9 @@ export const useAppStore = defineStore('app', {
       this.warnings = []
       this.gameUpdatedAt = 0
       this.modRevision = 0
+      this.pendingWorkshopRefreshIds = []
+      this.pendingWorkshopRefreshAll = false
+      this.pendingWorkshopRefreshForce = false
       this.runtime = { running: false, mod_revision: 0 }
       this.saveGames = []
       this.saveGamesDirectory = ''
@@ -516,50 +522,50 @@ export const useAppStore = defineStore('app', {
         return data
       })
     },
-    async refreshWorkshopInBackground() {
-      if (this.workshopRefreshing || this.runtime.running) return
+    async refreshWorkshopInBackground(workshopIds = null, force = false) {
+      if (this.runtime.running) return
+      let requested = Array.isArray(workshopIds)
+        ? [...new Set(workshopIds.map(String).filter(id => /^\d+$/.test(id)))] : null
+      if (requested && !requested.length) return
+      if (this.workshopRefreshing) {
+        if (requested) this.pendingWorkshopRefreshIds = [...new Set([...this.pendingWorkshopRefreshIds, ...requested])]
+        else this.pendingWorkshopRefreshAll = true
+        this.pendingWorkshopRefreshForce ||= force
+        return
+      }
       const revision = this.gameContextRevision
-      const folderRevision = this.modFolderRevision
-      await this.flushPlaysetUpdates()
-      if (revision !== this.gameContextRevision) return
+      const gameId = this.settings.selected_game || 'warhammer3'
       this.workshopRefreshing = true
       try {
-        const data = await invoke('scan_mods', true)
-        if (!this.isCurrentGameResult(data, revision)) return
-        const installed = new Set(data.mods.map(mod => mod.id))
-        const currentOrder = [...this.activeIds]
-        this.mods = data.mods
-        this.replaceActiveIds(
-          this.dirty
-            ? currentOrder.filter(id => installed.has(id))
-            : data.enabled_order,
-        )
-        this.reconcileInactiveOrder()
-        this.missingEnabledIds = data.missing_enabled_ids
-        this.orderToken = data.order_token
-        this.warnings = data.warnings
-        this.gameUpdatedAt = Number(data.game_updated_at || 0)
-        this.modRevision = Number(data.mod_revision ?? this.modRevision)
-        this.playsets = data.playsets || this.playsets
-        this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
-        if (folderRevision === this.modFolderRevision && Array.isArray(data.mod_folders)) {
-          this.modFolders = data.mod_folders
-        }
-        if (!this.selectedId || !installed.has(this.selectedId)) {
-          this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
-        }
-        this.selectedIds = this.selectedIds.filter(id => installed.has(id))
-        if (this.selectedId && !this.selectedIds.includes(this.selectedId)) this.selectedIds = [this.selectedId]
-        if (!installed.has(this.selectionAnchorId)) this.selectionAnchorId = this.selectedId
-        this.workshopEligibilityRequestId += 1
-        this.workshopEligibilityKnownIds = new Set()
-        this.workshopUpdateEligibility = new Set()
-        void this.refreshWorkshopUpdateEligibility(
-          this.mods.filter(mod => mod?.workshop_id).map(mod => mod.id),
-        )
-        await this.loadPreview(this.selectedId)
-        if (!this.isCurrentGameResult(data, revision)) return
-        void this.loadThumbnails(true)
+        await this.flushPlaysetUpdates()
+        if (revision !== this.gameContextRevision) return
+        do {
+          const folderRevision = this.modFolderRevision
+          const args = [requested, gameId]
+          if (!requested && !force) args.push(true)
+          const data = await invoke('refresh_workshop_metadata', ...args)
+          if (!this.isCurrentGameResult(data, revision)) return
+          // A slower metadata reply must not replace a newer filesystem snapshot.
+          if (Number(data.mod_revision ?? this.modRevision) >= this.modRevision) {
+            const affected = (data.mods || []).filter(mod => mod?.workshop_id
+              && (!requested || requested.includes(String(mod.workshop_id)))).map(mod => mod.id)
+            for (const id of affected) delete this.thumbnails[id]
+            await this.applyExternalScan(data, { revision, folderRevision, preservePlaysetOrder: true })
+            if (!this.isCurrentGameResult(data, revision)) return
+            for (const id of affected) {
+              this.workshopEligibilityKnownIds.delete(id)
+              this.workshopUpdateEligibility.delete(id)
+            }
+            void this.refreshWorkshopUpdateEligibility(affected)
+          }
+          requested = this.pendingWorkshopRefreshAll ? null : [...this.pendingWorkshopRefreshIds]
+          const pending = this.pendingWorkshopRefreshAll || requested.length > 0
+          force = this.pendingWorkshopRefreshForce
+          this.pendingWorkshopRefreshIds = []
+          this.pendingWorkshopRefreshAll = false
+          this.pendingWorkshopRefreshForce = false
+          if (!pending) break
+        } while (revision === this.gameContextRevision)
         this.notify(t('toast.workshopComplete'))
       } catch (error) {
         if (revision === this.gameContextRevision) this.notify(error.message || t('toast.workshopFailed'), 'warning')
@@ -1782,14 +1788,15 @@ export const useAppStore = defineStore('app', {
       }
     },
     async applyExternalScan(data, {
-      forcePlaysetOrder = false, revision = this.gameContextRevision, folderRevision = this.modFolderRevision,
+      forcePlaysetOrder = false, preservePlaysetOrder = false,
+      revision = this.gameContextRevision, folderRevision = this.modFolderRevision,
     } = {}) {
       if (!this.isCurrentGameResult(data, revision)) return
       const previousIds = [...this.activeIds]
       const installed = new Set((data.mods || []).map(mod => mod.id))
       this.mods = data.mods || []
       this.replaceActiveIds(
-        this.dirty && !forcePlaysetOrder
+        preservePlaysetOrder || (this.dirty && !forcePlaysetOrder)
           ? previousIds.filter(id => installed.has(id))
           : (data.enabled_order || []),
       )
@@ -1817,7 +1824,6 @@ export const useAppStore = defineStore('app', {
       const folderRevision = this.modFolderRevision
       if (
         this.liveModRefreshing
-        || this.workshopRefreshing
         || (this.runtime.running && this.settings.auto_low_consumption_mode !== false)
         || this.busy
       ) return null
@@ -1830,16 +1836,12 @@ export const useAppStore = defineStore('app', {
             .map(mod => String(mod?.workshop_id || '').trim())
             .filter(Boolean),
         )
-        let data = await invoke('scan_mods', false)
+        const data = await invoke('scan_mods', false)
         if (!this.isCurrentGameResult(data, revision)) return null
-        const hasNewWorkshopMod = (data.mods || []).some(mod => {
+        const newWorkshopIds = (data.mods || []).filter(mod => {
           const workshopId = String(mod?.workshop_id || '').trim()
           return mod?.source === 'workshop' && workshopId && !previousWorkshopIds.has(workshopId)
-        })
-        if (hasNewWorkshopMod && this.settings.fetch_workshop_metadata !== false) {
-          data = await invoke('scan_mods', true)
-          if (!this.isCurrentGameResult(data, revision)) return null
-        }
+        }).map(mod => String(mod.workshop_id))
         const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
         const previousActiveIds = [...this.activeIds]
         await this.applyExternalScan(data, { forcePlaysetOrder, revision, folderRevision })
@@ -1850,6 +1852,9 @@ export const useAppStore = defineStore('app', {
             this.dirty = true
             this.recordCurrentPlaysetChange()
           }
+        }
+        if (newWorkshopIds.length && this.settings.fetch_workshop_metadata !== false) {
+          void this.refreshWorkshopInBackground(newWorkshopIds)
         }
         return data
       } catch (error) {

@@ -1,0 +1,78 @@
+{
+  "before": {
+    "mods": 305,
+    "workshop_items": 290,
+    "local_scan_seconds": 0.637,
+    "metadata_seconds": 35.04,
+    "stages": {
+      "english": 33.096,
+      "localized": 1.382,
+      "dependencies": 0.5,
+      "authors": 0.0
+    }
+  },
+  "method": "Copy live settings and metadata cache into a temporary directory; remove one existing item from the copy to simulate a cold subscription; use real read-only Steam queries. No installed MOD or live cache is modified.",
+  "after": {
+    "mods": 305,
+    "workshop_items": 290,
+    "request_items": 1,
+    "local_scan_seconds": 0.905,
+    "metadata_seconds": 11.192,
+    "stages": [
+      {
+        "phase": "english",
+        "items": 1,
+        "seconds": 9.536
+      },
+      {
+        "phase": "localized",
+        "items": 1,
+        "seconds": 0.529
+      },
+      {
+        "phase": "dependencies",
+        "items": 1,
+        "seconds": 0.905
+      },
+      {
+        "phase": "authors",
+        "items": 1,
+        "seconds": 0.0
+      }
+    ],
+    "title_available": true,
+    "author_available": true,
+    "unchanged_old_cache_records": 359,
+    "old_cache_records": 359
+  },
+  "final": {
+    "mods": 305,
+    "workshop_items": 290,
+    "request_items": 1,
+    "local_scan_seconds": 0.871,
+    "metadata_seconds": 1.493,
+    "stages": [
+      {
+        "phase": "english_and_localized",
+        "items": 1,
+        "seconds": 0.89
+      },
+      {
+        "phase": "dependencies",
+        "items": 1,
+        "seconds": 0.542
+      }
+    ],
+    "http_calls": 0,
+    "title_available": true,
+    "author_available": true,
+    "unchanged_old_cache_records": 359,
+    "old_cache_records": 359
+  },
+  "automatic_cache_filter": {
+    "installed_workshop_items": 290,
+    "warm_pending": 0,
+    "one_removed_pending": 1,
+    "removed_item_selected": true
+  }
+}

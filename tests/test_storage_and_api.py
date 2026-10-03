@@ -18,7 +18,7 @@ from backend.constants import (
 )
 from backend.launch_paths import LaunchPathMap
 from backend.models import GamePaths, ModAsset, ScanResult
-from backend.scanner import _asset_id
+from backend.scanner import ModScanner, _asset_id
 from backend.share import export_share, parse_pending_workshop_mod_id
 from backend.start_options import (
     DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
@@ -539,6 +539,72 @@ class ApiContractTests(unittest.TestCase):
             )
 
             self.assertEqual(api._unit_data_source_ids(), [normal.id])
+
+    def test_renamed_launcher_generated_pack_stays_hidden_and_out_of_load_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            copied_patch = write_pack(
+                data / "!!!!wyccc_game_data_patch (1).pack",
+                entries=[(
+                    "db\\projectiles_tables\\!!!!wyccc_game_data_v0053",
+                    b"generated data",
+                )],
+            )
+            asset = ModScanner._make_asset(copied_patch, SOURCE_DATA)
+            ModScanner._apply_internal_pack_metadata({asset.id: asset}, "zh-CN")
+            api = API(root / "state")
+            try:
+                api._assets = {asset.id: asset}
+                self.assertTrue(asset.is_launcher_runtime_pack)
+                self.assertTrue(asset.hidden)
+                self.assertNotIn("is_launcher_runtime_pack", asset.to_dict())
+                self.assertEqual(api._canonicalize_mod_ids([asset.id]), [])
+            finally:
+                api.close()
+
+    def test_runtime_pack_staging_replaces_a_symlink_at_its_data_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            data.mkdir()
+            source = root / "generated.pack"
+            source.write_bytes(b"trusted generated pack")
+            target = data / GAME_DATA_PATCH_NAME
+            target.write_bytes(b"external sentinel")
+            api = API(root / "state")
+            atomic_targets: list[Path] = []
+
+            def replace_target(source_path: Path, target_path: Path) -> None:
+                atomic_targets.append(target_path)
+                target_path.write_bytes(source_path.read_bytes())
+
+            original_is_symlink = Path.is_symlink
+
+            def target_is_symlink(path: Path) -> bool:
+                if path == target:
+                    return True
+                return original_is_symlink(path)
+
+            try:
+                with (
+                    patch.object(api, "_atomic_copy", side_effect=replace_target),
+                    patch.object(Path, "is_symlink", autospec=True, side_effect=target_is_symlink),
+                ):
+                    staged = api._stage_runtime_pack_in_data(
+                        str(source), data, GAME_DATA_PATCH_NAME
+                    )
+                self.assertEqual(
+                    staged.resolve(strict=False), target.resolve(strict=False)
+                )
+                self.assertEqual(
+                    [path.resolve(strict=False) for path in atomic_targets],
+                    [target.resolve(strict=False)],
+                )
+                self.assertEqual(target.read_bytes(), b"trusted generated pack")
+            finally:
+                api.close()
 
     def test_terminate_game_rpc_uses_the_selected_game_executable_and_updates_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

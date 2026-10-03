@@ -196,6 +196,7 @@ class API:
         self._encyclopedia_views: dict[str, Any] = {}
         self._encyclopedia_editors: dict[str, Any] = {}
         self._scan_lock = threading.Lock()
+        self._workshop_refresh_lock = threading.Lock()
         self._context_lock = threading.RLock()
         self._file_operation_lock = threading.RLock()
         self._game_context_revision = 0
@@ -250,6 +251,7 @@ class API:
             "select_rpfm_executable": self._select_rpfm_executable,
             "select_mod_profile": self._select_mod_profile,
             "scan_mods": self._scan_mods,
+            "refresh_workshop_metadata": self._refresh_workshop_metadata,
             "save_mod_user_data": self._save_mod_user_data,
             "generate_mod_user_data": self._generate_mod_user_data,
             "list_mod_types": self._list_mod_types,
@@ -1015,7 +1017,65 @@ class API:
         except Exception as exc:
             raise ValueError(f"无法打开官方配置选择器：{exc}") from exc
 
+    def _refresh_workshop_metadata(
+        self, workshop_ids: list[str] | None = None, game_id: str = "", only_stale: bool = False
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            revision = self._game_context_revision
+            settings = self.settings_service.get()
+            definition = self._active_game()
+        discarded = {"discarded": True, "game_id": definition.id, "context_revision": revision}
+        if game_id and game_id != definition.id:
+            return discarded
+        if workshop_ids is None:
+            snapshot = self._scan_mods(False)
+            if snapshot.get("discarded"):
+                return snapshot
+        elif not isinstance(workshop_ids, list):
+            raise ValueError("Workshop IDs must be a list")
+        with self._context_lock:
+            if revision != self._game_context_revision:
+                return discarded
+            installed = {asset.workshop_id for asset in self._assets.values() if asset.workshop_id.isdigit()}
+        ids = sorted(installed) if workshop_ids is None else list(
+            dict.fromkeys(str(value) for value in workshop_ids if str(value) in installed)
+        )
+        # Network waits must not own the local scan lock. Serialize cache writers separately.
+        with self._workshop_refresh_lock:
+            with self._context_lock:
+                if revision != self._game_context_revision:
+                    return discarded
+            warning = ""
+            if only_stale:
+                ids = self.workshop_service.pending_refresh_ids(
+                    ids, str(settings.get("language") or DEFAULT_LANGUAGE), app_id=int(definition.app_id)
+                )
+            if ids:
+                started = time.monotonic()
+                try:
+                    self.workshop_service.refresh(
+                        ids, str(settings.get("language") or DEFAULT_LANGUAGE), app_id=int(definition.app_id),
+                        steamworks_first=workshop_ids is not None or only_stale,
+                    )
+                    warning = self.workshop_service.last_refresh_warning
+                except Exception as exc:
+                    warning = f"工坊在线信息刷新失败：{exc}"
+                logger.info("Workshop metadata refresh game=%s requested=%s incremental=%s elapsed=%.3fs",
+                    definition.id, len(ids), workshop_ids is not None, time.monotonic() - started)
+            with self._context_lock:
+                if revision != self._game_context_revision:
+                    return discarded
+            result = self._scan_mods(False)
+            if result.get("context_revision") != revision:
+                return discarded
+            if warning and not result.get("discarded"):
+                result["warnings"].append({"code": "workshop_dependency_refresh", "severity": "warning",
+                    "message": warning, "ignorable": True})
+            return result
+
     def _scan_mods(self, refresh_workshop: bool = False) -> dict[str, Any]:
+        if refresh_workshop:
+            return self._refresh_workshop_metadata()
         with self._context_lock:
             context_revision = self._game_context_revision
             settings = self.settings_service.get()
@@ -1121,6 +1181,7 @@ class API:
                     mod.hidden = bool(
                         mod.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
                         or mod.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                        or mod.is_launcher_runtime_pack
                         or hidden_mod_ids.intersection([mod.id, *mod.alternate_ids])
                     )
                     raw_ignored_warning_codes = custom.get("ignored_warning_codes")
@@ -1232,6 +1293,7 @@ class API:
         managed = (
             asset.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
             or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+            or asset.is_launcher_runtime_pack
         )
         effective_hidden = bool(hidden) or managed
         asset.hidden = self.state_repository.set_playset_mod_hidden(
@@ -2087,6 +2149,7 @@ class API:
             asset.hidden = bool(
                 asset.pack_name.casefold() in INTERNAL_FEATURE_PACK_NAMES
                 or asset.workshop_id in INTERNAL_FEATURE_WORKSHOP_IDS
+                or asset.is_launcher_runtime_pack
                 or hidden_mod_ids.intersection([asset.id, *asset.alternate_ids])
             )
             if asset.hidden:
@@ -2951,11 +3014,18 @@ class API:
                 results.append({**row, "status": "failed", "error": str(exc)})
         schema_info = {"cached": False}
         if candidates:
-            schemas, schema_info = load_latest_schema(active_game, self.data_dir / "schemas")
+            schemas, schema_info = load_latest_schema(
+                active_game, self.data_dir / "schemas", prefer_bundled=self.interface_language() == "zh-CN"
+            )
             paths = self.settings_service.resolve_game_paths()
             if not paths.data_path:
                 raise ValueError("schemaUpdate.gameDataMissing")
-            targets = installed_definitions(Path(paths.data_path), names, schemas)
+            try:
+                targets = installed_definitions(Path(paths.data_path), names, schemas)
+            except ValueError as exc:
+                if schema_info.get("bundled") and str(exc) == "schemaUpdate.unknownGameVersion":
+                    raise ValueError("schemaUpdate.bundledGameVersion") from exc
+                raise
             for path, row in candidates:
                 try:
                     outcome = update_mod_schema(path, schemas, targets, self.data_dir / "backups" / "table-schemas" / active_game)
@@ -3088,7 +3158,12 @@ class API:
         data_root: Path,
         pack_name: str,
     ) -> Path | None:
-        target = (data_root / pack_name).resolve(strict=False)
+        resolved_data_root = data_root.resolve(strict=False)
+        if Path(pack_name).name != pack_name or pack_name in {".", ".."}:
+            raise ValueError("运行时 Pack 文件名无效")
+        target = resolved_data_root / pack_name
+        if target.parent.resolve(strict=False) != resolved_data_root:
+            raise ValueError("运行时 Pack 目标超出游戏 Data 目录")
         if not source_value:
             target.unlink(missing_ok=True)
             return None
@@ -3096,7 +3171,7 @@ class API:
         source = Path(source_value)
         if not source.is_file():
             raise FileNotFoundError(f"运行时 Pack 不存在：{source}")
-        if source.resolve(strict=False) != target:
+        if target.is_symlink() or source.resolve(strict=False) != target.resolve(strict=False):
             self._atomic_copy(source, target)
         return target
 
@@ -3204,6 +3279,10 @@ class API:
         ):
             return True
         if normalized in self._internal_feature_mod_ids:
+            return True
+        asset_id = self._asset_aliases.get(normalized, normalized)
+        asset = self._assets.get(asset_id)
+        if asset is not None and asset.is_launcher_runtime_pack:
             return True
         pending = parse_pending_workshop_mod_id(normalized)
         if pending and pending[0] in INTERNAL_FEATURE_WORKSHOP_IDS:

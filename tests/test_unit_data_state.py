@@ -5,15 +5,18 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from backend.game_data import TABLE_SCHEMAS, GameDataEntry, DbSource
 from backend.start_options import UNIT_DATA_PATCH_NAME
 from backend.unit_data_state import (
     ensure_unit_data_patch,
     fingerprint_unit_data_inputs,
+    build_unit_data_inputs,
     load_unit_data_edits,
     save_unit_data_edits,
 )
+from backend.start_options import collect_game_data_source_snapshot
 
 
 def _encode_value(field_type: str, value: Any) -> bytes:
@@ -214,6 +217,108 @@ class UnitDataStateTests(_TempGame):
             {**base, "edits": {"inf_swordsmen": {"campaign_cap": 9}}}
         )
         self.assertNotEqual(first, changed_edits)
+
+    def _change_vanilla_unit_count(self, count: int) -> None:
+        entries = [
+            GameDataEntry(
+                entry.name,
+                _table_payload(
+                    "main_units_tables",
+                    7,
+                    [
+                        {
+                            "unit": "inf_swordsmen",
+                            "caste": "infantry",
+                            "land_unit": "land_inf_swordsmen",
+                            "num_men": count,
+                            "campaign_cap": 4,
+                            "recruitment_cost": 400,
+                            "upkeep_cost": 100,
+                        }
+                    ],
+                ) if "main_units_tables" in entry.name else entry.payload,
+            )
+            for entry in self._sources_pack.entries
+        ]
+        self._sources_pack = DbSource("db.pack", tuple(entries))
+        self._build_db_pack()
+
+    def test_source_update_during_generation_retries_with_a_fresh_snapshot(self) -> None:
+        self._build_db_pack()
+        save_unit_data_edits(self.runtime, {"inf_swordsmen": {"campaign_cap": 9}})
+        from backend import unit_data_state
+
+        build = unit_data_state.build_unit_data_patch
+        calls = 0
+
+        def build_then_update(*args, **kwargs):
+            nonlocal calls
+            result = build(*args, **kwargs)
+            calls += 1
+            if calls == 1:
+                self._change_vanilla_unit_count(91)
+            return result
+
+        with patch(
+            "backend.unit_data_state.build_unit_data_patch",
+            side_effect=build_then_update,
+        ):
+            result = ensure_unit_data_patch(
+                self.runtime,
+                self.data,
+                self.assets,
+                [],
+                "default",
+                {"unit_model_multiplier": 1},
+            )
+
+        snapshot = collect_game_data_source_snapshot(self.data, self.assets, [])
+        expected_inputs = build_unit_data_inputs(
+            self.data,
+            self.assets,
+            [],
+            "default",
+            {"unit_model_multiplier": 1},
+            load_unit_data_edits(self.runtime),
+            snapshot,
+        )
+        self.assertEqual(calls, 2)
+        self.assertEqual(result["status"], "generated")
+        self.assertEqual(result["fingerprint"], fingerprint_unit_data_inputs(expected_inputs))
+
+    def test_repeated_source_updates_abort_and_remove_the_stale_generated_pack(self) -> None:
+        self._build_db_pack()
+        save_unit_data_edits(self.runtime, {"inf_swordsmen": {"campaign_cap": 9}})
+        from backend import unit_data_state
+
+        build = unit_data_state.build_unit_data_patch
+        calls = 0
+
+        def build_then_update(*args, **kwargs):
+            nonlocal calls
+            result = build(*args, **kwargs)
+            calls += 1
+            self._change_vanilla_unit_count(90 + calls)
+            return result
+
+        with (
+            patch(
+                "backend.unit_data_state.build_unit_data_patch",
+                side_effect=build_then_update,
+            ),
+            self.assertRaisesRegex(ValueError, "来源.*连续变化"),
+        ):
+            ensure_unit_data_patch(
+                self.runtime,
+                self.data,
+                self.assets,
+                [],
+                "default",
+                {"unit_model_multiplier": 1},
+            )
+
+        self.assertEqual(calls, 2)
+        self.assertFalse((self.runtime / UNIT_DATA_PATCH_NAME).exists())
 
 
 if __name__ == "__main__":

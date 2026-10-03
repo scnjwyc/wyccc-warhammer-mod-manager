@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 from backend.changelog import CHANGELOG_STRUCTURE, CHANGELOG_TEXT, get_all_changelogs
 from backend.constants import APP_NAME, APP_VERSION
+from backend.table_schema import SCHEMA_NAMES
 from backend.update_service import is_newer_version
 from backend.webview_runtime import get_webview2_runtime_status
 from main import ensure_single_instance
@@ -169,15 +170,15 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "1.1.8")
+        self.assertEqual(APP_VERSION, "1.1.9")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '1.1.8'", frontend_store)
-        self.assertIn("filevers=(1, 1, 8, 0)", version_info)
-        self.assertIn("prodvers=(1, 1, 8, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '1.1.8')", version_info)
-        self.assertIn("`1.1.8`", readme)
-        self.assertIn("`1.1.8`", readme_en)
+        self.assertIn("appVersion: '1.1.9'", frontend_store)
+        self.assertIn("filevers=(1, 1, 9, 0)", version_info)
+        self.assertIn("prodvers=(1, 1, 9, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '1.1.9')", version_info)
+        self.assertIn("`1.1.9`", readme)
+        self.assertIn("`1.1.9`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
@@ -197,9 +198,24 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
             [release["version"] for release in changelog[:13]],
-            ["1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0"],
+            ["1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
         )
-        self.assertEqual(changelog[11]["version"], "1.0.1")
+        self.assertEqual(
+            next(item for item in changelog if item["version"] == "1.0.1")["version"],
+            "1.0.1",
+        )
+        self.assertEqual(
+            [change["type"] for entry in changelog[0]["entries"] for change in entry["changes"]],
+            ["optimize", "improvement", "fix"],
+        )
+        self.assertEqual(
+            [change["text"] for entry in changelog[0]["entries"] for change in entry["changes"]],
+            [
+                "优化新增MOD时，更新MOD信息的速度",
+                "优化更新表结构功能",
+                "内置pack存在的隐患",
+            ],
+        )
         release_111 = next(release for release in changelog if release["version"] == "1.1.1")
         self.assertEqual(release_111["entries"][0]["changes"][0]["text"], "适配战锤9.0版本更新")
         previous_release = next(release for release in changelog if release["version"] == "0.6.0")
@@ -221,7 +237,7 @@ class PackagedRuntimeTests(unittest.TestCase):
         for releases in localized.values():
             self.assertEqual(
                 [release["version"] for release in releases[:13]],
-                ["1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1", "1.0.0"],
+                ["1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
             )
             self.assertEqual(len(releases[0]["entries"]), 2)
             release_115 = next(release for release in releases if release["version"] == "1.1.5")
@@ -694,6 +710,10 @@ class PackagedRuntimeTests(unittest.TestCase):
             (packaging / "version_info.txt").write_text("fixture", encoding="utf-8")
             schema_path = backend / "wh3_db_schema.json"
             schema_path.write_text("{}", encoding="utf-8")
+            bundled_schemas = backend / "schemas"
+            bundled_schemas.mkdir()
+            for name in ("LICENSE.txt", "manifest.json", *(f"schema_{game}.ron.gz" for game in SCHEMA_NAMES.values())):
+                (bundled_schemas / name).write_bytes(b"fixture")
             (steam_runtime / "workshop_bridge.js").write_text("fixture", encoding="utf-8")
             native_binding = (
                 steam_runtime
@@ -743,6 +763,7 @@ class PackagedRuntimeTests(unittest.TestCase):
             )
             separator = ";" if os.name == "nt" else ":"
             self.assertIn(f"{schema_path}{separator}backend", pyinstaller_command)
+            self.assertIn(f"{bundled_schemas}{separator}backend/schemas", pyinstaller_command)
 
 
 if __name__ == "__main__":

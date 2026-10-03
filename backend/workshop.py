@@ -56,6 +56,7 @@ AUTHOR_HTTP_TIMEOUT_SECONDS = 5.0
 AUTHOR_HTTP_MAX_ATTEMPTS = 3
 AUTHOR_HTTP_BACKOFF_SECONDS = (0.5, 1.0)
 AUTHOR_HTTP_DEADLINE_SECONDS = 90.0
+DETAILS_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000
 LOCALIZED_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 LOCALIZED_FAILURE_RETRY_MS = 6 * 60 * 60 * 1000
 DEPENDENCY_CACHE_WARNING = (
@@ -120,6 +121,17 @@ class WorkshopMetadataService:
                 for language, value in localized_source.items()
                 if isinstance(value, dict)
             }
+        for variant in localized.values():
+            # Older caches marked a successful English fallback as a failed translation.
+            if (
+                variant.get("source") == "steamworks"
+                and variant.get("failed")
+                and not variant.get("last_error_at")
+                and int(variant.get("fetched_at") or 0) > 0
+                and not variant.get("title")
+                and not variant.get("description")
+            ):
+                variant["failed"] = False
         if ENGLISH_STEAM_LANGUAGE not in localized:
             localized[ENGLISH_STEAM_LANGUAGE] = {
                 "title": str(record.get("title") or ""),
@@ -207,12 +219,82 @@ class WorkshopMetadataService:
             record["app_id"] = requested_app_id
             items[workshop_id] = record
 
+    @staticmethod
+    def _localized_needs_refresh(record: dict, steam_language: str, now: int, force: bool = False) -> bool:
+        if force:
+            return True
+        variant = record["localized"].get(steam_language)
+        if not isinstance(variant, dict):
+            return True
+        fetched_at = int(variant.get("fetched_at") or 0)
+        last_error_at = int(variant.get("last_error_at") or 0)
+        if (variant.get("source") == "steamworks" and not variant.get("failed") and fetched_at > 0
+            and now - fetched_at <= LOCALIZED_CACHE_MAX_AGE_MS
+            and int(variant.get("source_updated_at") or 0) >= int(record.get("updated_at") or 0)):
+            return False
+        return not (last_error_at > 0 and now - last_error_at <= LOCALIZED_FAILURE_RETRY_MS)
+
+    def pending_refresh_ids(self, workshop_ids: list[str], interface_language: str, *, app_id: int) -> list[str]:
+        """Select missing/stale data for automatic refresh without any network access."""
+        cache = self.store.load()
+        try:
+            schema_version = int(cache.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            schema_version = 0
+        if schema_version < CACHE_SCHEMA_VERSION:
+            return list(workshop_ids)
+        items, authors = cache.get("items", {}), cache.get("authors", {})
+        if not isinstance(items, dict):
+            return list(workshop_ids)
+        if not isinstance(authors, dict):
+            authors = {}
+        now = int(time.time() * 1000)
+        language = _steam_language(interface_language)
+        pending = []
+        for workshop_id in workshop_ids:
+            record = self._upgrade_item(items.get(workshop_id), workshop_id)
+            fetched_at = int(record.get("fetched_at") or 0)
+            if (_record_app_id(record) != app_id or fetched_at <= 0
+                or now - fetched_at > DETAILS_CACHE_MAX_AGE_MS):
+                pending.append(workshop_id)
+                continue
+            # A recent unavailable-item response is cached too; do not retry it on every startup.
+            if int(record.get("result") or 1) != 1:
+                continue
+            if not record.get("title"):
+                pending.append(workshop_id)
+                continue
+            if language != ENGLISH_STEAM_LANGUAGE and self._localized_needs_refresh(record, language, now):
+                pending.append(workshop_id)
+                continue
+            dependency_error = int(record.get("dependencies_last_error_at") or 0)
+            dependencies_at = int(record.get("dependencies_fetched_at") or 0)
+            if not (dependency_error > 0 and now - dependency_error <= LOCALIZED_FAILURE_RETRY_MS):
+                if (dependencies_at <= 0 or now - dependencies_at > LOCALIZED_CACHE_MAX_AGE_MS
+                    or record.get("dependencies_language") != language):
+                    pending.append(workshop_id)
+                    continue
+            creator_id = str(record.get("creator_id") or "")
+            if creator_id:
+                author = authors.get(creator_id, {})
+                if not isinstance(author, dict):
+                    author = {}
+                author_at = int(author.get("fetched_at") or 0)
+                failed_at = max(int(author.get("last_error_at") or 0), int(author.get("last_attempt_at") or 0))
+                if not author.get("name") and not failed_at:
+                    failed_at = author_at
+                if not (author.get("name") and author_at > 0 and now - author_at <= AUTHOR_CACHE_MAX_AGE_MS):
+                    if failed_at <= 0 or now - failed_at > AUTHOR_FAILURE_RETRY_MS:
+                        pending.append(workshop_id)
+        return pending
+
     def refresh(
         self,
         workshop_ids: list[str],
         interface_language: str = "en-US",
         *,
         app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
+        steamworks_first: bool = False,
     ) -> dict[str, dict[str, Any]]:
         self.last_refresh_warning = ""
         ids = list(dict.fromkeys(item for item in workshop_ids if item.isdigit()))
@@ -233,23 +315,58 @@ class WorkshopMetadataService:
             cache["authors"] = authors
         requested_app_id = _normalized_app_id(app_id)
         self._prepare_items_for_app(items, ids, requested_app_id)
+        requested_language = _steam_language(interface_language)
+        localized_response = None
+        http_ids = ids
+        if steamworks_first:
+            languages = list(dict.fromkeys([ENGLISH_STEAM_LANGUAGE, requested_language]))
+            try:
+                localized_response = query_workshop_languages(
+                    ids, languages, app_id=requested_app_id, timeout_seconds=20
+                )
+                english = localized_response.get(ENGLISH_STEAM_LANGUAGE, {})
+                http_ids = []
+                now = int(time.time() * 1000)
+                for workshop_id in ids:
+                    detail = english.get(workshop_id)
+                    if not isinstance(detail, dict) or not detail.get("title"):
+                        http_ids.append(workshop_id)
+                        continue
+                    record = self._upgrade_item(items.get(workshop_id), workshop_id)
+                    record.update({"title": str(detail["title"]), "description": str(detail.get("description") or ""),
+                        "app_id": requested_app_id, "result": 1, "fetched_at": now})
+                    for key in ("creator_id", "preview_url", "created_at", "updated_at"):
+                        if detail.get(key):
+                            record[key] = detail[key]
+                    record["localized"][ENGLISH_STEAM_LANGUAGE] = {
+                        "title": record["title"], "description": record["description"], "fetched_at": now,
+                        "source_updated_at": int(record.get("updated_at") or 0), "failed": False,
+                        "last_error_at": 0, "source": "steamworks",
+                    }
+                    items[workshop_id] = record
+            except SteamworksBridgeError as exc:
+                logger.warning("Incremental Steamworks metadata query failed; using HTTP: %s", exc)
+                # Do not repeat the same failed bridge query for translations in this refresh.
+                localized_response = {}
 
         try:
-            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
-                self._refresh_english_details(items, ids)
-            else:
-                self._refresh_english_details(items, ids, app_id=requested_app_id)
+            if http_ids:
+                if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                    self._refresh_english_details(items, http_ids)
+                else:
+                    self._refresh_english_details(items, http_ids, app_id=requested_app_id)
         except Exception as exc:
             logger.warning("Steam English Workshop metadata refresh failed: %s", exc)
 
-        requested_language = _steam_language(interface_language)
         if requested_language != ENGLISH_STEAM_LANGUAGE:
+            preloaded = {"response": localized_response} if localized_response is not None else {}
             if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
                 self._refresh_localized_steamworks(
                     items,
                     ids,
                     requested_language,
                     force=previous_schema < CACHE_SCHEMA_VERSION,
+                    **preloaded,
                 )
             else:
                 self._refresh_localized_steamworks(
@@ -258,6 +375,7 @@ class WorkshopMetadataService:
                     requested_language,
                     force=previous_schema < CACHE_SCHEMA_VERSION,
                     app_id=requested_app_id,
+                    **preloaded,
                 )
 
         if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
@@ -505,42 +623,30 @@ class WorkshopMetadataService:
         *,
         force: bool = False,
         app_id: int | str = DEFAULT_WORKSHOP_APP_ID,
+        response: dict | None = None,
     ) -> None:
         now = int(time.time() * 1000)
         pending: list[str] = []
         for workshop_id in workshop_ids:
             record = self._upgrade_item(items.get(workshop_id), workshop_id)
             items[workshop_id] = record
-            variant = record["localized"].get(steam_language)
-            if not force and isinstance(variant, dict):
-                fetched_at = int(variant.get("fetched_at") or 0)
-                last_error_at = int(variant.get("last_error_at") or 0)
-                source_updated_at = int(variant.get("source_updated_at") or 0)
-                current_updated_at = int(record.get("updated_at") or 0)
-                if (
-                    variant.get("source") == "steamworks"
-                    and not variant.get("failed")
-                    and fetched_at > 0
-                    and now - fetched_at <= LOCALIZED_CACHE_MAX_AGE_MS
-                    and source_updated_at >= current_updated_at
-                ):
-                    continue
-                if last_error_at > 0 and now - last_error_at <= LOCALIZED_FAILURE_RETRY_MS:
-                    continue
+            if not self._localized_needs_refresh(record, steam_language, now, force):
+                continue
             pending.append(workshop_id)
         if not pending:
             return
 
         try:
             requested_app_id = _normalized_app_id(app_id)
-            if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
-                response = query_workshop_languages(pending, [steam_language])
-            else:
-                response = query_workshop_languages(
-                    pending,
-                    [steam_language],
-                    app_id=requested_app_id,
-                )
+            if response is None:
+                if requested_app_id == DEFAULT_WORKSHOP_APP_ID:
+                    response = query_workshop_languages(pending, [steam_language])
+                else:
+                    response = query_workshop_languages(
+                        pending,
+                        [steam_language],
+                        app_id=requested_app_id,
+                    )
             language_items = response.get(steam_language, {})
         except SteamworksBridgeError as exc:
             logger.warning("Steamworks localized Workshop refresh failed: %s", exc)
@@ -581,7 +687,7 @@ class WorkshopMetadataService:
                 "description": localized_description,
                 "fetched_at": now,
                 "source_updated_at": updated_at,
-                "failed": not bool(localized_title or localized_description),
+                "failed": False,
                 "last_error_at": 0,
                 "source": "steamworks",
             }

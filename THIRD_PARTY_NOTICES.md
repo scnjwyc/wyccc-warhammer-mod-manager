@@ -29,6 +29,15 @@ Wyccc's Mod Manager 的实现研究了以下开源项目。它们的许可证通
 - 原生模块取自上述 WH3-Mod-Manager 本地版本中随附的 steamworks.js 运行时。
 - 许可证原文：[licenses/steamworks.js-LICENSE.txt](licenses/steamworks.js-LICENSE.txt)
 
+## rpfm-schemas
+
+- 项目：https://github.com/Frodo45127/rpfm-schemas
+- 内置快照版本与各文件校验值：[backend/schemas/manifest.json](backend/schemas/manifest.json)
+- 许可证：MIT License
+- 版权所有：Copyright (c) 2020 Ismael Gutiérrez González
+- 用途：中文界面离线更新 Pack 数据表所需的完整版本化定义。
+- 许可证原文：[backend/schemas/LICENSE.txt](backend/schemas/LICENSE.txt)，随内置资源一起打包。
+
 上述项目的名称与版权归各自作者所有。列入本文件不表示原作者对 Wyccc's Mod Manager 提供背书。
 
 ## 包依赖

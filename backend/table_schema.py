@@ -1,10 +1,11 @@
-"""Fetch and read the complete, versioned RPFM schema for the selected game."""
+"""Read bundled or upstream versioned RPFM schemas for the selected game."""
 
 from __future__ import annotations
 
+import gzip
 import json
-import re
 import os
+import re
 import tempfile
 from pathlib import Path
 from urllib.error import URLError
@@ -24,6 +25,7 @@ SCHEMA_NAMES = {
     "shogun2": "sho2",
 }
 SCHEMA_BASE_URL = "https://raw.githubusercontent.com/Frodo45127/rpfm-schemas/master/"
+BUNDLED_SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 MAX_SCHEMA_BYTES = 64 * 1024 * 1024
 _TOKEN = re.compile(
     r'\s+|//[^\n]*|/\*.*?\*/|"(?:[^"\\]|\\.)*"|'
@@ -143,11 +145,21 @@ def parse_schema(source: str) -> dict:
     return result
 
 
-def load_latest_schema(game_id: str, cache_dir: Path) -> tuple[dict, dict]:
-    """Revalidate upstream on every operation; report an offline fallback explicitly."""
+def load_latest_schema(game_id: str, cache_dir: Path, *, prefer_bundled: bool = False) -> tuple[dict, dict]:
+    """Use bundled definitions without network, or revalidate the upstream cache."""
     if game_id not in SCHEMA_NAMES:
         raise ValueError("schemaUpdate.unsupportedGame")
     name = f"schema_{SCHEMA_NAMES[game_id]}.ron"
+    if prefer_bundled:
+        try:
+            with gzip.open(BUNDLED_SCHEMA_DIR / f"{name}.gz", "rb") as stream:
+                raw = stream.read(MAX_SCHEMA_BYTES + 1)
+            if len(raw) > MAX_SCHEMA_BYTES:
+                raise ValueError("schemaUpdate.invalidSchema")
+            schemas = parse_schema(raw.decode("utf-8"))
+        except (OSError, EOFError, UnicodeError) as exc:
+            raise ValueError("schemaUpdate.invalidSchema") from exc
+        return schemas, {"source_url": SCHEMA_BASE_URL + name, "cached": False, "bundled": True}
     path = cache_dir / name
     metadata_path = path.with_suffix(".json")
     metadata = {}
