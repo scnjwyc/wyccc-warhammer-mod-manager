@@ -1,25 +1,34 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.2.0",
-  "published_at": "2026-10-03",
+  "version": "1.2.1",
+  "published_at": "2026-10-04",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.0/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "EEE9D4866501C6A842349518A28172CBC78E172F8905CB3DF075B10FBD7B0331",
-    "size": 65473742
+    "sha256": "EA8836207115304A5433E204A1D9F210670C6FB2DBD6E8A1B406BC95CCAF65D0",
+    "size": 65484728
   },
   "changelog": [
     {
-      "title": "修复",
+      "title": "调整",
       "changes": [
         {
-          "type": "fix",
-          "text": "仅显示报警MOD模式下存在的问题"
+          "type": "improvement",
+          "text": "文件夹现在可以拖动排序了"
+        }
+      ]
+    },
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "文件夹现在可以跨播放集保存"
         }
       ]
     },
@@ -28,16 +37,7 @@
       "changes": [
         {
           "type": "feature",
-          "text": "启动记录功能，可以查看每一次游戏启动的MOD列表，支持和当前列表进行对比，也支持加载记录中的mod列表"
-        }
-      ]
-    },
-    {
-      "title": "修复",
-      "changes": [
-        {
-          "type": "fix",
-          "text": "当用户加入steam家庭组时，会显示家庭成员的MOD的问题"
+          "text": "修改类型现在可以通过AI自动识别，前提是你在设置中配置了AI模型，AI会自动判断这个MOD的类型，加入标签，只会从当前已有的类型中进行选择"
         }
       ]
     }
