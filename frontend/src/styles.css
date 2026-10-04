@@ -1349,6 +1349,7 @@ textarea {
 }
 
 .mod-folder-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1442,13 +1443,16 @@ textarea {
   opacity: 0.32;
 }
 
-.mod-row.dragging {
+.mod-row.dragging,
+.mod-folder-row.dragging {
   cursor: grabbing;
   opacity: 0.45;
 }
 
 .mod-row.drop-before::before,
-.mod-row.drop-after::after {
+.mod-row.drop-after::after,
+.mod-folder-row.drop-before::before,
+.mod-folder-row.drop-after::after {
   position: absolute;
   z-index: 2;
   right: 8px;
@@ -1461,11 +1465,13 @@ textarea {
   pointer-events: none;
 }
 
-.mod-row.drop-before::before {
+.mod-row.drop-before::before,
+.mod-folder-row.drop-before::before {
   top: -4px;
 }
 
-.mod-row.drop-after::after {
+.mod-row.drop-after::after,
+.mod-folder-row.drop-after::after {
   bottom: -4px;
 }
 

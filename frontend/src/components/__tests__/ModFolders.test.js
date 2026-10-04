@@ -8,6 +8,23 @@ const folder = { id: 'folder', name: '界面', mod_ids: ['a', 'c'], collapsed_ac
 const list = (overrides = {}) => mount(ModList, { props: { title: 'MOD', mods, folders: [folder], ...overrides } })
 
 describe('MOD folder list', () => {
+  it('drags a folder below another folder without dragging MODs or changing load order', async () => {
+    const other = { ...folder, id: 'other', name: '其他', mod_ids: ['b'] }
+    const wrapper = list({ active: true, orderIds: ['a', 'b', 'c'], folders: [folder, other] })
+    const source = wrapper.get('[data-testid="mod-folder-folder"]')
+    const target = wrapper.get('[data-testid="mod-folder-other"]')
+    expect(source.attributes('draggable')).toBe('true')
+    await source.trigger('dragstart')
+    await target.trigger('dragover', { clientY: 1 })
+    await target.trigger('drop', { clientY: 1 })
+    expect(wrapper.emitted('move-folder')[0][0]).toEqual({
+      folderId: 'folder', targetFolderId: 'other', targetModId: '', placement: 'after', listName: 'active',
+    })
+    expect(wrapper.emitted('drop-mods')).toBeUndefined()
+    expect(wrapper.emitted('drag-start')).toBeUndefined()
+    expect(wrapper.props('orderIds')).toEqual(['a', 'b', 'c'])
+  })
+
   it('groups members while retaining their real load-order numbers', () => {
     const wrapper = list({ active: true, orderIds: ['a', 'b', 'c'] })
     expect(wrapper.findAll('.mod-folder-row')).toHaveLength(1)
@@ -45,6 +62,33 @@ describe('MOD folder list', () => {
     expect(wrapper.findAll('.mod-folder-row')).toHaveLength(2)
     await wrapper.setProps({ mods: [mods[1]], searchTokens: [{ value: 'b' }] })
     expect(wrapper.findAll('.mod-folder-row')).toHaveLength(0)
+  })
+
+  it('shows folders whose members are disabled, hidden or no longer installed', () => {
+    const wrapper = list({ mods: [], active: true })
+    expect(wrapper.get('[data-testid="mod-folder-folder"] .count-badge').text()).toBe('0')
+    expect(wrapper.findAll('.mod-row')).toHaveLength(0)
+  })
+
+  it('moves a collapsed folder onto a plain MOD and can render the saved position', async () => {
+    const wrapper = list({ folders: [{ ...folder, collapsed_inactive: true }] })
+    await wrapper.get('[data-testid="mod-folder-folder"]').trigger('dragstart')
+    await wrapper.get('.mod-row').trigger('dragover', { clientY: 1 })
+    await wrapper.get('.mod-row').trigger('drop', { clientY: 1 })
+    expect(wrapper.emitted('move-folder')[0][0]).toEqual({
+      folderId: 'folder', targetFolderId: '', targetModId: 'b', placement: 'after', listName: 'inactive',
+    })
+    await wrapper.setProps({ folderLayout: ['mod:b', 'folder:folder'] })
+    expect(wrapper.get('.mod-list').element.firstElementChild.classList.contains('mod-row')).toBe(true)
+    expect(wrapper.get('.mod-folder-toggle').attributes('aria-expanded')).toBe('false')
+  })
+
+  it('prevents folder movement while busy and never interprets a folder drag as a MOD drop', async () => {
+    const wrapper = list({ busy: true, dragSource: { kind: 'folder', folderId: 'folder', source: 'active' } })
+    expect(wrapper.get('.mod-folder-row').attributes('draggable')).toBe('false')
+    await wrapper.get('.mod-row').trigger('drop')
+    expect(wrapper.emitted('move-folder')).toBeUndefined()
+    expect(wrapper.emitted('drop-mods')).toBeUndefined()
   })
 
   it('uses independent collapse states for the enabled and disabled panels', async () => {

@@ -96,7 +96,7 @@ class StorageContractTests(unittest.TestCase):
                 schema_version = connection.execute(
                     "SELECT value FROM system_info WHERE key = 'schema_version'"
                 ).fetchone()[0]
-            self.assertEqual(schema_version, "11")
+            self.assertEqual(schema_version, "12")
 
     def test_legacy_global_hidden_flags_are_copied_into_each_playset(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1427,6 +1427,9 @@ class ApiContractTests(unittest.TestCase):
                 "game_data": {},
             }
             with (
+                # Exercise real Unicode-path staging without leaving a real
+                # SUBST mapping behind after this temporary directory is removed.
+                patch.object(api.launch_path_aliases, "_create_alias", return_value="X:\\"),
                 patch(
                     "backend.api.query_workshop_subscription_status",
                     return_value=self._feature_statuses(),

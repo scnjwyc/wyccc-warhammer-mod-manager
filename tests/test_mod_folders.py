@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from backend.api import API
@@ -56,13 +57,13 @@ class ModFolderTests(unittest.TestCase):
             self.repository.set_mod_folder_collapsed("default", folder, "invalid", True)
         self.assertEqual(self.folders()[0]["mod_ids"], ["a"])
 
-    def test_playsets_and_games_are_isolated_and_deleting_playset_cascades(self):
+    def test_playsets_share_folders_while_games_are_isolated_and_playset_deletion_keeps_them(self):
         first = self.repository.create_mod_folder("default", "UI", ["a"])
         other = self.repository.create_playset("Other", ["a"])["id"]
-        self.assertEqual(self.folders(other), [])
-        second = self.repository.create_mod_folder(other, "UI", ["b"])
+        self.assertEqual(self.folders(other), self.folders())
+        second = self.repository.create_mod_folder(other, "Other UI", ["b"])
+        self.repository.assign_mod_folder(other, ["a"], second)
         for game, playset, target in [
-            ("warhammer3", other, first),
             ("three_kingdoms", "default:three_kingdoms", first),
             ("three_kingdoms", other, second),
         ]:
@@ -70,8 +71,102 @@ class ModFolderTests(unittest.TestCase):
                 self.repository.assign_mod_folder(playset, ["a"], target, game)
         self.repository.delete_playset(other)
         with self.repository._connect() as connection:
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folders").fetchone()[0], 1)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folder_items").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folders").fetchone()[0], 2)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folder_items").fetchone()[0], 2)
+        self.assertEqual(self.folders()[1]["mod_ids"], ["a", "b"])
+
+    def test_panel_layout_survives_restart_and_playset_switch_without_changing_mod_order(self):
+        first = self.repository.create_mod_folder("default", "One", ["a"])
+        second = self.repository.create_mod_folder("default", "Two", ["b"])
+        self.repository.update_current_playset(["a", "b", "c"])
+        layout = [f"folder:{second}", "mod:c", f"folder:{first}"]
+        self.repository.reorder_mod_folder_groups("default", "active", layout)
+        other = self.repository.create_playset("Other", ["c", "b"])["id"]
+        restored = StateRepository(self.database)
+        self.assertEqual(restored.get_mod_folder_layouts(), {"active": layout, "inactive": []})
+        self.assertEqual(restored.list_mod_folders(other), restored.list_mod_folders("default"))
+        restored.switch_playset("default")
+        self.assertEqual(restored.get_enabled_order(), ["a", "b", "c"])
+        self.assertEqual(restored.get_mod_folder_layouts("three_kingdoms"), {"active": [], "inactive": []})
+        restored.delete_mod_folder("default", first)
+        self.assertEqual(restored.get_mod_folder_layouts()["active"], [f"folder:{second}", "mod:c"])
+
+    def test_invalid_layout_does_not_replace_saved_positions(self):
+        folder = self.repository.create_mod_folder("default", "One", ["a"])
+        layout = [f"folder:{folder}"]
+        self.repository.reorder_mod_folder_groups("default", "inactive", layout)
+        for name, keys in [("invalid", layout), ("inactive", ["folder:missing"]),
+                           ("inactive", ["bad"]), ("inactive", [1]), ("inactive", layout * 2)]:
+            with self.subTest(name=name, keys=keys), self.assertRaises(ValueError):
+                self.repository.reorder_mod_folder_groups("default", name, keys)
+        self.assertEqual(self.repository.get_mod_folder_layouts()["inactive"], layout)
+
+    def make_legacy_folders(self):
+        other = self.repository.create_playset("Old playset", ["a"])["id"]
+        with self.repository._connect() as connection:
+            connection.execute("DROP TABLE mod_folder_items")
+            connection.execute("DROP TABLE mod_folders")
+            connection.execute("""CREATE TABLE mod_folders (
+                id TEXT PRIMARY KEY, playset_id TEXT NOT NULL REFERENCES playsets(id) ON DELETE CASCADE,
+                name TEXT NOT NULL, collapsed_active INTEGER NOT NULL DEFAULT 0,
+                collapsed_inactive INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+                UNIQUE(playset_id, id))""")
+            connection.execute("""CREATE TABLE mod_folder_items (
+                playset_id TEXT NOT NULL, mod_id TEXT NOT NULL, folder_id TEXT NOT NULL,
+                PRIMARY KEY(playset_id, mod_id),
+                FOREIGN KEY(playset_id, folder_id) REFERENCES mod_folders(playset_id, id) ON DELETE CASCADE)""")
+            connection.executemany("INSERT INTO mod_folders VALUES(?, ?, ?, ?, ?, ?)", [
+                ("first", "default", "UI", 0, 0, 1),
+                ("current", other, "ui", 1, 0, 2),
+                ("battle", "default", "Battle", 0, 1, 3),
+                ("tk", "default:three_kingdoms", "UI", 0, 0, 4),
+            ])
+            connection.executemany("INSERT INTO mod_folder_items VALUES(?, ?, ?)", [
+                ("default", "b", "first"), ("default", "a", "battle"),
+                ("default", "c", "battle"), (other, "a", "current"),
+                ("default:three_kingdoms", "a", "tk"),
+            ])
+        return other
+
+    def test_legacy_playset_folders_migrate_once_with_membership_and_game_isolation(self):
+        other = self.make_legacy_folders()
+        restored = StateRepository(self.database)
+        folders = restored.list_mod_folders("default")
+        self.assertEqual(folders, restored.list_mod_folders(other))
+        self.assertEqual(folders[0]["id"], "current")
+        self.assertTrue(folders[0]["collapsed_active"])
+        self.assertEqual(folders[0]["mod_ids"], ["a", "b"])
+        self.assertEqual(folders[1]["mod_ids"], ["c"])
+        self.assertEqual(restored.list_mod_folders("default:three_kingdoms", "three_kingdoms")[0]["id"], "tk")
+        with restored._connect() as connection:
+            backup = json.loads(connection.execute(
+                "SELECT value FROM system_info WHERE key = 'mod_folders_legacy_v11'"
+            ).fetchone()["value"])
+            self.assertEqual(len(backup["folders"]), 4)
+            self.assertEqual(len(backup["items"]), 5)
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+        self.assertEqual(StateRepository(self.database).list_mod_folders("default"), folders)
+
+    def test_legacy_migration_failure_rolls_back_original_folder_tables(self):
+        self.make_legacy_folders()
+
+        class FailingConnection:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, sql, *args):
+                if sql.startswith("INSERT INTO mod_folders VALUES"):
+                    raise RuntimeError("simulated write failure")
+                return self.connection.execute(sql, *args)
+
+        with self.repository._connect() as connection:
+            with self.assertRaisesRegex(RuntimeError, "simulated write failure"):
+                StateRepository._ensure_shared_mod_folders(FailingConnection(connection))
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folders").fetchone()[0], 4)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM mod_folder_items").fetchone()[0], 5)
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(mod_folders)")}
+            self.assertIn("playset_id", columns)
+            self.assertNotIn("game_id", columns)
 
 
 class ModFolderApiTests(unittest.TestCase):
@@ -115,6 +210,28 @@ class ModFolderApiTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertFalse(self.api.call("assign_mod_folder", args)["ok"])
                 self.assertEqual(self.api._current_playset_payload()["mod_folders"][0]["mod_ids"], ["canonical"])
+
+    def test_switching_to_an_existing_playset_retains_folders_and_membership(self):
+        other = self.api.state_repository.create_playset("Other", ["canonical"])["id"]
+        self.call("switch_playset", "default")
+        created = self.call("create_mod_folder", "UI", ["canonical"])["mod_folders"]
+        switched = self.call("switch_playset", other)
+        self.assertEqual(switched["mod_folders"], created)
+        self.assertEqual(switched["ordered_mod_ids"], ["canonical"])
+        self.assertEqual(self.call("switch_playset", "default")["mod_folders"], created)
+
+    def test_rpc_layout_is_returned_after_switch_and_wrong_context_cannot_replace_it(self):
+        folder = self.call("create_mod_folder", "UI", ["canonical"])["mod_folders"][0]
+        layout = ["mod:loose", f"folder:{folder['id']}"]
+        result = self.call("reorder_mod_folder_groups", "active", layout, "warhammer3", "default")
+        self.assertEqual(result["mod_folder_layouts"], {"active": layout, "inactive": []})
+        created = self.call("create_playset", "Other", ["canonical"])
+        other = created["current_playset"]["id"]
+        self.assertEqual(created["mod_folder_layouts"]["active"], layout)
+        self.assertFalse(self.api.call("reorder_mod_folder_groups", [
+            "active", [], "warhammer3", "default",
+        ])["ok"])
+        self.assertEqual(self.call("switch_playset", other)["mod_folder_layouts"]["active"], layout)
 
 
 if __name__ == "__main__":

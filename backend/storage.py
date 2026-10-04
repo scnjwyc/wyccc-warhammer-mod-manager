@@ -22,7 +22,7 @@ from .mod_types import (
 
 DEFAULT_PLAYSET_ID = "default"
 DEFAULT_PLAYSET_NAME = "默认"
-PLAYSET_SCHEMA_VERSION = "11"
+PLAYSET_SCHEMA_VERSION = "12"
 MOD_TYPE_ORDER_STATE_KEY = "mod_type_order"
 
 
@@ -255,11 +255,87 @@ class StateRepository:
                 """
             )
             self._initialize_playsets(connection)
+            self._ensure_shared_mod_folders(connection)
             self._migrate_legacy_hidden_mods_to_playsets(connection)
             connection.execute(
                 "INSERT OR REPLACE INTO system_info(key, value) VALUES('schema_version', ?)",
                 (PLAYSET_SCHEMA_VERSION,),
             )
+
+    @classmethod
+    def _ensure_shared_mod_folders(cls, connection: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(mod_folders)")}
+        if "game_id" in columns:
+            return
+        connection.execute("SAVEPOINT shared_mod_folders")
+        try:
+            folders = [dict(row) for row in connection.execute(
+                "SELECT f.*, p.game_id FROM mod_folders f JOIN playsets p ON p.id = f.playset_id "
+                "ORDER BY f.created_at, f.rowid"
+            )]
+            items = [dict(row) for row in connection.execute("SELECT * FROM mod_folder_items ORDER BY rowid")]
+            if folders:
+                # Retain the complete old configuration, including conflicting
+                # per-playset memberships, before merging the shared catalog.
+                connection.execute(
+                    "INSERT OR IGNORE INTO system_info(key, value) VALUES(?, ?)",
+                    ("mod_folders_legacy_v11", json.dumps({"folders": folders, "items": items}, ensure_ascii=False)),
+                )
+            current = {
+                definition.id: cls._read_app_state(connection, _game_state_key("current_playset_id", definition.id))
+                for definition in game_definitions()
+            }
+            folders.sort(key=lambda row: (
+                row["playset_id"] != current.get(row["game_id"]),
+                row["playset_id"] != _default_playset_id(row["game_id"]),
+                row["created_at"], row["id"],
+            ))
+            connection.execute("ALTER TABLE mod_folder_items RENAME TO legacy_mod_folder_items")
+            connection.execute("ALTER TABLE mod_folders RENAME TO legacy_mod_folders")
+            connection.execute("""
+                CREATE TABLE mod_folders (
+                    id TEXT PRIMARY KEY,
+                    game_id TEXT NOT NULL,
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    collapsed_active INTEGER NOT NULL DEFAULT 0,
+                    collapsed_inactive INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE (game_id, name), UNIQUE (game_id, id)
+                )
+            """)
+            connection.execute("""
+                CREATE TABLE mod_folder_items (
+                    game_id TEXT NOT NULL, mod_id TEXT NOT NULL, folder_id TEXT NOT NULL,
+                    PRIMARY KEY (game_id, mod_id),
+                    FOREIGN KEY (game_id, folder_id) REFERENCES mod_folders(game_id, id) ON DELETE CASCADE
+                )
+            """)
+            names: dict[tuple[str, str], str] = {}
+            folder_items: dict[str, list[str]] = {}
+            for item in items:
+                folder_items.setdefault(item["folder_id"], []).append(item["mod_id"])
+            for folder in folders:
+                key = (folder["game_id"], folder["name"].casefold())
+                target_id = names.get(key)
+                if target_id is None:
+                    target_id = folder["id"]
+                    names[key] = target_id
+                    connection.execute(
+                        "INSERT INTO mod_folders VALUES(?, ?, ?, ?, ?, ?)",
+                        (target_id, folder["game_id"], folder["name"], folder["collapsed_active"],
+                         folder["collapsed_inactive"], folder["created_at"]),
+                    )
+                connection.executemany(
+                    "INSERT OR IGNORE INTO mod_folder_items(game_id, mod_id, folder_id) VALUES(?, ?, ?)",
+                    [(folder["game_id"], mod_id, target_id) for mod_id in folder_items.get(folder["id"], [])],
+                )
+            connection.execute("DROP TABLE legacy_mod_folder_items")
+            connection.execute("DROP TABLE legacy_mod_folders")
+            connection.execute("RELEASE shared_mod_folders")
+        except Exception:
+            connection.execute("ROLLBACK TO shared_mod_folders")
+            connection.execute("RELEASE shared_mod_folders")
+            raise
 
     @staticmethod
     def _ensure_data_sync_schema(connection: sqlite3.Connection) -> None:
@@ -536,6 +612,11 @@ class StateRepository:
         if not isinstance(decoded, list):
             return []
         return list(dict.fromkeys(str(item) for item in decoded if str(item).strip()))
+
+    @staticmethod
+    def _read_app_state(connection: sqlite3.Connection, key: str) -> str:
+        row = connection.execute("SELECT value FROM app_state WHERE key = ?", (key,)).fetchone()
+        return str(row["value"]) if row else ""
 
     @staticmethod
     def _write_app_state(connection: sqlite3.Connection, key: str, value: str) -> None:
@@ -1082,37 +1163,37 @@ class StateRepository:
         return clean
 
     @staticmethod
-    def _require_mod_folder(connection: sqlite3.Connection, playset_id: str, folder_id: str) -> None:
+    def _require_mod_folder(connection: sqlite3.Connection, game_id: str, folder_id: str) -> None:
         if not connection.execute(
-            "SELECT 1 FROM mod_folders WHERE id = ? AND playset_id = ?",
-            (folder_id, playset_id),
+            "SELECT 1 FROM mod_folders WHERE id = ? AND game_id = ?",
+            (folder_id, game_id),
         ).fetchone():
             raise ValueError("folders.notFound")
 
     @staticmethod
     def _ensure_folder_name_available(
-        connection: sqlite3.Connection, playset_id: str, name: str, excluded_id: str = "",
+        connection: sqlite3.Connection, game_id: str, name: str, excluded_id: str = "",
     ) -> None:
         names = connection.execute(
-            "SELECT name FROM mod_folders WHERE playset_id = ? AND id <> ?",
-            (playset_id, excluded_id),
+            "SELECT name FROM mod_folders WHERE game_id = ? AND id <> ?",
+            (game_id, excluded_id),
         ).fetchall()
         if any(str(row["name"]).casefold() == name.casefold() for row in names):
             raise ValueError("folders.duplicateName")
 
     @staticmethod
     def _assign_folder_items(
-        connection: sqlite3.Connection, playset_id: str, mod_ids: list[str], folder_id: str,
+        connection: sqlite3.Connection, game_id: str, mod_ids: list[str], folder_id: str,
     ) -> None:
         ids = list(dict.fromkeys(str(item).strip() for item in mod_ids if str(item).strip()))
         connection.executemany(
-            "DELETE FROM mod_folder_items WHERE playset_id = ? AND mod_id = ?",
-            [(playset_id, mod_id) for mod_id in ids],
+            "DELETE FROM mod_folder_items WHERE game_id = ? AND mod_id = ?",
+            [(game_id, mod_id) for mod_id in ids],
         )
         if folder_id:
             connection.executemany(
-                "INSERT INTO mod_folder_items(playset_id, mod_id, folder_id) VALUES(?, ?, ?)",
-                [(playset_id, mod_id, folder_id) for mod_id in ids],
+                "INSERT INTO mod_folder_items(game_id, mod_id, folder_id) VALUES(?, ?, ?)",
+                [(game_id, mod_id, folder_id) for mod_id in ids],
             )
 
     def list_mod_folders(self, playset_id: str, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
@@ -1120,12 +1201,12 @@ class StateRepository:
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
             rows = connection.execute(
-                "SELECT * FROM mod_folders WHERE playset_id = ? ORDER BY created_at, rowid",
-                (playset_id,),
+                "SELECT * FROM mod_folders WHERE game_id = ? ORDER BY created_at, rowid",
+                (game_id,),
             ).fetchall()
             items = connection.execute(
-                "SELECT folder_id, mod_id FROM mod_folder_items WHERE playset_id = ? ORDER BY mod_id",
-                (playset_id,),
+                "SELECT folder_id, mod_id FROM mod_folder_items WHERE game_id = ? ORDER BY mod_id",
+                (game_id,),
             ).fetchall()
         grouped: dict[str, list[str]] = {}
         for item in items:
@@ -1145,12 +1226,12 @@ class StateRepository:
         folder_id = uuid.uuid4().hex
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
-            self._ensure_folder_name_available(connection, playset_id, clean)
+            self._ensure_folder_name_available(connection, game_id, clean)
             connection.execute(
-                "INSERT INTO mod_folders(id, playset_id, name, created_at) VALUES(?, ?, ?, ?)",
-                (folder_id, playset_id, clean, int(time.time())),
+                "INSERT INTO mod_folders(id, game_id, name, created_at) VALUES(?, ?, ?, ?)",
+                (folder_id, game_id, clean, int(time.time())),
             )
-            self._assign_folder_items(connection, playset_id, mod_ids, folder_id)
+            self._assign_folder_items(connection, game_id, mod_ids, folder_id)
         return folder_id
 
     def assign_mod_folder(
@@ -1160,8 +1241,8 @@ class StateRepository:
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
             if folder_id:
-                self._require_mod_folder(connection, playset_id, folder_id)
-            self._assign_folder_items(connection, playset_id, mod_ids, folder_id)
+                self._require_mod_folder(connection, game_id, folder_id)
+            self._assign_folder_items(connection, game_id, mod_ids, folder_id)
 
     def rename_mod_folder(
         self, playset_id: str, folder_id: str, name: str, game_id: str = DEFAULT_GAME_ID,
@@ -1170,8 +1251,8 @@ class StateRepository:
         clean = self._folder_name(name)
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
-            self._require_mod_folder(connection, playset_id, folder_id)
-            self._ensure_folder_name_available(connection, playset_id, clean, folder_id)
+            self._require_mod_folder(connection, game_id, folder_id)
+            self._ensure_folder_name_available(connection, game_id, clean, folder_id)
             connection.execute("UPDATE mod_folders SET name = ? WHERE id = ?", (clean, folder_id))
 
     def delete_mod_folder(
@@ -1180,8 +1261,14 @@ class StateRepository:
         game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
-            self._require_mod_folder(connection, playset_id, folder_id)
+            self._require_mod_folder(connection, game_id, folder_id)
             connection.execute("DELETE FROM mod_folders WHERE id = ?", (folder_id,))
+            for list_name in ("active", "inactive"):
+                key = _game_state_key(f"mod_folder_layout_{list_name}", game_id)
+                layout = self._decode_order(self._read_app_state(connection, key))
+                self._write_app_state(connection, key, json.dumps(
+                    [item for item in layout if item != f"folder:{folder_id}"], ensure_ascii=False
+                ))
 
     def set_mod_folder_collapsed(
         self, playset_id: str, folder_id: str, list_name: str, collapsed: bool,
@@ -1192,11 +1279,37 @@ class StateRepository:
         game_id = _normalized_game_id(game_id)
         with self._lock, self._connect() as connection:
             self._require_playset_in_game(connection, playset_id, game_id)
-            self._require_mod_folder(connection, playset_id, folder_id)
+            self._require_mod_folder(connection, game_id, folder_id)
             connection.execute(
                 f"UPDATE mod_folders SET collapsed_{list_name} = ? WHERE id = ?",
                 (int(bool(collapsed)), folder_id),
             )
+
+    def get_mod_folder_layouts(self, game_id: str = DEFAULT_GAME_ID) -> dict[str, list[str]]:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            return {name: self._decode_order(self._read_app_state(
+                connection, _game_state_key(f"mod_folder_layout_{name}", game_id)
+            )) for name in ("active", "inactive")}
+
+    def reorder_mod_folder_groups(
+        self, playset_id: str, list_name: str, group_keys: list[str], game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        if list_name not in {"active", "inactive"}:
+            raise ValueError("folders.invalidList")
+        if not isinstance(group_keys, list) or any(
+            not isinstance(key, str) or not key.startswith(("folder:", "mod:"))
+            or not key.split(":", 1)[1] for key in group_keys
+        ) or len(set(group_keys)) != len(group_keys):
+            raise ValueError("folders.invalidLayout")
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            for key in group_keys:
+                if key.startswith("folder:"):
+                    self._require_mod_folder(connection, game_id, key[7:])
+            self._write_app_state(connection, _game_state_key(f"mod_folder_layout_{list_name}", game_id),
+                                  json.dumps(group_keys, ensure_ascii=False))
 
     def list_playsets(self, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
         game_id = _normalized_game_id(game_id)

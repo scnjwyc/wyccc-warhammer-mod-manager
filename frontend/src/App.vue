@@ -575,6 +575,11 @@ const toggleModFolder = async (folderId, listName) => {
     // Store actions surface failures through the shared toast.
   }
 }
+const moveModFolder = async move => {
+  try { await store.moveModFolder(move) } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
 const renameModFolder = folder => {
   Object.assign(folderDialog, { open: true, rename: true, folderId: folder.id, name: folder.name, modIds: [], error: '' })
 }
@@ -626,6 +631,8 @@ const handleContextAction = async ({ action, value, mod }) => {
       showTypeManager.value = true
     } else if (action === 'manual-type') {
       await enterManualModType(actionIds, mod)
+    } else if (action === 'ai-recognize-types') {
+      await store.recognizeModTypesMany(actionIds)
     } else if (action === 'move-specific') {
       const current = store.activeIds.indexOf(mod.id) + 1
       const raw = window.prompt(t('app.promptLoadOrder', { count: store.activeIds.length }), String(current))
@@ -1161,6 +1168,7 @@ onBeforeUnmount(() => {
         :title="t('app.inactiveMods')"
         :mods="store.inactiveMods"
         :folders="store.modFolders"
+        :folder-layout="store.modFolderLayouts.inactive"
         :busy="!!store.busy"
         :warnings-only="store.warningsOnly"
         :selected-id="store.selectedId"
@@ -1188,9 +1196,11 @@ onBeforeUnmount(() => {
         @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
         @drag-start="startModDrag"
+        @folder-drag-start="startModDrag"
         @drag-end="endModDrag"
         @context-menu="openModContextMenu"
         @toggle-folder="toggleModFolder"
+        @move-folder="moveModFolder"
         @rename-folder="renameModFolder"
         @delete-folder="deleteModFolder"
         @open-unit-data="openUnitDataModification"
@@ -1208,6 +1218,7 @@ onBeforeUnmount(() => {
         active
         :mods="store.activeMods"
         :folders="store.modFolders"
+        :folder-layout="store.modFolderLayouts.active"
         :busy="!!store.busy"
         :selected-id="store.selectedId"
         :selected-ids="store.selectedIds"
@@ -1236,9 +1247,11 @@ onBeforeUnmount(() => {
         @toggle-active="toggleSingleMod"
         @drop-mods="handleListDrop"
         @drag-start="startModDrag"
+        @folder-drag-start="startModDrag"
         @drag-end="endModDrag"
         @move="store.move"
         @toggle-folder="toggleModFolder"
+        @move-folder="moveModFolder"
         @rename-folder="renameModFolder"
         @delete-folder="deleteModFolder"
         @context-menu="openModContextMenu"

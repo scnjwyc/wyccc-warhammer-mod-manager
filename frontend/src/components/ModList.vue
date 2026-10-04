@@ -1,8 +1,10 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
 import { localizeBackendMessage, t } from '../languages'
 import SortMenu from './SortMenu.vue'
 import TagSearchBox from './TagSearchBox.vue'
+import { buildFolderGroups } from '../modFolderLayout'
+import { createDragFeedback } from '../dragFeedback'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -31,6 +33,7 @@ const props = defineProps({
   dragSource: { type: Object, default: null },
   unitDataModIds: { type: Array, default: () => [] },
   folders: { type: Array, default: () => [] },
+  folderLayout: { type: Array, default: () => [] },
   busy: { type: Boolean, default: false },
 })
 
@@ -56,37 +59,23 @@ const emit = defineEmits([
   'toggle-folder',
   'rename-folder',
   'delete-folder',
+  'move-folder',
+  'folder-drag-start',
 ])
 const draggingIds = ref([])
 const draggingOriginId = ref('')
-const dropPreview = ref(null)
+let draggingFolderId = ''
+let folderDropPreview = null
+let dropPreview = null
+const listElement = ref(null)
+const insertionMarker = ref(null)
+const dragFeedback = createDragFeedback(() => listElement.value, () => insertionMarker.value)
+onUpdated(() => dragFeedback.restore())
+onBeforeUnmount(() => dragFeedback.clear())
 const rowElements = new Map()
 const displayGroups = computed(() => {
-  const membership = new Map()
-  for (const folder of props.folders) {
-    for (const id of folder.mod_ids || []) if (!membership.has(id)) membership.set(id, folder)
-  }
-  const groups = []
-  const folderGroups = new Map()
-  for (const mod of props.mods) {
-    const folder = membership.get(mod.id)
-    if (!folder) {
-      groups.push({ key: `mod:${mod.id}`, folder: null, mods: [mod] })
-      continue
-    }
-    if (!folderGroups.has(folder.id)) {
-      const group = { key: `folder:${folder.id}`, folder, mods: [] }
-      folderGroups.set(folder.id, group)
-      groups.push(group)
-    }
-    folderGroups.get(folder.id).mods.push(mod)
-  }
   const searching = props.searchTokens.length > 0 || props.searchActive || props.warningsOnly
-  if (!searching) {
-    for (const folder of props.folders) {
-      if (!folder.mod_ids?.length) groups.push({ key: `folder:${folder.id}`, folder, mods: [] })
-    }
-  }
+  const groups = buildFolderGroups(props.mods, props.folders, props.folderLayout, searching)
   return groups.map(group => {
     const collapsed = Boolean(group.folder?.[props.active ? 'collapsed_active' : 'collapsed_inactive'])
     const expanded = !collapsed || searching || group.mods.some(mod => mod.id === props.searchFocusId)
@@ -95,7 +84,8 @@ const displayGroups = computed(() => {
 })
 const visibleMods = computed(() => displayGroups.value.flatMap(group => group.visibleMods))
 
-const positionOf = modId => props.orderIds.indexOf(modId) + 1
+const orderPositions = computed(() => new Map(props.orderIds.map((id, index) => [id, index + 1])))
+const positionOf = modId => orderPositions.value.get(modId) || 0
 const sourcesOf = mod => [...new Set(mod.sources?.length ? mod.sources : [mod.source])]
 const sourceLabel = source => ({
   workshop: t('list.workshopSource'),
@@ -117,7 +107,7 @@ const warningsOf = mod => (mod.warnings || []).filter(
 const canOpenUnitData = mod => props.unitDataModIds.includes(mod.id)
 const targetList = () => (props.active ? 'active' : 'inactive')
 const currentDragSource = () => (
-  props.dragSource || (draggingIds.value.length
+  (props.dragSource?.kind === 'folder' ? null : props.dragSource) || (draggingIds.value.length
     ? {
         source: targetList(),
         ids: draggingIds.value,
@@ -132,7 +122,54 @@ const canAcceptDrop = targetId => {
   return !(source.source === targetList() && targetId && source.ids?.includes(targetId))
 }
 const clearDropPreview = () => {
-  dropPreview.value = null
+  dropPreview = null
+  folderDropPreview = null
+  dragFeedback.clearPreview()
+}
+
+const currentFolderDrag = () => (
+  props.dragSource?.kind === 'folder' ? props.dragSource.folderId : draggingFolderId
+)
+const dropPlacement = event => {
+  const bounds = event.currentTarget?.getBoundingClientRect?.()
+  return !bounds || event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+}
+const onFolderDragStart = (event, folderId) => {
+  if (props.busy || event.target?.closest?.('.icon-button')) {
+    event.preventDefault()
+    return
+  }
+  draggingFolderId = folderId
+  dragFeedback.setSource(event.currentTarget)
+  const payload = { kind: 'folder', folderId, source: targetList() }
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-wyccc-folder', JSON.stringify(payload))
+  }
+  emit('folder-drag-start', payload)
+}
+const onFolderDragOver = (event, targetFolderId) => {
+  if (!currentFolderDrag() || props.busy || currentFolderDrag() === targetFolderId) {
+    clearDropPreview()
+    return
+  }
+  event.preventDefault()
+  const placement = dropPlacement(event)
+  folderDropPreview = { targetFolderId, targetModId: '', placement }
+  dragFeedback.showTarget(event.currentTarget, placement)
+}
+const onFolderDrop = (event, targetFolderId = '', targetModId = '') => {
+  let folderId = currentFolderDrag()
+  if (!folderId) {
+    try { folderId = JSON.parse(event.dataTransfer?.getData('application/x-wyccc-folder') || 'null')?.folderId } catch { /* Ignore unrelated drags. */ }
+  }
+  if (folderId && folderId !== targetFolderId && !props.busy) {
+    const preview = folderDropPreview
+    const placement = preview?.targetFolderId === targetFolderId && preview?.targetModId === targetModId
+      ? preview.placement : dropPlacement(event)
+    emit('move-folder', { folderId, targetFolderId, targetModId, placement, listName: targetList() })
+  }
+  clearDragging()
 }
 
 const selectMod = (event, mod) => {
@@ -173,7 +210,9 @@ const onKeydown = event => {
 const clearDragging = () => {
   draggingIds.value = []
   draggingOriginId.value = ''
+  draggingFolderId = ''
   clearDropPreview()
+  dragFeedback.clear()
   emit('drag-end')
 }
 
@@ -201,6 +240,14 @@ const onDragStart = (event, sourceId) => {
 }
 
 const onRowDragOver = (event, targetId) => {
+  if (currentFolderDrag()) {
+    if (!props.busy) {
+      const placement = dropPlacement(event)
+      folderDropPreview = { targetFolderId: '', targetModId: targetId, placement }
+      dragFeedback.showTarget(event.currentTarget, placement)
+    }
+    return
+  }
   if (!canAcceptDrop(targetId)) {
     clearDropPreview()
     return
@@ -209,13 +256,20 @@ const onRowDragOver = (event, targetId) => {
   const placement = !bounds || event.clientY < bounds.top + bounds.height / 2
     ? 'before'
     : 'after'
-  dropPreview.value = { targetId, placement }
+  dropPreview = { targetId, placement }
+  dragFeedback.showTarget(event.currentTarget, placement)
 }
 
 const onListDragOver = event => {
-  if (event.target instanceof Element && event.target.closest('.mod-row')) return
+  if (event.target instanceof Element && event.target.closest('.mod-row, .mod-folder-row')) return
+  if (currentFolderDrag()) {
+    folderDropPreview = { targetFolderId: '', targetModId: '', placement: 'after' }
+    dragFeedback.showEnd()
+    return
+  }
   if (!canAcceptDrop()) return
-  dropPreview.value = { targetId: '', placement: 'after' }
+  dropPreview = { targetId: '', placement: 'after' }
+  dragFeedback.showEnd()
 }
 
 const onListDragLeave = event => {
@@ -225,6 +279,10 @@ const onListDragLeave = event => {
 }
 
 const onDrop = (event, targetId = '') => {
+  if (currentFolderDrag() || event.dataTransfer?.getData('application/x-wyccc-folder')) {
+    onFolderDrop(event, '', targetId)
+    return
+  }
   if (!canAcceptDrop(targetId)) {
     clearDragging()
     return
@@ -245,8 +303,8 @@ const onDrop = (event, targetId = '') => {
     }
   }
   if (payload?.ids?.length) {
-    const placement = dropPreview.value?.targetId === targetId
-      ? dropPreview.value.placement
+    const placement = dropPreview?.targetId === targetId
+      ? dropPreview.placement
       : ''
     emit('drop-mods', {
       ...payload,
@@ -258,6 +316,11 @@ const onDrop = (event, targetId = '') => {
   }
   clearDragging()
 }
+
+watch(
+  () => props.dragSource,
+  source => { if (!source) clearDropPreview() },
+)
 
 watch(
   () => props.searchFocusId,
@@ -330,6 +393,7 @@ watch(
     </header>
 
     <div
+      ref="listElement"
       class="mod-list"
       data-testid="mod-list"
       tabindex="0"
@@ -340,7 +404,11 @@ watch(
     >
       <template v-for="group in displayGroups" :key="group.key">
         <div v-if="group.folder" class="mod-folder-row" :data-testid="`mod-folder-${group.folder.id}`"
-          @dragover.stop @drop.prevent.stop>
+          :draggable="!busy"
+          @dragstart.stop="onFolderDragStart($event, group.folder.id)"
+          @dragend.stop="clearDragging"
+          @dragover.stop="onFolderDragOver($event, group.folder.id)"
+          @drop.prevent.stop="onFolderDrop($event, group.folder.id)">
           <button
             type="button"
             class="mod-folder-toggle"
@@ -374,8 +442,6 @@ watch(
             'visual-sorted': visualSorted,
             'search-match': isSearchMatch(mod.id),
             'search-muted': isSearchMuted(mod.id),
-            'drop-before': dropPreview?.targetId === mod.id && dropPreview?.placement === 'before',
-            'drop-after': dropPreview?.targetId === mod.id && dropPreview?.placement === 'after',
             'in-folder': !!group.folder,
           }"
           role="button"
@@ -491,8 +557,9 @@ watch(
       </template>
 
       <div
-        v-if="dropPreview?.targetId === '' && dropPreview?.placement === 'after'"
+        ref="insertionMarker"
         class="drop-insertion-marker"
+        hidden
         aria-hidden="true"
       ></div>
 

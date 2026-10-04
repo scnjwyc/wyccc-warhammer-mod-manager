@@ -9,6 +9,15 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.2.1",
+        "date": "2026-10-04",
+        "entries": (
+            ("v121_adjusted_title", (("improvement", "v121_folder_sorting"),)),
+            ("v121_adjusted_title", (("improvement", "v121_folder_playsets"),)),
+            ("v121_added_title", (("feature", "v121_ai_mod_types"),)),
+        ),
+    },
+    {
         "version": "1.2.0",
         "date": "2026-10-03",
         "entries": (
@@ -670,6 +679,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v121_adjusted_title": "调整",
+        "v121_added_title": "新增",
+        "v121_folder_sorting": "文件夹现在可以拖动排序了",
+        "v121_folder_playsets": "文件夹现在可以跨播放集保存",
+        "v121_ai_mod_types": "修改类型现在可以通过AI自动识别，前提是你在设置中配置了AI模型，AI会自动判断这个MOD的类型，加入标签，只会从当前已有的类型中进行选择",
         "v120_fixed_title": "修复",
         "v120_added_title": "新增",
         "v120_warning_filter": "仅显示报警MOD模式下存在的问题",
@@ -908,6 +922,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v121_adjusted_title": "Adjusted",
+        "v121_added_title": "Added",
+        "v121_folder_sorting": "Folders can now be reordered by dragging.",
+        "v121_folder_playsets": "Folders now persist across playsets.",
+        "v121_ai_mod_types": "MOD types can now be recognized automatically by AI after configuring an AI model in Settings. AI determines the MOD's types and adds labels, choosing only from the types currently available.",
         "v120_fixed_title": "Fixed",
         "v120_added_title": "Added",
         "v120_warning_filter": "Issues in the mode that shows only MODs with warnings.",
@@ -1146,6 +1165,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v121_adjusted_title": "변경",
+        "v121_added_title": "추가",
+        "v121_folder_sorting": "이제 폴더를 드래그하여 순서를 변경할 수 있습니다.",
+        "v121_folder_playsets": "이제 폴더가 플레이 세트 간에 유지됩니다.",
+        "v121_ai_mod_types": "설정에서 AI 모델을 구성하면 MOD 유형을 AI로 자동 인식할 수 있습니다. AI가 MOD의 유형을 판단하고 태그를 추가하며, 현재 등록된 유형에서만 선택합니다.",
         "v120_fixed_title": "수정",
         "v120_added_title": "추가",
         "v120_warning_filter": "경고가 있는 MOD만 표시하는 모드의 문제를 수정했습니다.",
@@ -1384,6 +1408,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v121_adjusted_title": "Изменено",
+        "v121_added_title": "Добавлено",
+        "v121_folder_sorting": "Теперь порядок папок можно менять перетаскиванием.",
+        "v121_folder_playsets": "Теперь папки сохраняются при переключении наборов модов.",
+        "v121_ai_mod_types": "После настройки модели ИИ в настройках типы MOD можно определять автоматически. ИИ определяет типы MOD и добавляет метки, выбирая только из уже существующих типов.",
         "v120_fixed_title": "Исправлено",
         "v120_added_title": "Добавлено",
         "v120_warning_filter": "Проблемы в режиме отображения только MOD с предупреждениями.",
@@ -1622,6 +1651,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v121_adjusted_title": "調整",
+        "v121_added_title": "追加",
+        "v121_folder_sorting": "フォルダーをドラッグして並べ替えられるようになりました。",
+        "v121_folder_playsets": "フォルダーがプレイセットを切り替えても保持されるようになりました。",
+        "v121_ai_mod_types": "設定でAIモデルを構成すると、MODの種類をAIで自動認識できます。AIがMODの種類を判断してタグを追加し、現在登録されている種類からのみ選択します。",
         "v120_fixed_title": "修正",
         "v120_added_title": "追加",
         "v120_warning_filter": "警告のあるMODのみ表示するモードの問題を修正しました。",
@@ -1860,6 +1894,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v121_adjusted_title": "Ajustado",
+        "v121_added_title": "Añadido",
+        "v121_folder_sorting": "Ahora se puede cambiar el orden de las carpetas arrastrándolas.",
+        "v121_folder_playsets": "Ahora las carpetas se conservan entre conjuntos de juego.",
+        "v121_ai_mod_types": "Los tipos de MOD ahora se pueden reconocer automáticamente mediante IA tras configurar un modelo en Ajustes. La IA determina los tipos del MOD y añade etiquetas, eligiendo únicamente entre los tipos existentes.",
         "v120_fixed_title": "Corregido",
         "v120_added_title": "Añadido",
         "v120_warning_filter": "Problemas en el modo que muestra solo los MODs con advertencias.",

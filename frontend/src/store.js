@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { compareModLists } from './modListComparison'
+import { buildFolderGroups, moveFolderLayout } from './modFolderLayout'
 import { gameLabelKey } from './games'
 import { invoke } from './bridge'
 import {
@@ -82,7 +83,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.2.0',
+    appVersion: '1.2.1',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -90,6 +91,7 @@ export const useAppStore = defineStore('app', {
     mods: [],
     modTypes: [],
     modFolders: [],
+    modFolderLayouts: { active: [], inactive: [] },
     modFolderRevision: 0,
     activeIds: [],
     inactiveOrderIds: [],
@@ -389,6 +391,7 @@ export const useAppStore = defineStore('app', {
       this.backups = data.backups
       this.modTypes = data.mod_types || []
       this.modFolders = data.mod_folders || []
+      this.modFolderLayouts = data.mod_folder_layouts || { active: [], inactive: [] }
       this.orderToken = data.order_token
       this.runtime = data.runtime
       this.modRevision = Number(data.runtime?.mod_revision || 0)
@@ -434,6 +437,7 @@ export const useAppStore = defineStore('app', {
     clearGameContextData() {
       this.mods = []
       this.modFolders = []
+      this.modFolderLayouts = { active: [], inactive: [] }
       this.thumbnails = {}
       this.replaceActiveIds([])
       this.inactiveOrderIds = []
@@ -506,6 +510,7 @@ export const useAppStore = defineStore('app', {
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
         this.modFolders = data.mod_folders || []
+        this.modFolderLayouts = data.mod_folder_layouts || { active: [], inactive: [] }
         if (!this.selectedId || !installed.has(this.selectedId)) {
           this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
         }
@@ -673,6 +678,7 @@ export const useAppStore = defineStore('app', {
       this.playsets = data.playsets || this.playsets
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
       this.modFolders = data.mod_folders || []
+      this.modFolderLayouts = data.mod_folder_layouts || this.modFolderLayouts
       if (Array.isArray(data.current_playset?.hidden_mod_ids)) {
         const hiddenIds = new Set(data.current_playset.hidden_mod_ids)
         for (const mod of this.mods) mod.hidden = hiddenIds.has(mod.id)
@@ -694,12 +700,26 @@ export const useAppStore = defineStore('app', {
       return this.withBusy(t('folders.saving'), async () => {
         const data = await invoke(method, ...args, gameId, playsetId)
         if (revision === this.gameContextRevision && data.game_id === gameId && this.currentPlaysetId === playsetId
-          && data.playset_id === playsetId) this.modFolders = data.mod_folders || []
+          && data.playset_id === playsetId) {
+          this.modFolders = data.mod_folders || []
+          this.modFolderLayouts = data.mod_folder_layouts || this.modFolderLayouts
+        }
         return data
       })
     },
     createModFolder(name, modIds) {
       return this.updateModFolders('create_mod_folder', name, [...modIds])
+    },
+    moveModFolder(move) {
+      const listName = move.listName
+      if (!['active', 'inactive'].includes(listName)) return Promise.resolve(null)
+      const active = listName === 'active'
+      const filtered = this.warningsOnly || (active ? this.activeSearchTokens.length : this.inactiveSearchTokens.length) > 0
+      const previous = this.modFolderLayouts[listName] || []
+      const groups = buildFolderGroups(active ? this.activeMods : this.inactiveMods, this.modFolders, previous, filtered)
+      const keys = moveFolderLayout(groups, previous, move)
+      if (!keys) return Promise.resolve(null)
+      return this.updateModFolders('reorder_mod_folder_groups', listName, keys)
     },
     assignModFolder(modIds, folderId = '') {
       return this.updateModFolders('assign_mod_folder', [...modIds], folderId)
@@ -1500,6 +1520,55 @@ export const useAppStore = defineStore('app', {
         return this.modTypes
       })
     },
+    async recognizeModTypesMany(modIds) {
+      const ids = [...new Set((Array.isArray(modIds) ? modIds : [])
+        .map(id => String(id || '').trim())
+        .filter(Boolean))]
+      if (!ids.length) return { succeeded: [], failed: [] }
+      const revision = this.gameContextRevision
+      return this.withBusy(t('busy.aiRecognizeTypes', { current: 1, total: ids.length, name: '' }), async () => {
+        const succeeded = []
+        const failed = []
+        let lastError = ''
+        for (const [index, modId] of ids.entries()) {
+          if (revision !== this.gameContextRevision) break
+          this.busy = t('busy.aiRecognizeTypes', {
+            current: index + 1, total: ids.length, name: this.modMap.get(modId)?.effective_name || modId,
+          })
+          try {
+            const updated = await invoke('recognize_mod_types', modId)
+            if (revision !== this.gameContextRevision) break
+            const modIndex = this.mods.findIndex(mod => mod.id === updated.id)
+            if (modIndex >= 0) {
+              // Apply only the labels so background refreshes and other user
+              // metadata are not replaced by an older response.
+              this.mods[modIndex] = {
+                ...this.mods[modIndex], mod_type: updated.mod_type, mod_types: updated.mod_types,
+              }
+            }
+            succeeded.push(modId)
+          } catch (error) {
+            if (revision !== this.gameContextRevision) break
+            failed.push(modId)
+            lastError = error.message || String(error)
+          }
+        }
+        if (revision === this.gameContextRevision) {
+          if (ids.length === 1) {
+            if (failed.length) this.notify(lastError, 'error')
+            else {
+              const names = (this.modMap.get(ids[0])?.mod_types || [])
+                .map(id => this.modTypeMap[id] || id).join(', ')
+              this.notify(t('toast.typeSet', { names }))
+            }
+          } else {
+            const summary = t('toast.aiTypesRecognized', { succeeded: succeeded.length, failed: failed.length })
+            this.notify(lastError ? `${summary} ${lastError}` : summary, failed.length ? 'warning' : 'success')
+          }
+        }
+        return { succeeded, failed }
+      })
+    },
     async setModType(modId, typeId) {
       return this.withBusy(t('busy.editType'), async () => {
         const updated = await invoke('set_mod_types', modId, [typeId])
@@ -1858,6 +1927,7 @@ export const useAppStore = defineStore('app', {
       this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
       if (folderRevision === this.modFolderRevision && Array.isArray(data.mod_folders)) {
         this.modFolders = data.mod_folders
+        this.modFolderLayouts = data.mod_folder_layouts || this.modFolderLayouts
       }
       if (!installed.has(this.selectedId)) this.selectedId = this.activeIds[0] || this.mods[0]?.id || ''
       this.selectedIds = this.selectedIds.filter(id => installed.has(id))

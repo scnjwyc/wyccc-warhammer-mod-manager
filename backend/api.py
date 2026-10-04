@@ -14,6 +14,7 @@ import uuid
 import webbrowser
 from io import BytesIO
 from functools import wraps
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
@@ -26,7 +27,7 @@ from .app_settings import (
     SettingsService,
     default_data_dir,
 )
-from .ai_service import generate_mod_user_data
+from .ai_service import generate_mod_user_data, recognize_mod_types, validate_ai_settings
 from .changelog import get_all_changelogs
 from .constants import (
     APP_NAME,
@@ -256,6 +257,7 @@ class API:
             "refresh_workshop_metadata": self._refresh_workshop_metadata,
             "save_mod_user_data": self._save_mod_user_data,
             "generate_mod_user_data": self._generate_mod_user_data,
+            "recognize_mod_types": self._recognize_mod_types,
             "list_mod_types": self._list_mod_types,
             "reorder_mod_types": self._reorder_mod_types,
             "create_mod_type": self._create_mod_type,
@@ -287,6 +289,7 @@ class API:
             "delete_playset": self._delete_playset,
             "switch_playset": self._switch_playset,
             "create_mod_folder": self._create_mod_folder,
+            "reorder_mod_folder_groups": self._reorder_mod_folder_groups,
             "assign_mod_folder": self._assign_mod_folder,
             "rename_mod_folder": self._rename_mod_folder,
             "delete_mod_folder": self._delete_mod_folder,
@@ -447,6 +450,7 @@ class API:
             "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current_playset,
             "mod_folders": self._mod_folders_payload(game_id, current_playset["id"]),
+            "mod_folder_layouts": self.state_repository.get_mod_folder_layouts(game_id),
             "backups": self.state_repository.list_backups(),
             "mod_types": self.state_repository.list_mod_types(),
             "order_token": self._last_order_token,
@@ -1239,6 +1243,7 @@ class API:
                         "mod_folders": self._mod_folders_payload(
                             game_id, self.state_repository.get_current_playset_id(game_id)
                         ),
+                        "mod_folder_layouts": self.state_repository.get_mod_folder_layouts(game_id),
                         # A filesystem event arriving during this scan must remain
                         # visible to the frontend so it schedules one follow-up scan.
                         "mod_revision": scan_revision,
@@ -1262,6 +1267,32 @@ class API:
 
     def _list_mod_types(self) -> list[dict[str, Any]]:
         return self.state_repository.list_mod_types()
+
+    def _recognize_mod_types(self, mod_id: str) -> dict[str, Any]:
+        with self._context_lock:
+            asset = replace(self._require_asset(mod_id))
+            revision = self._game_context_revision
+            settings = self.settings_service.get()
+            app_id = int(self._active_game().app_id)
+        validate_ai_settings(settings)
+        if asset.workshop_id:
+            # Fetch the description directly; the service retains cached copy
+            # when Steam is unavailable. No dependency or author refresh needed.
+            with self._workshop_refresh_lock:
+                item = self.workshop_service.refresh_localized(
+                    [asset.workshop_id],
+                    str(settings.get("language") or DEFAULT_LANGUAGE),
+                    app_id=app_id,
+                ).get(asset.workshop_id, {})
+            asset.display_name = str(item.get("title") or asset.display_name)
+            asset.description = str(item.get("description") or asset.description)
+            if not asset.description.strip():
+                raise ValueError("无法读取该 MOD 的描述，请刷新工坊信息后重试")
+        selected = recognize_mod_types(asset, settings, self.state_repository.list_mod_types())
+        with self._context_lock:
+            if revision != self._game_context_revision:
+                raise ValueError("游戏已切换，未应用 AI 识别结果")
+            return self._set_mod_types(asset.id, selected)
 
     def _reorder_mod_types(self, type_ids: list[str]) -> dict[str, Any]:
         return {"items": self.state_repository.reorder_mod_types(type_ids)}
@@ -2101,7 +2132,17 @@ class API:
 
     def _mod_folder_result(self, game_id: str, playset_id: str) -> dict[str, Any]:
         return {"game_id": game_id, "playset_id": playset_id,
-                "mod_folders": self._mod_folders_payload(game_id, playset_id)}
+                "mod_folders": self._mod_folders_payload(game_id, playset_id),
+                "mod_folder_layouts": self.state_repository.get_mod_folder_layouts(game_id)}
+
+    def _reorder_mod_folder_groups(
+        self, list_name: str, group_keys: list[str],
+        expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.reorder_mod_folder_groups(playset_id, list_name, group_keys, game_id)
+            return self._mod_folder_result(game_id, playset_id)
 
     def _folder_assignment_ids(self, mod_ids: list[str]) -> list[str]:
         ids = self._canonicalize_mod_ids(mod_ids)
@@ -2189,6 +2230,7 @@ class API:
             "playsets": self.state_repository.list_playsets(game_id),
             "current_playset": current,
             "mod_folders": self._mod_folders_payload(game_id, current["id"]),
+            "mod_folder_layouts": self.state_repository.get_mod_folder_layouts(game_id),
             "ordered_mod_ids": present,
             "missing_mod_ids": missing,
             "missing_dependency_warnings": self._missing_dependency_warnings_payload(),

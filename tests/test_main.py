@@ -170,15 +170,15 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "1.2.0")
+        self.assertEqual(APP_VERSION, "1.2.1")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '1.2.0'", frontend_store)
-        self.assertIn("filevers=(1, 2, 0, 0)", version_info)
-        self.assertIn("prodvers=(1, 2, 0, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '1.2.0')", version_info)
-        self.assertIn("`1.2.0`", readme)
-        self.assertIn("`1.2.0`", readme_en)
+        self.assertIn("appVersion: '1.2.1'", frontend_store)
+        self.assertIn("filevers=(1, 2, 1, 0)", version_info)
+        self.assertIn("prodvers=(1, 2, 1, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '1.2.1')", version_info)
+        self.assertIn("`1.2.1`", readme)
+        self.assertIn("`1.2.1`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
@@ -197,8 +197,8 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:14]],
-            ["1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
+            [release["version"] for release in changelog[:15]],
+            ["1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
         )
         self.assertEqual(
             next(item for item in changelog if item["version"] == "1.0.1")["version"],
@@ -206,14 +206,14 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             [change["type"] for entry in changelog[0]["entries"] for change in entry["changes"]],
-            ["fix", "feature", "fix"],
+            ["improvement", "improvement", "feature"],
         )
         self.assertEqual(
             [change["text"] for entry in changelog[0]["entries"] for change in entry["changes"]],
             [
-                "仅显示报警MOD模式下存在的问题",
-                "启动记录功能，可以查看每一次游戏启动的MOD列表，支持和当前列表进行对比，也支持加载记录中的mod列表",
-                "当用户加入steam家庭组时，会显示家庭成员的MOD的问题",
+                "文件夹现在可以拖动排序了",
+                "文件夹现在可以跨播放集保存",
+                "修改类型现在可以通过AI自动识别，前提是你在设置中配置了AI模型，AI会自动判断这个MOD的类型，加入标签，只会从当前已有的类型中进行选择",
             ],
         )
         release_111 = next(release for release in changelog if release["version"] == "1.1.1")
@@ -236,8 +236,8 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:14]],
-                ["1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
+                [release["version"] for release in releases[:15]],
+                ["1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8", "1.0.7", "1.0.6", "1.0.5", "1.0.1"],
             )
             self.assertEqual(len(releases[0]["entries"]), 3)
             release_115 = next(release for release in releases if release["version"] == "1.1.5")

@@ -149,6 +149,18 @@ const run = (action, value = null, close = true) => {
             <span>{{ t('context.manualType') }}</span>
             <kbd class="context-menu-shortcut">Shift + F</kbd>
           </button>
+          <button
+            type="button"
+            class="context-menu-item"
+            role="menuitem"
+            data-testid="context-ai-recognize-types"
+            :disabled="busy || !aiEnabled"
+            :title="aiEnabled ? '' : t('details.aiDisabledTitle')"
+            @click.stop="run('ai-recognize-types')"
+          >
+            <span class="context-menu-icon">✦</span>
+            <span>{{ batchLabel(t('context.aiRecognizeTypes')) }}</span>
+          </button>
           <div class="context-menu-divider"></div>
           <button
             v-for="type in types"
