@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.2.2",
+        "date": "2026-10-06",
+        "entries": (
+            (
+                "v122_fixed_title",
+                (
+                    ("fix", "v122_unrecognized_mods"),
+                    ("fix", "v122_stale_permission_table"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "1.2.1",
         "date": "2026-10-04",
         "entries": (
@@ -679,6 +692,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v122_fixed_title": "修复",
+        "v122_unrecognized_mods": "某些MOD无法被识别的问题",
+        "v122_stale_permission_table": "关闭选项时未清理旧权限表的问题",
         "v121_adjusted_title": "调整",
         "v121_added_title": "新增",
         "v121_folder_sorting": "文件夹现在可以拖动排序了",
@@ -922,6 +938,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v122_fixed_title": "Fixed",
+        "v122_unrecognized_mods": "Some MODs could not be recognized.",
+        "v122_stale_permission_table": "The old permission table was not cleared when the option was turned off.",
         "v121_adjusted_title": "Adjusted",
         "v121_added_title": "Added",
         "v121_folder_sorting": "Folders can now be reordered by dragging.",
@@ -1165,6 +1184,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v122_fixed_title": "수정",
+        "v122_unrecognized_mods": "일부 MOD가 인식되지 않던 문제",
+        "v122_stale_permission_table": "옵션을 끌 때 이전 권한 테이블이 정리되지 않던 문제",
         "v121_adjusted_title": "변경",
         "v121_added_title": "추가",
         "v121_folder_sorting": "이제 폴더를 드래그하여 순서를 변경할 수 있습니다.",
@@ -1408,6 +1430,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v122_fixed_title": "Исправлено",
+        "v122_unrecognized_mods": "Проблема, из-за которой некоторые MOD не распознавались.",
+        "v122_stale_permission_table": "Проблема, из-за которой при отключении параметра не очищалась старая таблица разрешений.",
         "v121_adjusted_title": "Изменено",
         "v121_added_title": "Добавлено",
         "v121_folder_sorting": "Теперь порядок папок можно менять перетаскиванием.",
@@ -1651,6 +1676,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v122_fixed_title": "修正",
+        "v122_unrecognized_mods": "一部のMODが認識されない問題",
+        "v122_stale_permission_table": "オプションをオフにしたときに古い権限テーブルが削除されない問題",
         "v121_adjusted_title": "調整",
         "v121_added_title": "追加",
         "v121_folder_sorting": "フォルダーをドラッグして並べ替えられるようになりました。",
@@ -1894,6 +1922,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v122_fixed_title": "Corregido",
+        "v122_unrecognized_mods": "Un problema que impedía reconocer algunos MOD.",
+        "v122_stale_permission_table": "Un problema por el que no se eliminaba la tabla de permisos anterior al desactivar la opción.",
         "v121_adjusted_title": "Ajustado",
         "v121_added_title": "Añadido",
         "v121_folder_sorting": "Ahora se puede cambiar el orden de las carpetas arrastrándolas.",
