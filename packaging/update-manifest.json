@@ -1,43 +1,29 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.2.1",
-  "published_at": "2026-10-04",
+  "version": "1.2.2",
+  "published_at": "2026-10-06",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.2/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.1/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.2/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.2/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "EA8836207115304A5433E204A1D9F210670C6FB2DBD6E8A1B406BC95CCAF65D0",
-    "size": 65484728
+    "sha256": "CC467016D9E930E752325C1D79E4E957D072795D96441CC7167C492664261670",
+    "size": 63847549
   },
   "changelog": [
     {
-      "title": "调整",
+      "title": "修复",
       "changes": [
         {
-          "type": "improvement",
-          "text": "文件夹现在可以拖动排序了"
-        }
-      ]
-    },
-    {
-      "title": "调整",
-      "changes": [
+          "type": "fix",
+          "text": "某些MOD无法被识别的问题"
+        },
         {
-          "type": "improvement",
-          "text": "文件夹现在可以跨播放集保存"
-        }
-      ]
-    },
-    {
-      "title": "新增",
-      "changes": [
-        {
-          "type": "feature",
-          "text": "修改类型现在可以通过AI自动识别，前提是你在设置中配置了AI模型，AI会自动判断这个MOD的类型，加入标签，只会从当前已有的类型中进行选择"
+          "type": "fix",
+          "text": "关闭选项时未清理旧权限表的问题"
         }
       ]
     }
