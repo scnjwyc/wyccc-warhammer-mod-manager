@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import backend.start_options as start_options
+from backend.constants import RUNTIME_OPTIONS_MARKER_ENTRY
 from backend.game_data import GameDataBuildResult, GameDataEntry
 from backend.start_options import (
     INTRO_MOVIES,
@@ -731,7 +732,8 @@ class StartOptionsPackTests(unittest.TestCase):
 
             entries = {entry.name: entry.payload for entry in read_pack_entries(Path(result["path"]))}
             self.assertEqual(set(INTRO_MOVIES), REFERENCE_INTRO_MOVIES)
-            self.assertEqual(result["entry_count"], 24)
+            self.assertEqual(result["entry_count"], 25)
+            self.assertIn(RUNTIME_OPTIONS_MARKER_ENTRY, entries)
             self.assertEqual(entries["script\\enable_console_logging"], b"\0")
             for movie in REFERENCE_INTRO_MOVIES:
                 self.assertEqual(entries[movie], b"")

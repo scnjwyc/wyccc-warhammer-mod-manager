@@ -16,6 +16,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from .constants import (
     GAME_DATA_FEATURE_WORKSHOP_ITEMS,
     PACK_TYPE_MOVIE,
+    RUNTIME_OPTIONS_MARKER_ENTRY,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
 )
@@ -1042,6 +1043,10 @@ def build_runtime_options_pack(
             "entry_count": 0,
             "game_data": {},
         }
+    entries.append(PackEntry(
+        RUNTIME_OPTIONS_MARKER_ENTRY,
+        b'{"producer":"wyccc-mod-manager","kind":"runtime-options","schema":1}',
+    ))
     write_pfh5_pack(output_path, entries)
     return {
         "path": str(output_path.resolve(strict=False)),
@@ -1049,3 +1054,45 @@ def build_runtime_options_pack(
         "entry_count": len(entries),
         "game_data": {},
     }
+
+
+def remove_disabled_runtime_options(
+    output_dir: Path,
+    data_path: str,
+    settings: Mapping[str, Any],
+) -> None:
+    """Remove disabled overrides from existing Packs without rebuilding DB data."""
+    option_entries = {
+        "custom_battle_all_units_as_lords": (PERMISSIONS_ENTRY,),
+        "enable_script_logging": ("script\\enable_console_logging",),
+        "skip_intro_movies": INTRO_MOVIES,
+    }
+    disabled_entries = {
+        name.casefold()
+        for option, names in option_entries.items()
+        if not settings.get(option)
+        for name in names
+    }
+    if not disabled_entries:
+        return
+    any_enabled = any(settings.get(option) for option in option_entries)
+    paths = [Path(output_dir) / RUNTIME_PACK_NAME]
+    if data_path:
+        paths.append(Path(data_path) / RUNTIME_PACK_NAME)
+    for path in dict.fromkeys(paths):
+        if not any_enabled:
+            path.unlink(missing_ok=True)
+            continue
+        if not path.is_file():
+            continue
+        entries = read_pack_entries(path)
+        remaining = [
+            entry for entry in entries
+            if entry.name.replace("/", "\\").casefold() not in disabled_entries
+        ]
+        if len(remaining) == len(entries):
+            continue
+        if any(entry.name.replace("/", "\\").casefold() != RUNTIME_OPTIONS_MARKER_ENTRY for entry in remaining):
+            write_pfh5_pack(path, remaining)
+        else:
+            path.unlink(missing_ok=True)

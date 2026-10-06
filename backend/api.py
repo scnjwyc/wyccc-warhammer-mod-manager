@@ -86,6 +86,7 @@ from .start_options import (
     VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
     build_runtime_options_pack,
     collect_game_data_source_snapshot,
+    remove_disabled_runtime_options,
 )
 from .dynamic_ror_patch_state import ensure_dynamic_ror_compatibility_patch
 from .variant_selector_patch_state import ensure_variant_selector_compatibility_patch
@@ -702,7 +703,16 @@ class API:
         self._assets.clear()
         self._asset_aliases.clear()
         self._invalidate_game_executable_cache()
-        self._sync_runtime_services(self.detect_game_running(), force=True)
+        running = self.detect_game_running()
+        if (
+            paths.game_definition.supports_game_data_modification
+            and not running
+            and any(option in changes for option in (
+                "custom_battle_all_units_as_lords", "enable_script_logging", "skip_intro_movies",
+            ))
+        ):
+            remove_disabled_runtime_options(self.data_dir / "runtime", paths.data_path, settings)
+        self._sync_runtime_services(running, force=True)
         return {
             "settings": settings,
             "paths": paths.to_dict(),
@@ -1684,6 +1694,16 @@ class API:
                 str(runtime.get("path") or ""),
                 data_root,
                 RUNTIME_PACK_NAME,
+            )
+            logger.info(
+                "Runtime options all_units_as_lords=%s script_logging=%s skip_intro_movies=%s "
+                "entries=%s generated_pack=%s staged_pack=%s",
+                bool(settings.get("custom_battle_all_units_as_lords")),
+                bool(settings.get("enable_script_logging")),
+                bool(settings.get("skip_intro_movies")),
+                runtime.get("entry_count", 0),
+                runtime.get("path") or "none",
+                runtime_path or "none",
             )
             launch_plan = saved["plan"]
             launch_path = saved["plan"]["target_path"]

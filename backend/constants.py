@@ -63,6 +63,7 @@ UNIT_RECRUITMENT_CAPACITY_UNLIMITED = 0
 INTERNAL_FEATURE_WORKSHOP_IDS = frozenset(
     item["workshop_id"] for item in GAME_DATA_FEATURE_WORKSHOP_ITEMS.values()
 )
+RUNTIME_OPTIONS_MARKER_ENTRY = "wyccc\\launcher_runtime_options.json"
 INTERNAL_RUNTIME_PACK_NAMES = frozenset(
     {
         "!!!!wyccc_dynamic_ror_compatibility.pack",

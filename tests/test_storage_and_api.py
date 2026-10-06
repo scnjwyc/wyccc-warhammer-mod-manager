@@ -23,8 +23,10 @@ from backend.share import export_share, parse_pending_workshop_mod_id
 from backend.start_options import (
     DYNAMIC_ROR_COMPATIBILITY_PATCH_NAME,
     GAME_DATA_PATCH_NAME,
+    INTRO_MOVIES,
     RUNTIME_PACK_NAME,
     UNIT_DATA_PATCH_NAME,
+    build_runtime_options_pack,
 )
 from backend.steamworks_bridge import SteamworksBridgeError
 from backend.storage import StateRepository
@@ -564,6 +566,40 @@ class ApiContractTests(unittest.TestCase):
                 self.assertEqual(api._canonicalize_mod_ids([asset.id]), [])
             finally:
                 api.close()
+
+    def test_normal_mod_with_generic_launch_resources_can_be_enabled(self) -> None:
+        cases = (
+            [("script\\enable_console_logging", b"")],
+            [("script\\enable_console_logging", b""), ("db\\main_units_tables\\goblin", b"units")],
+            [(name, b"") for name in INTRO_MOVIES],
+            [(name, b"") for name in INTRO_MOVIES] + [("db\\main_units_tables\\goblin", b"units")],
+        )
+        for entries in cases:
+            with self.subTest(entries=len(entries)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                path = write_pack(root / "data" / "Goblin_horde_redux.pack", entries=entries)
+                asset = ModScanner._make_asset(path, SOURCE_DATA)
+                ModScanner._apply_internal_pack_metadata({asset.id: asset}, "zh-CN")
+                api = API(root / "state")
+                try:
+                    api._assets = {asset.id: asset}
+                    self.assertFalse(asset.is_launcher_runtime_pack)
+                    self.assertFalse(asset.hidden)
+                    self.assertEqual(api._canonicalize_mod_ids([asset.id]), [asset.id])
+                finally:
+                    api.close()
+
+    def test_renamed_generated_logging_and_intro_packs_remain_excluded(self) -> None:
+        for option in ("enable_script_logging", "skip_intro_movies"):
+            with self.subTest(option=option), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                built = build_runtime_options_pack(root / "runtime", str(root / "data"), {}, [], {option: True})
+                copied = root / "runtime-copy.pack"
+                copied.write_bytes(Path(built["path"]).read_bytes())
+                asset = ModScanner._make_asset(copied, SOURCE_DATA)
+                ModScanner._apply_internal_pack_metadata({asset.id: asset}, "zh-CN")
+                self.assertTrue(asset.is_launcher_runtime_pack)
+                self.assertTrue(asset.hidden)
 
     def test_runtime_pack_staging_replaces_a_symlink_at_its_data_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -14,6 +14,22 @@ import {
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
 describe('language settings', () => {
+  it('saves false when disabling an already enabled custom battle lord option', async () => {
+    const wrapper = mount(SettingsModal, {
+      props: {
+        open: true,
+        settings: { language: 'zh-CN', custom_battle_all_units_as_lords: true },
+        health: {},
+      },
+      global: { plugins: [createPinia()] },
+    })
+    const checkbox = wrapper.get('[data-testid="all-units-as-lords"]')
+    expect(checkbox.element.checked).toBe(true)
+    await checkbox.setValue(false)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('save')[0][0].custom_battle_all_units_as_lords).toBe(false)
+  })
+
   it('offers and saves all six supported language selections', async () => {
     const wrapper = mount(SettingsModal, {
       props: {

@@ -18,6 +18,7 @@ from .constants import (
     PACK_TYPE_MOD,
     PACK_TYPE_MOVIE,
     PACK_TYPE_UNKNOWN,
+    RUNTIME_OPTIONS_MARKER_ENTRY,
     SOURCE_DATA,
     SOURCE_LOCAL,
     SOURCE_WORKSHOP,
@@ -40,16 +41,7 @@ _LAUNCHER_RUNTIME_ENTRY_NAMES = frozenset(
     {
         "script\\campaign\\mod\\wyccc_variant_selector_patch.lua",
         "db\\units_custom_battle_permissions_tables\\!!!!wyccc_runtime",
-        "script\\enable_console_logging",
-    }
-)
-_LAUNCHER_RUNTIME_INTRO_MOVIE_ENTRIES = frozenset(
-    {
-        *(f"movies\\epilepsy_warning\\epilepsy_warning_{language}.ca_vp8" for language in (
-            "br", "cn", "cz", "de", "en", "es", "fr", "it", "kr", "pl", "ru", "tr", "zh",
-        )),
-        "movies\\gam_int.ca_vp8",
-        *(f"movies\\startup_movie_{index:02d}.ca_vp8" for index in range(1, 9)),
+        RUNTIME_OPTIONS_MARKER_ENTRY,
     }
 )
 
@@ -63,13 +55,9 @@ def _is_launcher_runtime_pack_entry(name: str) -> bool:
 
 
 def _is_launcher_runtime_pack(entry_names: Iterable[str]) -> bool:
-    normalized = {
-        str(name).replace("/", "\\").casefold() for name in entry_names
-    }
-    return (
-        any(_is_launcher_runtime_pack_entry(name) for name in normalized)
-        or _LAUNCHER_RUNTIME_INTRO_MOVIE_ENTRIES.issubset(normalized)
-    )
+    # Logging and intro overrides are shared by ordinary MODs. Only Wyccc's
+    # dedicated markers can identify a generated Pack after it is renamed.
+    return any(_is_launcher_runtime_pack_entry(name) for name in entry_names)
 
 
 def _read_subscription_file(subscription_path: Path, app_id: str) -> dict[str, int] | None:
