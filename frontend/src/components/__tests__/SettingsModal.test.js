@@ -3,17 +3,71 @@ import { createPinia } from 'pinia'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import SettingsModal from '../SettingsModal.vue'
+import { useAppStore } from '../../store'
 import {
   LANGUAGE_OPTIONS,
   applyInterfaceLanguage,
   contentLanguageFor,
   languageLabel,
   normalizeLanguage,
+  hasTranslation,
+  t,
 } from '../../languages'
 
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
 describe('language settings', () => {
+  const mountProbeSettings = (settings = {}, enabled = false, source = 'workshop') => {
+    const pinia = createPinia()
+    const store = useAppStore(pinia)
+    store.mods = [{ id: 'plus', workshop_id: '3811098873', pack_name: 'memreader_plus.pack', source }]
+    store.activeIds = enabled ? ['plus'] : []
+    return mount(SettingsModal, {
+      props: { open: true, settings: { language: 'zh-CN', ...settings }, health: {} },
+      global: { plugins: [pinia] },
+    })
+  }
+
+  it('saves the exception probe and displays the exact requested help and dependency', async () => {
+    const wrapper = mountProbeSettings()
+    const probe = wrapper.get('[data-testid="exception-probe"]')
+    expect(probe.element.checked).toBe(false)
+    expect(wrapper.text()).toContain('使用Memreader深入读取并记录异常片段，便于通过AI分析具体异常原因，日志位于游戏根目录，战锤3全面战争可用')
+    expect(wrapper.get('[data-testid="exception-probe-dependency"]').text()).toBe('需要订阅并启用 Memreader Plus 才能生效。')
+    await probe.setValue(true)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('save')[0][0].enable_exception_probe).toBe(true)
+  })
+
+  it('updates the dependency hint when the Plus MOD is enabled or disabled', async () => {
+    const wrapper = mountProbeSettings({ enable_exception_probe: true }, true)
+    expect(wrapper.get('[data-testid="exception-probe-dependency"]').text()).toContain('已订阅并启用')
+    const store = useAppStore()
+    store.activeIds = []
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="exception-probe-dependency"]').text()).toContain('需要订阅并启用')
+    await wrapper.get('[data-testid="exception-probe"]').setValue(false)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('save')[0][0].enable_exception_probe).toBe(false)
+  })
+
+  it('does not treat a local copy alone as subscribed Plus and disables the probe for other games', () => {
+    const local = mountProbeSettings({}, true, 'data')
+    expect(local.get('[data-testid="exception-probe-dependency"]').text()).toContain('需要订阅并启用')
+    const other = mountProbeSettings({ selected_game: 'three_kingdoms' }, true)
+    expect(other.get('[data-testid="exception-probe"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('provides exception probe text in all six built-in languages', () => {
+    for (const key of ['settings.exceptionProbe', 'settings.exceptionProbeHelp', 'settings.exceptionProbeRequired', 'settings.exceptionProbeReady']) {
+      expect(hasTranslation(key)).toBe(true)
+      for (const language of LANGUAGE_OPTIONS) {
+        applyInterfaceLanguage(language.code)
+        expect(t(key)).not.toBe(key)
+      }
+    }
+  })
+
   it('saves false when disabling an already enabled custom battle lord option', async () => {
     const wrapper = mount(SettingsModal, {
       props: {

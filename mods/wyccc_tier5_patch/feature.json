@@ -1,0 +1,9 @@
+{
+  "feature": "tier5_compatibility",
+  "title": "Tier 5 Settlement Appearance Compatibility",
+  "pack_name": "wyccc_tier5_patch.pack",
+  "schema_version": 1,
+  "default_hidden": true,
+  "default_enabled": false,
+  "required_workshop_items": ["3071058075"]
+}

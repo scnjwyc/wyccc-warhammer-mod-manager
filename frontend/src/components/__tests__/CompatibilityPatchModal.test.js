@@ -4,6 +4,33 @@ import { describe, expect, it } from 'vitest'
 import CompatibilityPatchModal from '../CompatibilityPatchModal.vue'
 
 describe('compatibility patch modal', () => {
+  it('keeps Tier5 off and disabled when dependencies are missing', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: { open: true, tier5PacksEnabled: false, tier5MissingPacks: ['wyccc_tier5_patch.pack'],
+        settings: { tier5_compatibility_patch_enabled: true } },
+    })
+    const checkbox = wrapper.get('[data-testid="tier5-compatibility-patch-enabled"]')
+    expect(checkbox.element.checked).toBe(false)
+    expect(checkbox.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="tier5-required-packs"]').text()).toContain('wyccc_tier5_patch.pack')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0].tier5_compatibility_patch_enabled).toBe(false)
+  })
+
+  it('allows opting in and clears the open Tier5 toggle when a dependency disappears', async () => {
+    const wrapper = mount(CompatibilityPatchModal, {
+      props: { open: true, tier5PacksEnabled: true, settings: {} },
+    })
+    const checkbox = wrapper.get('[data-testid="tier5-compatibility-patch-enabled"]')
+    expect(checkbox.element.checked).toBe(false)
+    expect(checkbox.attributes('disabled')).toBeUndefined()
+    await checkbox.setValue(true)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')[0][0].tier5_compatibility_patch_enabled).toBe(true)
+    await wrapper.setProps({ tier5PacksEnabled: false })
+    expect(checkbox.element.checked).toBe(false)
+    expect(checkbox.attributes('disabled')).toBeDefined()
+  })
   it('renders the Dynamic RoRs option and defaults to the stored setting', () => {
     const wrapper = mount(CompatibilityPatchModal, {
       props: {
@@ -77,6 +104,7 @@ describe('compatibility patch modal', () => {
     expect(wrapper.emitted('save')[0][0]).toEqual({
       dynamic_ror_compatibility_patch_enabled: false,
       variant_selector_compatibility_patch_enabled: false,
+      tier5_compatibility_patch_enabled: false,
     })
   })
 
@@ -96,6 +124,7 @@ describe('compatibility patch modal', () => {
     expect(wrapper.emitted('save')[0][0]).toEqual({
       dynamic_ror_compatibility_patch_enabled: true,
       variant_selector_compatibility_patch_enabled: false,
+      tier5_compatibility_patch_enabled: false,
     })
   })
 
@@ -117,6 +146,7 @@ describe('compatibility patch modal', () => {
     expect(wrapper.emitted('save')[0][0]).toEqual({
       dynamic_ror_compatibility_patch_enabled: false,
       variant_selector_compatibility_patch_enabled: false,
+      tier5_compatibility_patch_enabled: false,
     })
   })
 

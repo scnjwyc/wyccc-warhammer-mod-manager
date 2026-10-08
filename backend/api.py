@@ -28,6 +28,7 @@ from .app_settings import (
     default_data_dir,
 )
 from .ai_service import generate_mod_user_data, recognize_mod_types, validate_ai_settings
+from .battle_probe import MEMREADER_PLUS_WORKSHOP_ID, memreader_plus_enabled
 from .changelog import get_all_changelogs
 from .constants import (
     APP_NAME,
@@ -43,6 +44,7 @@ from .constants import (
     UNIT_DATA_FEATURE_TITLE,
     VARIANT_SELECTOR_FEATURE_PACK_NAME,
     VARIANT_SELECTOR_FEATURE_TITLE,
+    TIER5_COMPATIBILITY_PATCH_NAME,
 )
 from .file_operations import (
     build_delete_preview,
@@ -90,6 +92,8 @@ from .start_options import (
 )
 from .dynamic_ror_patch_state import ensure_dynamic_ror_compatibility_patch
 from .variant_selector_patch_state import ensure_variant_selector_compatibility_patch
+from .tier5_feature import tier5_feature_status
+from .tier5_patch_state import ensure_tier5_compatibility_patch
 from .unit_data import (
     _display_source_name,
     build_unit_table_snapshot,
@@ -709,6 +713,7 @@ class API:
             and not running
             and any(option in changes for option in (
                 "custom_battle_all_units_as_lords", "enable_script_logging", "skip_intro_movies",
+                "enable_exception_probe",
             ))
         ):
             remove_disabled_runtime_options(self.data_dir / "runtime", paths.data_path, settings)
@@ -756,16 +761,20 @@ class API:
                 return value.strip().casefold() in {"1", "true", "yes", "on"}
             return bool(value)
 
-        self.settings_service.save(
-            {
-                key: coerce(changes[key])
-                for key in (
-                    "dynamic_ror_compatibility_patch_enabled",
-                    "variant_selector_compatibility_patch_enabled",
-                )
-                if key in changes
-            }
-        )
+        filtered = {
+            key: coerce(changes[key])
+            for key in (
+                "dynamic_ror_compatibility_patch_enabled",
+                "variant_selector_compatibility_patch_enabled",
+                "tier5_compatibility_patch_enabled",
+            )
+            if key in changes
+        }
+        if filtered.get("tier5_compatibility_patch_enabled"):
+            filtered["tier5_compatibility_patch_enabled"] = tier5_feature_status(
+                self._assets, self._current_enabled_mod_ids(),
+            )["available"]
+        self.settings_service.save(filtered)
         return {"settings": self.settings_service.get_public()}
 
     def _current_enabled_mod_ids(self) -> list[str]:
@@ -1668,13 +1677,58 @@ class API:
                     "source_pack_names", []
                 ),
             )
+            try:
+                tier5_patch = ensure_tier5_compatibility_patch(
+                    output_dir=self.data_dir / "runtime",
+                    data_path=paths.data_path,
+                    assets=self._assets,
+                    active_ids=saved["plan"]["ordered_mod_ids"],
+                    playset_id=self.state_repository.get_current_playset_id(paths.game_id),
+                    settings=settings,
+                )
+            except Exception:
+                logger.exception("Tier5 compatibility patch status=generation_failed")
+                raise
+            logger.info(
+                "Tier5 compatibility patch status=%s reason=%s fingerprint=%s entries=%s stats=%s",
+                tier5_patch["status"], tier5_patch.get("reason", ""),
+                str(tier5_patch.get("fingerprint") or "")[:12],
+                tier5_patch.get("entry_count", 0), tier5_patch.get("stats", {}),
+            )
+            runtime_settings = dict(settings)
+            probe_subscribed = False
+            if settings.get("enable_exception_probe") and memreader_plus_enabled(
+                self._assets, saved["plan"]["ordered_mod_ids"]
+            ):
+                try:
+                    subscriptions = query_workshop_subscription_status(
+                        [MEMREADER_PLUS_WORKSHOP_ID],
+                        steam_language_for_interface(self.interface_language()),
+                        app_id=int(paths.game_definition.app_id),
+                    )
+                except SteamworksBridgeError:
+                    logger.warning("Exception probe skipped: unable to verify Memreader Plus subscription", exc_info=True)
+                else:
+                    probe_subscribed = any(
+                        str(item.get("workshop_id")) == MEMREADER_PLUS_WORKSHOP_ID
+                        and bool(item.get("subscribed"))
+                        for item in subscriptions
+                        if isinstance(item, dict)
+                    )
+            runtime_settings["enable_exception_probe"] = bool(
+                settings.get("enable_exception_probe") and probe_subscribed
+            )
             runtime = build_runtime_options_pack(
                 self.data_dir / "runtime",
                 paths.data_path,
                 self._assets,
                 saved["plan"]["ordered_mod_ids"],
-                settings,
+                runtime_settings,
             )
+            runtime.setdefault("exception_probe", {}).update({
+                "requested": bool(settings.get("enable_exception_probe")),
+                "subscribed": probe_subscribed,
+            })
             game_data_path = self._stage_runtime_pack_in_data(
                 str(game_data_patch.get("path") or ""),
                 data_root,
@@ -1690,17 +1744,21 @@ class API:
                 data_root,
                 VARIANT_SELECTOR_COMPATIBILITY_PATCH_NAME,
             )
+            tier5_path = self._stage_runtime_pack_in_data(
+                str(tier5_patch.get("path") or ""), data_root, TIER5_COMPATIBILITY_PATCH_NAME,
+            )
             runtime_path = self._stage_runtime_pack_in_data(
                 str(runtime.get("path") or ""),
                 data_root,
                 RUNTIME_PACK_NAME,
             )
             logger.info(
-                "Runtime options all_units_as_lords=%s script_logging=%s skip_intro_movies=%s "
+                "Runtime options all_units_as_lords=%s script_logging=%s skip_intro_movies=%s exception_probe=%s "
                 "entries=%s generated_pack=%s staged_pack=%s",
                 bool(settings.get("custom_battle_all_units_as_lords")),
                 bool(settings.get("enable_script_logging")),
                 bool(settings.get("skip_intro_movies")),
+                runtime.get("exception_probe", {}),
                 runtime.get("entry_count", 0),
                 runtime.get("path") or "none",
                 runtime_path or "none",
@@ -1762,6 +1820,15 @@ class API:
                     sources=[SOURCE_DATA],
                 )
                 internal_ids.append(variant_selector_id)
+            tier5_id = ""
+            if tier5_path is not None:
+                tier5_id = "runtime:tier5-compatibility"
+                internal_assets[tier5_id] = ModAsset(
+                    id=tier5_id, pack_name=TIER5_COMPATIBILITY_PATCH_NAME,
+                    display_name="五级小城美化兼容补丁", path=str(tier5_path),
+                    directory=str(data_root), source=SOURCE_DATA, sources=[SOURCE_DATA],
+                )
+                internal_ids.append(tier5_id)
             if runtime_path is not None:
                 runtime_id = "runtime:start-options"
                 internal_assets[runtime_id] = ModAsset(
@@ -1833,6 +1900,7 @@ class API:
                 "game_data_patch": game_data_patch,
                 "dynamic_ror_compatibility_patch": dynamic_ror_patch,
                 "variant_selector_compatibility_patch": variant_selector_patch,
+                "tier5_compatibility_patch": tier5_patch,
                 "runtime_options": runtime,
                 "launch_plan": launch_plan,
                 "save": selected_save,

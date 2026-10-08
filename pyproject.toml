@@ -1,6 +1,6 @@
 [project]
 name = "wyccc-mod-manager"
-version = "1.2.2"
+version = "1.2.3"
 description = "A focused Total War mod manager."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,4 +44,4 @@ packages = ["backend"]
 py-modules = ["main"]
 
 [tool.setuptools.package-data]
-backend = ["schemas/*.ron.gz", "schemas/*.json", "schemas/*.txt", "schemas/*.md"]
+backend = ["schemas/*.ron.gz", "schemas/*.json", "schemas/*.txt", "schemas/*.md", "resources/battle_probe/script/battle/mod/*.lua", "resources/battle_probe/script/wyccc_battle_probe/*.lua"]

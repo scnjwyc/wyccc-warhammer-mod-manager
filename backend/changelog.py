@@ -9,6 +9,19 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.2.3",
+        "date": "2026-10-08",
+        "entries": (
+            (
+                "v123_added_title",
+                (
+                    ("feature", "v123_exception_probe"),
+                    ("feature", "v123_tier5_patch"),
+                ),
+            ),
+        ),
+    },
+    {
         "version": "1.2.2",
         "date": "2026-10-06",
         "entries": (
@@ -692,6 +705,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v123_added_title": "新增",
+        "v123_exception_probe": "异常探针功能，将更详细的内存日志输出到游戏根目录，以便以出现某些难以排查的异常时，获得更多线索",
+        "v123_tier5_patch": "5级小城补丁，当使用5级小城MOD时，开启此MOD，检测到任何对小城进行了美化的MOD，例如与龙同行、OVN、JIANG， 都会动态生成一个兼容补丁",
         "v122_fixed_title": "修复",
         "v122_unrecognized_mods": "某些MOD无法被识别的问题",
         "v122_stale_permission_table": "关闭选项时未清理旧权限表的问题",
@@ -938,6 +954,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v123_added_title": "Added",
+        "v123_exception_probe": "An exception probe that writes more detailed memory logs to the game root directory, providing more clues when investigating difficult-to-diagnose errors.",
+        "v123_tier5_patch": "A tier 5 minor-settlement patch. When using the tier 5 minor-settlement MOD, enabling this MOD dynamically generates a compatibility patch for detected minor-settlement beautification MODs, such as Walking with the Dragon, OVN, and JIANG.",
         "v122_fixed_title": "Fixed",
         "v122_unrecognized_mods": "Some MODs could not be recognized.",
         "v122_stale_permission_table": "The old permission table was not cleared when the option was turned off.",
@@ -1184,6 +1203,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v123_added_title": "추가",
+        "v123_exception_probe": "게임 루트 폴더에 더 상세한 메모리 로그를 기록하는 예외 탐지 기능으로, 원인을 찾기 어려운 오류를 조사할 때 더 많은 단서를 제공합니다.",
+        "v123_tier5_patch": "5단계 소도시 패치. 5단계 소도시 MOD와 함께 이 MOD를 활성화하면 与龙同行, OVN, JIANG 등의 소도시 외형 개선 MOD를 감지하여 호환 패치를 동적으로 생성합니다.",
         "v122_fixed_title": "수정",
         "v122_unrecognized_mods": "일부 MOD가 인식되지 않던 문제",
         "v122_stale_permission_table": "옵션을 끌 때 이전 권한 테이블이 정리되지 않던 문제",
@@ -1430,6 +1452,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v123_added_title": "Добавлено",
+        "v123_exception_probe": "Зонд исключений, записывающий более подробные журналы памяти в корневую папку игры, чтобы дать больше подсказок при поиске причин трудно диагностируемых ошибок.",
+        "v123_tier5_patch": "Патч малых поселений 5-го уровня. При использовании соответствующего MOD включение этого MOD динамически создаёт патч совместимости для обнаруженных MOD внешнего вида малых поселений, например 与龙同行, OVN и JIANG.",
         "v122_fixed_title": "Исправлено",
         "v122_unrecognized_mods": "Проблема, из-за которой некоторые MOD не распознавались.",
         "v122_stale_permission_table": "Проблема, из-за которой при отключении параметра не очищалась старая таблица разрешений.",
@@ -1676,6 +1701,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v123_added_title": "追加",
+        "v123_exception_probe": "より詳しいメモリログをゲームのルートフォルダーに出力する例外プローブ機能。原因の特定が難しいエラーを調べる際に、より多くの手がかりを得られます。",
+        "v123_tier5_patch": "レベル5の小規模集落パッチ。レベル5の小規模集落MODとともにこのMODを有効にすると、与龙同行、OVN、JIANGなどの集落外観MODを検出し、互換パッチを動的に生成します。",
         "v122_fixed_title": "修正",
         "v122_unrecognized_mods": "一部のMODが認識されない問題",
         "v122_stale_permission_table": "オプションをオフにしたときに古い権限テーブルが削除されない問題",
@@ -1922,6 +1950,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v123_added_title": "Añadido",
+        "v123_exception_probe": "Una sonda de excepciones que guarda registros de memoria más detallados en la carpeta raíz del juego, aportando más pistas para investigar errores difíciles de diagnosticar.",
+        "v123_tier5_patch": "Un parche de asentamientos menores de nivel 5. Al usar el MOD de asentamientos menores de nivel 5 y activar este MOD, se genera dinámicamente un parche de compatibilidad para los MOD de apariencia detectados, como 与龙同行, OVN y JIANG.",
         "v122_fixed_title": "Corregido",
         "v122_unrecognized_mods": "Un problema que impedía reconocer algunos MOD.",
         "v122_stale_permission_table": "Un problema por el que no se eliminaba la tabla de permisos anterior al desactivar la opción.",

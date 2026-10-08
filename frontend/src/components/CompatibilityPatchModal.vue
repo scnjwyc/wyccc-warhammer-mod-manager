@@ -10,6 +10,8 @@ const props = defineProps({
   missingPacks: { type: Array, default: () => [] },
   variantSelectorPacksEnabled: { type: Boolean, default: false },
   variantSelectorMissingPacks: { type: Array, default: () => [] },
+  tier5PacksEnabled: { type: Boolean, default: false },
+  tier5MissingPacks: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -17,6 +19,7 @@ const emit = defineEmits(['close', 'save'])
 const draft = reactive({
   dynamic_ror_compatibility_patch_enabled: false,
   variant_selector_compatibility_patch_enabled: false,
+  tier5_compatibility_patch_enabled: false,
 })
 
 const resetDraft = () => {
@@ -27,6 +30,9 @@ const resetDraft = () => {
   draft.variant_selector_compatibility_patch_enabled = Boolean(
     props.variantSelectorPacksEnabled
     && props.settings.variant_selector_compatibility_patch_enabled !== false,
+  )
+  draft.tier5_compatibility_patch_enabled = Boolean(
+    props.tier5PacksEnabled && props.settings.tier5_compatibility_patch_enabled,
   )
 }
 
@@ -47,7 +53,7 @@ watch(
 )
 
 watch(
-  () => [props.requiredPacksEnabled, props.variantSelectorPacksEnabled],
+  () => [props.requiredPacksEnabled, props.variantSelectorPacksEnabled, props.tier5PacksEnabled],
   () => {
     if (props.open) resetDraft()
   },
@@ -60,6 +66,9 @@ const currentSettings = () => ({
   variant_selector_compatibility_patch_enabled: Boolean(
     props.variantSelectorPacksEnabled
     && draft.variant_selector_compatibility_patch_enabled,
+  ),
+  tier5_compatibility_patch_enabled: Boolean(
+    props.tier5PacksEnabled && draft.tier5_compatibility_patch_enabled,
   ),
 })
 
@@ -141,6 +150,28 @@ const submit = () => {
           <p class="compatibility-patch-note">
             {{ t('compatibilityPatch.variantSelectorRuntimeNote') }}
           </p>
+        </section>
+        <section class="compatibility-patch-card">
+          <label class="switch-row compatibility-patch-option">
+            <input
+              v-model="draft.tier5_compatibility_patch_enabled"
+              type="checkbox"
+              :disabled="!!busy || !tier5PacksEnabled"
+              data-testid="tier5-compatibility-patch-enabled"
+            />
+            <span>
+              <strong>{{ t('compatibilityPatch.tier5Title') }}</strong>
+              <small>{{ t('compatibilityPatch.tier5Description') }}</small>
+            </span>
+          </label>
+          <p
+            v-if="!tier5PacksEnabled"
+            class="compatibility-patch-requirement"
+            data-testid="tier5-required-packs"
+          >
+            {{ t('compatibilityPatch.tier5Required', { mods: tier5MissingPacks.join(', ') }) }}
+          </p>
+          <p class="compatibility-patch-note">{{ t('compatibilityPatch.tier5RuntimeNote') }}</p>
         </section>
       </div>
 

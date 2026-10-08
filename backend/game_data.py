@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .encyclopedia_schema import ENCYCLOPEDIA_SCHEMAS
+from .settlement_schema import SETTLEMENT_SCHEMAS
 from .game_data_settings import (
     CATEGORY_UNIT_MODE_FULL,
     CATEGORY_UNIT_MODE_HALF,
@@ -605,7 +606,7 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
     },
 }
 
-TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS, **ENCYCLOPEDIA_SCHEMAS}
+TABLE_SCHEMAS = {**_load_schemas(), **EXTRA_TABLE_SCHEMAS, **ENCYCLOPEDIA_SCHEMAS, **SETTLEMENT_SCHEMAS}
 THREE_KINGDOMS_TABLE_SCHEMAS = load_three_kingdoms_schemas()
 TABLE_ORDER = (
     "_kv_rules_tables",
@@ -642,12 +643,20 @@ VARIANT_SELECTOR_TABLE_ORDER = (
 )
 ALL_TABLE_ORDER = tuple(dict.fromkeys((
     *TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER, *VARIANT_SELECTOR_TABLE_ORDER, *ENCYCLOPEDIA_SCHEMAS,
+    *SETTLEMENT_SCHEMAS,
 )))
 TABLE_PREFIXES = tuple(
     f"db\\{table_name}\\"
     for table_name in dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER))
 )
 CURRENT_TABLE_VERSIONS = {
+    "building_levels_tables": 3,
+    "building_chains_tables": 10,
+    "building_culture_variants_tables": 5,
+    "building_upgrades_junction_tables": 0,
+    "campaign_settlement_display_building_ids_tables": 3,
+    "campaign_settlement_display_building_model_ids_tables": 0,
+    "campaign_settlement_display_buildings_tables": 8,
     # Legacy ability junctions omit the version header and use the v0 layout
     # (without culture). Explicit version headers still select their own schema.
     **{
@@ -688,6 +697,11 @@ THREE_KINGDOMS_CURRENT_TABLE_VERSIONS = {
     for table_name, versions in THREE_KINGDOMS_TABLE_SCHEMAS.items()
 }
 TABLE_KEY_FIELDS = {
+    "building_levels_tables": "level_name",
+    "building_chains_tables": "key",
+    "campaign_settlement_display_building_ids_tables": "key",
+    "campaign_settlement_display_building_model_ids_tables": "id",
+    "campaign_settlement_display_buildings_tables": "key",
     "_kv_rules_tables": "key",
     "campaign_character_art_sets_tables": "art_set_id",
     "campaign_character_arts_tables": "id",
@@ -1277,6 +1291,12 @@ def _table_row_key(
         return str(
             values.get(THREE_KINGDOMS_TABLE_KEY_FIELDS.get(table_name, "key")) or ""
         )
+    if table_name in {"building_culture_variants_tables", "building_upgrades_junction_tables"}:
+        fields = (
+            ("building", "culture", "subculture", "faction")
+            if table_name == "building_culture_variants_tables" else ("from", "to")
+        )
+        return "\x1f".join(str(row.values.get(field) or "") for field in fields)
     if table_name == "effect_bonus_value_missile_weapon_junctions_tables":
         values = row.values
         return "\x1f".join(

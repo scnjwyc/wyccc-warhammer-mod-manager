@@ -34,7 +34,7 @@ _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 logger = logging.getLogger(__name__)
 _PACK_TYPE_MASK = 0x0F
 _LAUNCHER_RUNTIME_DB_ENTRY_RE = re.compile(
-    r"^db\\[^\\]+\\!+wyccc_(?:game_data|unit_data|dynamic_ror_compatibility)_v\d{4}$",
+    r"^db\\[^\\]+\\!+wyccc_(?:(?:game_data|unit_data|dynamic_ror_compatibility)_v\d{4}|tier5_v\d{4}_display)$",
     re.IGNORECASE,
 )
 _LAUNCHER_RUNTIME_ENTRY_NAMES = frozenset(

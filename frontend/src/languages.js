@@ -4,6 +4,7 @@ import { diagnosticsEntries } from './diagnosticsLanguages'
 import { folderEntries } from './folderLanguages'
 import { schemaEntries } from './schemaLanguages'
 import { launchComparisonEntries } from './launchComparisonLanguages'
+import { exceptionProbeEntries } from './exceptionProbeLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -531,6 +532,10 @@ const entries = {
   'compatibilityPatch.aria': ['兼容补丁', 'Compatibility patch', '호환 패치', 'Патч совместимости', '互換パッチ'],
   'compatibilityPatch.eyebrow': ['兼容补丁', 'COMPATIBILITY PATCH', '호환 패치', 'ПАТЧ СОВМЕСТИМОСТИ', '互換パッチ'],
   'compatibilityPatch.title': ['兼容补丁', 'Compatibility patch', '호환 패치', 'Патч совместимости', '互換パッチ'],
+  'compatibilityPatch.tier5Title': ['五级小城美化兼容', 'Tier 5 settlement appearance compatibility', '5단계 소도시 외형 호환', 'Совместимость облика малых поселений 5-го уровня', '小規模集落レベル5の外観互換'],
+  'compatibilityPatch.tier5Description': ['为当前启用的城市美化 MOD 补齐四、五级小城外观，沿用原有模型并保留已有高级外观。', 'Complete tier 4 and 5 minor-settlement appearances for enabled beautification MODs, reusing their models and preserving existing higher-tier appearances.', '활성 도시 외형 MOD의 모델을 재사용하여 4·5단계 소도시 외형을 보완하고 기존 상위 단계 외형을 유지합니다.', 'Дополняет облик малых поселений 4-го и 5-го уровней для включённых MOD, используя их модели и сохраняя готовые облики старших уровней.', '有効な都市外観 MOD のモデルを使って小規模集落のレベル4・5の外観を補完し、既存の上位レベルの外観を保持します。'],
+  'compatibilityPatch.tier5Required': ['需要安装 wyccc_tier5_patch.pack，并启用五级小城 MOD。当前缺少：{mods}', 'Install wyccc_tier5_patch.pack and enable the tier 5 minor-settlement MOD. Missing: {mods}', 'wyccc_tier5_patch.pack을 설치하고 5단계 소도시 MOD를 활성화하세요. 누락: {mods}', 'Установите wyccc_tier5_patch.pack и включите MOD малых поселений 5-го уровня. Отсутствует: {mods}', 'wyccc_tier5_patch.pack を導入し、小規模集落レベル5 MOD を有効にしてください。不足: {mods}'],
+  'compatibilityPatch.tier5RuntimeNote': ['补丁默认隐藏，无需启用或排序。勾选后，通过本启动器启动时根据当前启用的 MOD 自动生成兼容配置。', 'The marker Pack is hidden by default and needs no activation or ordering. When checked, this launcher generates compatibility data from your enabled MODs on launch.', '표시용 Pack은 기본 숨김 상태이며 활성화나 정렬이 필요 없습니다. 체크하면 이 런처로 실행할 때 활성 MOD에 맞는 호환 데이터를 생성합니다.', 'Pack-маркер скрыт по умолчанию: включать и сортировать его не нужно. При включённой опции лаунчер создаёт данные совместимости из включённых MOD перед запуском.', '機能用 Pack は初期状態で非表示になり、有効化や並べ替えは不要です。チェックすると、このランチャーでの起動時に有効な MOD から互換データを生成します。'],
   'compatibilityPatch.dynamicRorTitle': ['为 Nanu\u0027s Dynamic RoRs 生成兼容补丁', 'Generate a compatibility patch for Nanu\u0027s Dynamic RoRs', 'Nanu\u0027s Dynamic RoRs용 호환 패치 생성', 'Создать патч совместимости для Nanu\u0027s Dynamic RoRs', 'Nanu\u0027s Dynamic RoRs 用の互換パッチを生成'],
   'compatibilityPatch.dynamicRorDescription': ['根据当前已启用的 MOD，为所有 MOD 单位生成补丁。', 'Generate a patch for every MOD unit based on the currently enabled MODs.', '현재 활성화된 MOD를 기준으로 모든 MOD 유닛에 대한 패치를 생성합니다.', 'Создаёт патч для всех отрядов MOD на основе включённых MOD.', '現在有効な MOD を基準に、すべての MOD ユニット用のパッチを生成します。'],
   'compatibilityPatch.requiredPacksMissing': ['需要启用或订阅以下 MOD 才能开启此选项：{mods}', 'Enable or subscribe to the following MODs to use this option: {mods}', '이 옵션을 사용하려면 다음 MOD를 활성화하거나 구독해야 합니다: {mods}', 'Чтобы включить эту опцию, включите или оформите подписку на MOD: {mods}', 'このオプションを使用するには、以下の MOD を有効にするか購読する必要があります: {mods}'],
@@ -1257,6 +1262,10 @@ const spanishEntries = {
   "compatibilityPatch.aria": "Parche de compatibilidad",
   "compatibilityPatch.eyebrow": "PARCHE DE COMPATIBILIDAD",
   "compatibilityPatch.title": "Parche de compatibilidad",
+  "compatibilityPatch.tier5Title": "Compatibilidad de apariencia de asentamientos de nivel 5",
+  "compatibilityPatch.tier5Description": "Completa la apariencia de los asentamientos menores de nivel 4 y 5 para los MOD activos, reutilizando sus modelos y conservando las apariencias de niveles superiores ya existentes.",
+  "compatibilityPatch.tier5Required": "Instala wyccc_tier5_patch.pack y activa el MOD de asentamientos menores de nivel 5. Falta: {mods}",
+  "compatibilityPatch.tier5RuntimeNote": "El Pack marcador se oculta por defecto y no necesita activación ni ordenación. Al marcar la opción, este lanzador genera datos de compatibilidad a partir de los MOD activos antes de iniciar el juego.",
   "compatibilityPatch.dynamicRorTitle": "Generar un parche de compatibilidad para Nanu\u0027s Dynamic RoRs",
   "compatibilityPatch.dynamicRorDescription": "Genera un parche para todos los MOD según los MOD habilitados actualmente.",
   "compatibilityPatch.requiredPacksMissing": "Habilita o suscríbete a los siguientes MOD para usar esta opción: {mods}",
@@ -1813,7 +1822,7 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
-for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries })) {
+for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries, ...exceptionProbeEntries })) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
 }

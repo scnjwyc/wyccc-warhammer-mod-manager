@@ -8,6 +8,7 @@ import ConfirmationModal from './components/ConfirmationModal.vue'
 import FolderNameModal from './components/FolderNameModal.vue'
 import DeleteModsModal from './components/DeleteModsModal.vue'
 import CompatibilityPatchModal from './components/CompatibilityPatchModal.vue'
+import { tier5PackRequirement } from './tier5Compatibility'
 import GameDataModificationModal from './components/GameDataModificationModal.vue'
 import UnitDataModificationModal from './components/UnitDataModificationModal.vue'
 import UnitEncyclopediaModal from './components/UnitEncyclopediaModal.vue'
@@ -158,6 +159,7 @@ const variantSelectorPackRequirement = computed(() => {
   }
   return { allEnabled: missing.length === 0, missing }
 })
+const tier5Requirement = computed(() => tier5PackRequirement(store.mods, store.activeIds))
 const workshopPublishMod = computed(() => store.modMap.get(workshopPublish.modId) || null)
 const inactiveSearchFocusId = computed(() => (
   store.inactiveSearchHighlightActive
@@ -1447,6 +1449,8 @@ onBeforeUnmount(() => {
       :missing-packs="nanuRorPackRequirement.missing"
       :variant-selector-packs-enabled="variantSelectorPackRequirement.allEnabled"
       :variant-selector-missing-packs="variantSelectorPackRequirement.missing"
+      :tier5-packs-enabled="tier5Requirement.allEnabled"
+      :tier5-missing-packs="tier5Requirement.missing"
       @close="showCompatibilityPatch = false"
       @save="saveCompatibilityPatch"
     />

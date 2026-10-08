@@ -6,7 +6,7 @@ LEGACY_APP_SLUGS = (
     "WycccWarhammerManager",
     "WycccWarhammerModManager",
 )
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 
 IGNORABLE_MOD_WARNING_CODES = (
     "outdated_mod",
@@ -55,6 +55,9 @@ UNIT_DATA_FEATURE_PACK_NAME = "wyccc_dynamic_units_modify.pack"
 UNIT_DATA_FEATURE_TITLE = "Dynamic Units Modify"
 VARIANT_SELECTOR_FEATURE_PACK_NAME = "wyccc_variant_selector_patch.pack"
 VARIANT_SELECTOR_FEATURE_TITLE = "Dynamic Variant Selector Patch"
+TIER5_FEATURE_PACK_NAME = "wyccc_tier5_patch.pack"
+TIER5_COMPATIBILITY_PATCH_NAME = "!!!!wyccc_tier5_patch.pack"
+TIER5_BASE_WORKSHOP_ID = "3071058075"
 UNIT_MODEL_MULTIPLIER_MIN = 1
 UNIT_MODEL_MULTIPLIER_MAX = 5
 UNIT_RECRUITMENT_CAPACITY_MULTIPLIER_MIN = 1
@@ -68,6 +71,7 @@ INTERNAL_RUNTIME_PACK_NAMES = frozenset(
     {
         "!!!!wyccc_dynamic_ror_compatibility.pack",
         "!!!!wyccc_variant_selector_patch.pack",
+        TIER5_COMPATIBILITY_PATCH_NAME,
         "!!!!wyccc_game_data_patch.pack",
         "!!!!wyccc_runtime_options.pack",
         "!!!!wyccc_unit_data_patch.pack",
@@ -78,6 +82,7 @@ INTERNAL_FEATURE_PACK_NAMES = frozenset(
 ) | INTERNAL_RUNTIME_PACK_NAMES | {
     UNIT_DATA_FEATURE_PACK_NAME.casefold(),
     VARIANT_SELECTOR_FEATURE_PACK_NAME.casefold(),
+    TIER5_FEATURE_PACK_NAME.casefold(),
     "wyccc_nanu_rors_patch.pack",
 }
 
@@ -86,6 +91,22 @@ INTERNAL_FEATURE_PACK_NAMES = frozenset(
 # them, but their display name should describe the feature instead of exposing
 # an implementation filename.
 INTERNAL_PACK_DISPLAY_NAMES = {
+    TIER5_FEATURE_PACK_NAME: {
+        "zh-CN": "五级小城美化兼容",
+        "en-US": "Tier 5 Settlement Appearance Compatibility",
+        "ko-KR": "5단계 소도시 외형 호환",
+        "ru-RU": "Совместимость облика малых поселений 5-го уровня",
+        "ja-JP": "小規模集落レベル5の外観互換",
+        "es-ES": "Compatibilidad de apariencia de asentamientos de nivel 5",
+    },
+    TIER5_COMPATIBILITY_PATCH_NAME: {
+        "zh-CN": "五级小城美化兼容补丁",
+        "en-US": "Tier 5 Settlement Appearance Patch",
+        "ko-KR": "5단계 소도시 외형 패치",
+        "ru-RU": "Патч облика малых поселений 5-го уровня",
+        "ja-JP": "小規模集落レベル5の外観パッチ",
+        "es-ES": "Parche de apariencia de asentamientos de nivel 5",
+    },
     "wyccc_dynamic_unit_size.pack": {
         "zh-CN": "动态单位规模",
         "en-US": "Dynamic Unit Size",

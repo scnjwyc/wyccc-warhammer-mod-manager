@@ -83,7 +83,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.2.2',
+    appVersion: '1.2.3',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -1304,6 +1304,7 @@ export const useAppStore = defineStore('app', {
       })
     },
     async saveCompatibilityPatchSettings(changes) {
+      await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.saveCompatibilityPatch'), async () => {
         const data = await invoke('save_compatibility_patch_settings', changes)
         this.settings = data.settings

@@ -19,6 +19,7 @@ from .constants import (
     RUNTIME_OPTIONS_MARKER_ENTRY,
     SOURCE_DATA,
     SOURCE_WORKSHOP,
+    TIER5_COMPATIBILITY_PATCH_NAME,
 )
 from .game_data import (
     TABLE_PREFIXES,
@@ -27,6 +28,7 @@ from .game_data import (
     build_game_data_entries,
 )
 from .dynamic_ror_compatibility import build_dynamic_ror_compatibility_entries
+from .tier5_compatibility import TIER5_SOURCE_PREFIXES, build_tier5_compatibility_entries
 from .variant_selector_compatibility import (
     VARIANT_SELECTOR_FRAMEWORK_SCRIPT,
     VARIANT_SELECTOR_SOURCE_PREFIXES,
@@ -39,6 +41,7 @@ from .game_data_settings import (
     normalize_unit_scale_multiplier,
 )
 from .models import ModAsset
+from .battle_probe import BATTLE_PROBE_ENTRY_NAMES, battle_probe_payloads, memreader_plus_enabled
 from .pack_reader import read_pack_index
 from .scanner import read_pack_type
 from .unit_data import build_unit_data_entries
@@ -1007,6 +1010,32 @@ def build_variant_selector_compatibility_patch(
     }
 
 
+def build_tier5_compatibility_patch(
+    output_dir: Path,
+    data_path: str,
+    assets: dict[str, ModAsset],
+    active_ids: list[str],
+    enabled: bool,
+    *,
+    source_snapshot: GameDataSourceSnapshot | None = None,
+) -> dict[str, Any]:
+    output_path = Path(output_dir) / TIER5_COMPATIBILITY_PATCH_NAME
+    if not enabled:
+        output_path.unlink(missing_ok=True)
+        return {"path": "", "entry_count": 0, "stats": {}}
+    snapshot = source_snapshot or collect_game_data_source_snapshot(
+        data_path, assets, active_ids, prefixes=TIER5_SOURCE_PREFIXES,
+    )
+    built = build_tier5_compatibility_entries(snapshot.sources)
+    if not built.entries:
+        output_path.unlink(missing_ok=True)
+        return {"path": "", "entry_count": 0, "stats": built.stats,
+                "source_diagnostics": snapshot.diagnostics()}
+    write_pfh5_pack(output_path, [PackEntry(e.name, e.payload) for e in built.entries])
+    return {"path": str(output_path.resolve(strict=False)), "entry_count": len(built.entries),
+            "stats": built.stats, "source_diagnostics": snapshot.diagnostics()}
+
+
 def build_runtime_options_pack(
     output_dir: Path,
     data_path: str,
@@ -1030,6 +1059,17 @@ def build_runtime_options_pack(
     if settings.get("enable_script_logging"):
         entries.append(PackEntry("script\\enable_console_logging", b"\0"))
         enabled_options.append("enable_script_logging")
+    probe_requested = bool(settings.get("enable_exception_probe"))
+    probe_supported = settings.get("selected_game", "warhammer3") == "warhammer3"
+    probe_ready = probe_supported and memreader_plus_enabled(assets, active_ids)
+    if probe_requested and probe_ready:
+        entries.extend(PackEntry(name, payload) for name, payload in battle_probe_payloads())
+        enabled_options.append("enable_exception_probe")
+    probe_status = {
+        "requested": probe_requested,
+        "available": probe_ready,
+        "enabled": probe_requested and probe_ready,
+    }
     if settings.get("skip_intro_movies"):
         entries.extend(PackEntry(name, b"") for name in INTRO_MOVIES)
         enabled_options.append("skip_intro_movies")
@@ -1042,6 +1082,7 @@ def build_runtime_options_pack(
             "options": [],
             "entry_count": 0,
             "game_data": {},
+            "exception_probe": probe_status,
         }
     entries.append(PackEntry(
         RUNTIME_OPTIONS_MARKER_ENTRY,
@@ -1053,6 +1094,7 @@ def build_runtime_options_pack(
         "options": enabled_options,
         "entry_count": len(entries),
         "game_data": {},
+        "exception_probe": probe_status,
     }
 
 
@@ -1065,6 +1107,7 @@ def remove_disabled_runtime_options(
     option_entries = {
         "custom_battle_all_units_as_lords": (PERMISSIONS_ENTRY,),
         "enable_script_logging": ("script\\enable_console_logging",),
+        "enable_exception_probe": BATTLE_PROBE_ENTRY_NAMES,
         "skip_intro_movies": INTRO_MOVIES,
     }
     disabled_entries = {

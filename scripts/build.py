@@ -225,6 +225,8 @@ def package_desktop(output_dir: Path) -> Path:
             "--add-data",
             f"{bundled_schemas}{separator}backend/schemas",
             "--add-data",
+            f"{ROOT / 'backend' / 'resources' / 'battle_probe'}{separator}backend/resources/battle_probe",
+            "--add-data",
             f"{STEAM_RUNTIME}{separator}steam_runtime",
             "--add-binary",
             f"{node_executable}{separator}steam_runtime",

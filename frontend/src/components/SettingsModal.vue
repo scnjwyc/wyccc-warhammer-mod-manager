@@ -62,6 +62,14 @@ const activeInstallation = computed(() => (
   draft.game_installations?.[selectedGameOption.value.id] || {}
 ))
 const requiresManualPath = computed(() => !props.health.game_ready)
+const exceptionProbeSupported = computed(() => selectedGameOption.value.id === 'warhammer3')
+const memreaderPlusReady = computed(() => {
+  const active = new Set(store.activeIds)
+  return store.mods.some(mod => active.has(mod.id)
+    && String(mod.workshop_id) === '3811098873'
+    && String(mod.pack_name).toLowerCase() === 'memreader_plus.pack'
+    && (mod.sources?.length ? mod.sources : [mod.source]).includes('workshop'))
+})
 
 const tabs = [
   { id: 'basic', labelKey: 'settings.tabBasic', detailKey: 'settings.tabBasicDetail', marker: '01' },
@@ -114,6 +122,7 @@ watch(
     delete draft.show_hidden_mods
     if (!draft.language) draft.language = DEFAULT_LANGUAGE
     if (typeof draft.auto_low_consumption_mode !== 'boolean') draft.auto_low_consumption_mode = true
+    if (typeof draft.enable_exception_probe !== 'boolean') draft.enable_exception_probe = false
     if (typeof draft.keyboard_shortcuts_enabled !== 'boolean') draft.keyboard_shortcuts_enabled = true
     draft.keyboard_shortcuts = normalizeShortcutMap(props.settings?.keyboard_shortcuts)
     shortcutCaptureId.value = ''
@@ -365,6 +374,14 @@ const closeSettings = () => {
               <label class="switch-row">
                 <input v-model="draft.skip_intro_movies" type="checkbox" data-testid="skip-intro-movies" />
                 <span><strong>{{ t('settings.skipIntro') }}</strong><small>{{ t('settings.skipIntroHelp') }}</small></span>
+              </label>
+              <label class="switch-row">
+                <input v-model="draft.enable_exception_probe" type="checkbox" :disabled="!exceptionProbeSupported" data-testid="exception-probe" />
+                <span>
+                  <strong>{{ t('settings.exceptionProbe') }}</strong>
+                  <small>{{ t('settings.exceptionProbeHelp') }}</small>
+                  <small data-testid="exception-probe-dependency">{{ t(exceptionProbeSupported && memreaderPlusReady ? 'settings.exceptionProbeReady' : 'settings.exceptionProbeRequired') }}</small>
+                </span>
               </label>
             </div>
             <p class="settings-page-note">{{ t('settings.runtimeNote') }}</p>
