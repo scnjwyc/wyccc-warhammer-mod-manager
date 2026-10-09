@@ -1,29 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.2.3",
-  "published_at": "2026-10-08",
+  "version": "1.2.4",
+  "published_at": "2026-10-09",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.3/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.4/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.3/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.3/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.2.4/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.2.4/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "0209BE3F2EE8D18B4ED57820BAF6D7413303F8301AFFAC808CF0870493C1C660",
-    "size": 65512854
+    "sha256": "894E3DE2E3C3C5877630649586E33DB31247851684A88C103AD6AD31DAF4150E",
+    "size": 65509848
   },
   "changelog": [
     {
-      "title": "新增",
+      "title": "调整",
       "changes": [
         {
-          "type": "feature",
-          "text": "异常探针功能，将更详细的内存日志输出到游戏根目录，以便以出现某些难以排查的异常时，获得更多线索"
-        },
-        {
-          "type": "feature",
-          "text": "5级小城补丁，当使用5级小城MOD时，开启此MOD，检测到任何对小城进行了美化的MOD，例如与龙同行、OVN、JIANG， 都会动态生成一个兼容补丁"
+          "type": "improvement",
+          "text": "提高了补丁功能对各种MOD的兼容性"
         }
       ]
     }
