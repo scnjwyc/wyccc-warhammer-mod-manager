@@ -408,6 +408,11 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
             ("key", "StringU8"), ("precursor", "Boolean"), ("default_projectile", "StringU8"),
             ("audio_type", "OptionalStringU8"), ("use_secondary_ammo_pool", "Boolean"),
         ),
+        # RPFM's historical v10 layout has no optional-string marker for audio_type.
+        10: (
+            ("key", "StringU8"), ("precursor", "Boolean"), ("default_projectile", "StringU8"),
+            ("audio_type", "StringU8"), ("use_secondary_ammo_pool", "Boolean"),
+        ),
     },
     "effect_bonus_value_missile_weapon_junctions_tables": {
         0: (
@@ -650,7 +655,8 @@ TABLE_PREFIXES = tuple(
     for table_name in dict.fromkeys((*TABLE_ORDER, *THREE_KINGDOMS_TABLE_ORDER))
 )
 CURRENT_TABLE_VERSIONS = {
-    "building_levels_tables": 3,
+    # GUID-only legacy building tables use v0; current v3 tables carry a version marker.
+    "building_levels_tables": 0,
     "building_chains_tables": 10,
     "building_culture_variants_tables": 5,
     "building_upgrades_junction_tables": 0,

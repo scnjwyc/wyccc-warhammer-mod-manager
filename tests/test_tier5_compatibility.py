@@ -1,3 +1,4 @@
+import struct
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,72 @@ def test_unknown_mod_names_get_zero_padded_tiers_and_complete_references():
 def test_major_city_is_not_extended():
     result = build_tier5_compatibility_entries([DbSource("major", city(max_tier=5))])
     assert not result.entries
+
+
+def versionless_levels(rows, *, with_guid=True):
+    # RPFM omits the version marker for v0 (e.g. Chasslo_Landmarks_IEE).
+    payload = _table_payload("building_levels_tables", 0, rows)[8:]
+    if with_guid:
+        guid = "82c190ab-27e2-4782-b97b-34e0d385709a"
+        payload = b"\xfd\xfe\xfc\xff" + struct.pack("<H", len(guid)) + guid.encode("utf-16le") + payload
+    return GameDataEntry("db\\building_levels_tables\\le_iee", payload)
+
+
+@pytest.mark.parametrize("with_guid", [False, True])
+def test_versionless_landmarks_do_not_block_tier5_or_change_landmark_data(with_guid):
+    levels = versionless_levels([
+        {"level_name": "landmark_a", "chain": "landmark", "level": 0, "create_cost": 8800,
+         "primary_slot_building_building_level_requirement": 3, "additional_loot_value": 321},
+        {"level_name": "landmark_b", "chain": "landmark", "level": 1, "create_cost": 4700,
+         "resource_cost": "landmark_cost", "additional_loot_value": 654},
+    ], with_guid=with_guid)
+    sources = [DbSource("Chasslo_Landmarks_IEE.pack", [levels]), DbSource("beauty", city())]
+    result = build_tier5_compatibility_entries(sources)
+    assert result == build_tier5_compatibility_entries(sources[1:])
+    parsed = parse_db_table("building_levels_tables", levels.payload)
+    assert parsed.version == 0 and len(parsed.rows) == 2
+    assert [r.values["create_cost"] for r in parsed.rows] == [8800, 4700]
+    assert [r.values["additional_loot_value"] for r in parsed.rows] == [321, 654]
+    assert parsed.rows[1].values["resource_cost"] == "landmark_cost"
+    effective = _collect_effective_rows([DbSource("generated", result.entries), *sources],
+                                        {"building_levels_tables"})["building_levels_tables"]
+    for original in parsed.rows:
+        candidate = effective[original.values["level_name"]]
+        assert candidate.version == 0 and candidate.row.raw == original.raw
+    assert effective["unknown_city04"].version == effective["unknown_city05"].version == 3
+
+
+@pytest.mark.parametrize("version", [0, 2, 3])
+def test_explicit_building_level_versions_keep_their_own_layout(version):
+    original = entry("building_levels_tables", [{
+        "level_name": "explicit_level", "chain": "explicit_chain", "additional_loot_value": 123,
+        "resource_transaction_on_complete": "completed", "split_chain_sort_order": 7,
+        "override_startpos_settlement_display_building": True,
+    }], version=version)
+    parsed = parse_db_table("building_levels_tables", original.payload)
+    assert parsed.version == version
+    assert parsed.rows[0].values["additional_loot_value"] == 123
+    if version >= 2:
+        assert parsed.rows[0].values["resource_transaction_on_complete"] == "completed"
+        assert parsed.rows[0].values["split_chain_sort_order"] == 7
+    if version == 3:
+        assert parsed.rows[0].values["override_startpos_settlement_display_building"]
+
+
+@pytest.mark.parametrize("damage", ["truncated", "trailing", "wrong_version", "unknown_version"])
+def test_invalid_building_levels_still_abort_tier5(damage):
+    payload = versionless_levels([{"level_name": "landmark", "chain": "landmark"}], with_guid=False).payload
+    if damage == "truncated":
+        payload = payload[:-1]
+    elif damage == "trailing":
+        payload += b"\0"
+    else:
+        payload = b"\xfc\xfd\xfe\xff" + struct.pack("<i", 3 if damage == "wrong_version" else 999) + payload
+    with pytest.raises(ValueError, match="building_levels_tables"):
+        build_tier5_compatibility_entries([
+            DbSource("invalid", [GameDataEntry("db\\building_levels_tables\\invalid", payload)]),
+            DbSource("beauty", city()),
+        ])
 
 
 def test_display_chain_without_native_ui_fits_the_startup_array():

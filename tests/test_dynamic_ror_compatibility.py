@@ -321,6 +321,83 @@ class DynamicRorCompatibilityGeneratorTests(unittest.TestCase):
         self.assertIn("mod_inf_swordsmen", payload)
         self.assertIn("mod_inf_archers", payload)
 
+    def test_legacy_v10_missile_weapons_generate_ammo_alongside_current_weapons(self) -> None:
+        # RPFM v10 (used by Guns of Bretonnia 3) stores audio_type as StringU8,
+        # not OptionalStringU8. Keep this fixture independent of TABLE_SCHEMAS.
+        legacy_schema = (
+            ("key", "StringU8"),
+            ("precursor", "Boolean"),
+            ("default_projectile", "StringU8"),
+            ("audio_type", "StringU8"),
+            ("use_secondary_ammo_pool", "Boolean"),
+        )
+        weapon_values = {
+            "key": "mod_legacy_rifle",
+            "precursor": False,
+            "default_projectile": "mod_legacy_bullet",
+            "audio_type": "wh2_dlc12_warplock_jezzails",
+            "use_secondary_ammo_pool": False,
+        }
+        empty_audio_values = {
+            **weapon_values,
+            "key": "mod_legacy_silent_rifle",
+            "precursor": True,
+            "audio_type": "",
+            "use_secondary_ammo_pool": True,
+        }
+        legacy_payload = b"".join((
+            b"\xfc\xfd\xfe\xff",
+            struct.pack("<i", 10),
+            b"\1",
+            struct.pack("<i", 2),
+            *(
+                _encode_value(field_type, values[name])
+                for values in (weapon_values, empty_audio_values)
+                for name, field_type in legacy_schema
+            ),
+        ))
+        legacy_source = DbSource("Guns_of_Bretonnia_III.pack", (
+            GameDataEntry("db\\missile_weapons_tables\\gob3", legacy_payload),
+            _entry("main_units_tables", [_ranged_main("mod_rifles", "land_mod_rifles")]),
+            _entry("land_units_tables", [_ranged_land("land_mod_rifles", "mod_legacy_rifle")]),
+            _entry("projectiles_tables", [{
+                "key": "mod_legacy_bullet",
+                "category": "missile",
+                "damage": 35,
+                "ap_damage": 120,
+                "effective_range": 180,
+                "base_reload_time": 8,
+            }]),
+        ))
+        result = build_dynamic_ror_compatibility_entries((legacy_source, *_sources()))
+        self.assertEqual(result.stats["patched_unit_count"], 3)
+        self.assertEqual(result.stats["ammo_variant_count"], 2)
+
+        original = parse_db_table("missile_weapons_tables", legacy_payload)
+        self.assertEqual([row.values for row in original.rows], [weapon_values, empty_audio_values])
+        weapon_tables = [
+            parse_db_table("missile_weapons_tables", entry.payload)
+            for entry in result.entries
+            if entry.name.startswith("db\\missile_weapons_tables\\")
+        ]
+        self.assertEqual({table.version for table in weapon_tables}, {10, 12})
+        legacy_table = next(table for table in weapon_tables if table.version == 10)
+        self.assertEqual(len(legacy_table.rows), 1)
+        variant = legacy_table.rows[0].values
+        for name in ("precursor", "audio_type", "use_secondary_ammo_pool"):
+            self.assertEqual(variant[name], weapon_values[name])
+        projectile = next(
+            row for row in _rows_for(result, "projectiles_tables")
+            if row["key"] == variant["default_projectile"]
+        )
+        for name, expected in (("damage", 35), ("ap_damage", 120), ("effective_range", 180),
+                               ("base_reload_time", 8), ("ignition_amount", 100)):
+            self.assertEqual(projectile[name], expected)
+        self.assertTrue(any(
+            row["unit"] == "mod_rifles" and row["missile_weapon"] == variant["key"]
+            for row in _rows_for(result, "unit_missile_weapon_junctions_tables")
+        ))
+
 
 class DynamicRorCompatibilityStateTests(unittest.TestCase):
     def setUp(self) -> None:

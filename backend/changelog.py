@@ -9,6 +9,13 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.2.4",
+        "date": "2026-10-09",
+        "entries": (
+            ("v124_adjusted_title", (("improvement", "v124_patch_compatibility"),)),
+        ),
+    },
+    {
         "version": "1.2.3",
         "date": "2026-10-08",
         "entries": (
@@ -705,6 +712,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v124_adjusted_title": "调整",
+        "v124_patch_compatibility": "提高了补丁功能对各种MOD的兼容性",
         "v123_added_title": "新增",
         "v123_exception_probe": "异常探针功能，将更详细的内存日志输出到游戏根目录，以便以出现某些难以排查的异常时，获得更多线索",
         "v123_tier5_patch": "5级小城补丁，当使用5级小城MOD时，开启此MOD，检测到任何对小城进行了美化的MOD，例如与龙同行、OVN、JIANG， 都会动态生成一个兼容补丁",
@@ -954,6 +963,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v124_adjusted_title": "Adjusted",
+        "v124_patch_compatibility": "Improved compatibility of patch features with various MODs.",
         "v123_added_title": "Added",
         "v123_exception_probe": "An exception probe that writes more detailed memory logs to the game root directory, providing more clues when investigating difficult-to-diagnose errors.",
         "v123_tier5_patch": "A tier 5 minor-settlement patch. When using the tier 5 minor-settlement MOD, enabling this MOD dynamically generates a compatibility patch for detected minor-settlement beautification MODs, such as Walking with the Dragon, OVN, and JIANG.",
@@ -1203,6 +1214,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v124_adjusted_title": "조정",
+        "v124_patch_compatibility": "패치 기능의 다양한 MOD 호환성을 개선했습니다.",
         "v123_added_title": "추가",
         "v123_exception_probe": "게임 루트 폴더에 더 상세한 메모리 로그를 기록하는 예외 탐지 기능으로, 원인을 찾기 어려운 오류를 조사할 때 더 많은 단서를 제공합니다.",
         "v123_tier5_patch": "5단계 소도시 패치. 5단계 소도시 MOD와 함께 이 MOD를 활성화하면 与龙同行, OVN, JIANG 등의 소도시 외형 개선 MOD를 감지하여 호환 패치를 동적으로 생성합니다.",
@@ -1452,6 +1465,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v124_adjusted_title": "Изменено",
+        "v124_patch_compatibility": "Улучшена совместимость функций патчей с различными MOD.",
         "v123_added_title": "Добавлено",
         "v123_exception_probe": "Зонд исключений, записывающий более подробные журналы памяти в корневую папку игры, чтобы дать больше подсказок при поиске причин трудно диагностируемых ошибок.",
         "v123_tier5_patch": "Патч малых поселений 5-го уровня. При использовании соответствующего MOD включение этого MOD динамически создаёт патч совместимости для обнаруженных MOD внешнего вида малых поселений, например 与龙同行, OVN и JIANG.",
@@ -1701,6 +1716,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v124_adjusted_title": "調整",
+        "v124_patch_compatibility": "パッチ機能と各種MODの互換性を向上しました。",
         "v123_added_title": "追加",
         "v123_exception_probe": "より詳しいメモリログをゲームのルートフォルダーに出力する例外プローブ機能。原因の特定が難しいエラーを調べる際に、より多くの手がかりを得られます。",
         "v123_tier5_patch": "レベル5の小規模集落パッチ。レベル5の小規模集落MODとともにこのMODを有効にすると、与龙同行、OVN、JIANGなどの集落外観MODを検出し、互換パッチを動的に生成します。",
@@ -1950,6 +1967,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v124_adjusted_title": "Ajustado",
+        "v124_patch_compatibility": "Se mejoró la compatibilidad de las funciones de parches con diversos MOD.",
         "v123_added_title": "Añadido",
         "v123_exception_probe": "Una sonda de excepciones que guarda registros de memoria más detallados en la carpeta raíz del juego, aportando más pistas para investigar errores difíciles de diagnosticar.",
         "v123_tier5_patch": "Un parche de asentamientos menores de nivel 5. Al usar el MOD de asentamientos menores de nivel 5 y activar este MOD, se genera dinámicamente un parche de compatibilidad para los MOD de apariencia detectados, como 与龙同行, OVN y JIANG.",
