@@ -17,6 +17,7 @@ The current version is `1.3.1`. It brings mods, playsets, the Steam Workshop, an
 - Quickly search, filter, and organize mods, and save aliases, notes, and custom categories. AI can also generate mod aliases and summaries automatically.
 - Powerful publishing tools make it easier for modders to publish and update their own mods. Mods maintained in multiple languages no longer risk having one language overwrite another after publishing.
 - Share or import playsets. You can send your current mod list to friends for multiplayer, and they can import it and automatically subscribe to missing mods.
+- Export the current playset as JSON with the load order, a 1-based `load_order` index, and each mod's Workshop link, optionally including compacted Workshop descriptions (images/links removed and length-limited). Hand the file to another AI for sorting, then import it back; import matches installed mods only and never subscribes automatically.
 - Automatically checks for missing dependencies and mod version issues. Unnecessary warnings can be ignored per mod, such as false missing-dependency warnings for translation mods.
 - Pack-based games can launch directly, continue the most recent campaign, or load a selected save from the save list.
 - Pack-based games can compare the MODs used by a save and enable them in one action.

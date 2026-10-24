@@ -76,6 +76,12 @@ from .schema_update import db_table_name, installed_definitions, update_mod_sche
 from .table_schema import load_latest_schema
 from .scanner import ModScanner, is_internal_feature_mod
 from .save_games import SaveGameService
+from .playset_json import (
+    build_export_payload,
+    read_import_file,
+    safe_export_name,
+    write_export_file,
+)
 from .share import (
     export_share,
     parse_pending_workshop_mod_id,
@@ -318,6 +324,10 @@ class API:
             "export_share": self._export_share,
             "preview_import_share": self._preview_import_share,
             "import_share": self._import_share,
+            "select_playset_json": self._select_playset_json,
+            "export_playset_json": self._export_playset_json,
+            "preview_import_playset_json": self._preview_import_playset_json,
+            "import_playset_json": self._import_playset_json,
             "import_workshop_collection": self._import_workshop_collection,
             "preview_mod_profile": self._preview_mod_profile,
             "import_mod_profile": self._import_mod_profile,
@@ -2587,6 +2597,147 @@ class API:
                 "missing": missing,
                 "pending_workshop_ids": pending_workshop_ids,
             }
+
+    @staticmethod
+    def _ask_save_playset_json(default_name: str) -> str:
+        try:
+            import tkinter
+            from tkinter import filedialog
+
+            root = tkinter.Tk()
+            try:
+                root.withdraw()
+                root.attributes("-topmost", True)
+                selected = filedialog.asksaveasfilename(
+                    title="导出播放集 JSON",
+                    defaultextension=".json",
+                    initialfile=f"{default_name}.json",
+                    filetypes=(("JSON 文件", "*.json"), ("所有文件", "*.*")),
+                )
+            finally:
+                root.destroy()
+            return str(selected or "")
+        except Exception as exc:
+            raise ValueError(f"无法打开播放集导出对话框：{exc}") from exc
+
+    @staticmethod
+    def _ask_open_playset_json() -> str:
+        try:
+            import tkinter
+            from tkinter import filedialog
+
+            root = tkinter.Tk()
+            try:
+                root.withdraw()
+                root.attributes("-topmost", True)
+                selected = filedialog.askopenfilename(
+                    title="导入播放集 JSON",
+                    filetypes=(("JSON 文件", "*.json"), ("所有文件", "*.*")),
+                )
+            finally:
+                root.destroy()
+            return str(selected or "")
+        except Exception as exc:
+            raise ValueError(f"无法打开播放集导入对话框：{exc}") from exc
+
+    def _select_playset_json(self) -> dict[str, str]:
+        return {"path": self._ask_open_playset_json()}
+
+    def _export_playset_json(
+        self, include_descriptions: bool = False, path: str = ""
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game = self._active_game()
+            playset = self.state_repository.get_current_playset(game.id)
+            playset_name = str(playset.get("name") or "")
+            ordered_ids = self._canonicalize_mod_ids(playset.get("mod_ids") or [])
+            payload = build_export_payload(
+                game_id=game.id,
+                playset_name=playset_name,
+                ordered_ids=ordered_ids,
+                assets=self._assets,
+                include_descriptions=bool(include_descriptions),
+            )
+        target = str(path or "").strip()
+        if not target:
+            target = self._ask_save_playset_json(
+                safe_export_name(playset_name or "playset")
+            )
+            if not target:
+                return {
+                    "exported": False,
+                    "path": "",
+                    "mod_count": 0,
+                    "bytes": 0,
+                    "include_descriptions": bool(include_descriptions),
+                }
+        written = write_export_file(target, payload)
+        return {
+            "exported": True,
+            "path": str(written),
+            "mod_count": len(payload["mods"]),
+            "bytes": written.stat().st_size,
+            "include_descriptions": bool(include_descriptions),
+        }
+
+    def _preview_import_playset_json(self, path: str) -> dict[str, Any]:
+        payload = read_import_file(path)
+        game = self._active_game()
+        if payload["game"] and payload["game"].casefold() != game.id.casefold():
+            raise ValueError("播放集 JSON 所属游戏与当前游戏不一致")
+        with self._context_lock:
+            ordered_ids, missing = resolve_share(payload["mods"], self._assets)
+            resolved = [
+                {
+                    "id": asset.id,
+                    "name": asset.effective_name,
+                    "pack_name": asset.pack_name,
+                    "workshop_id": asset.workshop_id,
+                }
+                for mod_id in ordered_ids
+                if (asset := self._assets.get(mod_id)) is not None
+            ]
+        return {
+            "playset_name": payload["playset_name"],
+            "game": game.id,
+            "total": len(payload["mods"]),
+            "resolved_mod_ids": ordered_ids,
+            "resolved_mods": resolved,
+            "missing": missing,
+        }
+
+    def _import_playset_json(self, path: str, mode: str = "new") -> dict[str, Any]:
+        if mode not in {"new", "current"}:
+            raise ValueError("不支持的播放集导入方式")
+        preview = self._preview_import_playset_json(path)
+        ordered_ids = list(preview["resolved_mod_ids"])
+        if not ordered_ids:
+            raise ValueError("JSON 中没有可导入的已安装 MOD")
+        game_id = self._active_game().id
+        if mode == "new":
+            base_name = preview["playset_name"] or "Imported playset"
+            created = None
+            for index in range(20):
+                candidate = base_name if index == 0 else f"{base_name} ({index + 1})"
+                try:
+                    created = self._create_playset(candidate, ordered_ids)
+                    break
+                except ValueError as exc:
+                    if "已存在" not in str(exc):
+                        raise
+            if created is None:
+                raise ValueError("无法创建播放集：名称已存在")
+            result = created
+        else:
+            self.state_repository.update_current_playset(ordered_ids, game_id)
+            self._refresh_missing_dependency_warnings(ordered_ids)
+            result = self._current_playset_payload()
+        return {
+            **result,
+            "missing": preview["missing"],
+            "imported_count": len(ordered_ids),
+            "mode": mode,
+        }
 
     def _import_workshop_collection(self, collection_value: str) -> dict[str, Any]:
         collection = fetch_workshop_collection(

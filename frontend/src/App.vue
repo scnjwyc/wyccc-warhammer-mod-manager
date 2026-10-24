@@ -472,6 +472,71 @@ const importWorkshopCollection = async value => {
   }
 }
 
+const formatFileSize = bytes => {
+  const value = Number(bytes) || 0
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`
+  return `${value} B`
+}
+
+const exportPlaysetJson = async includeDescriptions => {
+  try {
+    const data = await store.exportPlaysetJson(includeDescriptions)
+    if (data.exported) {
+      const size = formatFileSize(data.bytes)
+      const large = Number(data.bytes || 0) > 5 * 1024 * 1024
+      store.notify(
+        t(large ? 'share.exportJsonDoneLarge' : 'share.exportJsonDone', {
+          count: data.mod_count,
+          size,
+          path: data.path,
+        }),
+        large ? 'warning' : undefined,
+      )
+    }
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
+const importPlaysetJson = async mode => {
+  try {
+    const selected = await store.selectPlaysetJson()
+    if (!selected?.path) return
+    const preview = await store.previewImportPlaysetJson(selected.path)
+    if (!preview.resolved_mod_ids?.length) {
+      store.notify(t('share.importJsonNoMods'), 'warning')
+      return
+    }
+    if (preview.missing?.length) {
+      const visibleItems = preview.missing
+        .slice(0, 10)
+        .map(item => {
+          const name = item.name
+            || item.pack_name
+            || (item.workshop_id ? t('app.workshopItem', { id: item.workshop_id }) : '')
+            || item.id
+          return name ? `• ${name}` : ''
+        })
+        .filter(Boolean)
+      if (preview.missing.length > visibleItems.length) {
+        visibleItems.push(t('app.moreUnsubscribed', {
+          count: preview.missing.length - visibleItems.length,
+        }))
+      }
+      const confirmed = await requestConfirmation({
+        message: t('share.importJsonMissing', { items: visibleItems.join('\n') }),
+      })
+      if (!confirmed) return
+    }
+    const imported = await store.importPlaysetJson(selected.path, mode)
+    store.notify(t('share.importJsonDone', { count: imported.imported_count || 0 }))
+    showShare.value = false
+  } catch {
+    // Store actions surface failures through the shared toast.
+  }
+}
+
 const selectedActionIds = modId => (
   store.selectedIds.includes(modId) ? store.selectedIds : [modId]
 )
@@ -1556,6 +1621,8 @@ onBeforeUnmount(() => {
       @import="importShare"
       @import-collection="importWorkshopCollection"
       @import-official="beginOfficialProfileImport"
+      @export-json="exportPlaysetJson"
+      @import-json="importPlaysetJson"
     />
 
     <OfficialProfileImportModal
