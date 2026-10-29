@@ -3887,6 +3887,7 @@ button.context-menu-item {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
   color: #e3d6c4;
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .toast.error {
@@ -3910,6 +3911,7 @@ button.context-menu-item {
   border-color: #725530;
   background: #2b2114;
   color: #e7c489;
+  white-space: pre-line;
 }
 
 .toast-enter-active,

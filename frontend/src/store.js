@@ -1732,6 +1732,32 @@ export const useAppStore = defineStore('app', {
     async previewShareImport(value) {
       return this.withBusy(t('busy.previewShare'), () => invoke('preview_import_share', value))
     },
+    async exportPlaysetJson(includeDescriptions = false) {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('busy.exportPlaysetJson'), () =>
+        invoke('export_playset_json', Boolean(includeDescriptions)),
+      )
+    },
+    async selectPlaysetJson() {
+      return this.withBusy(t('busy.previewPlaysetJson'), () =>
+        invoke('select_playset_json'),
+      )
+    },
+    async previewImportPlaysetJson(path) {
+      return this.withBusy(t('busy.previewPlaysetJson'), () =>
+        invoke('preview_import_playset_json', path),
+      )
+    },
+    async importPlaysetJson(path, mode = 'new') {
+      await this.flushPlaysetUpdates()
+      return this.withBusy(t('busy.importPlaysetJson'), async () => {
+        const data = await invoke('import_playset_json', path, mode)
+        this.applyPlaysetPayload(data)
+        this.dirty = true
+        this.recordCurrentPlaysetChange()
+        return data
+      })
+    },
     async subscribeWorkshopItems(workshopIds) {
       return this.withBusy(t('busy.subscribeWorkshop'), async () => {
         const data = await invoke('subscribe_workshop_items', workshopIds)
