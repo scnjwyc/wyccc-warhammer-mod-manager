@@ -253,10 +253,19 @@ def _overlay(current: DecisionNode, incoming: DecisionNode, baseline: DecisionNo
     children = {node.key: node for node in current.children}
     base_children = {node.key: node for node in baseline.children} if baseline else {}
     for child in incoming.children:
-        children[child.key] = (
-            _overlay(children[child.key], child, base_children.get(child.key))
-            if child.key in children else child
-        )
+        original = base_children.get(child.key)
+        if child == original:
+            continue
+        if child.key in children:
+            children[child.key] = _overlay(children[child.key], child, original)
+        elif original is not None and child.audio_id is None:
+            # A fallback language can have vanilla branches absent from the
+            # current language. Only carry its authored descendants across.
+            added = _overlay(replace(child, children=()), child, original)
+            if added.children:
+                children[child.key] = added
+        else:
+            children[child.key] = child
     metadata = current if baseline and (
         incoming.weight, incoming.probability
     ) == (baseline.weight, baseline.probability) else incoming
@@ -282,6 +291,31 @@ def _baseline_event(base, key):
             or next((event for (_, base_id), event in base.items() if base_id == event_id), None))
 
 
+def _extend_trailing_arguments(event: DialogueEvent, baseline: DialogueEvent) -> DialogueEvent:
+    depth = len(event.arguments)
+    missing = len(baseline.arguments) - depth
+    if (missing <= 0 or event.arguments != baseline.arguments[:depth]
+            or event.argument_types != baseline.argument_types[:depth]
+            or any(kind != 1 for kind in baseline.argument_types[depth:])):
+        return event
+
+    def extend(node: DecisionNode, level: int) -> DecisionNode:
+        if node.audio_id is not None:
+            # Existing early terminals already ignore all remaining conditions.
+            if level < depth:
+                return node
+            # State key 0 is Wwise Any. Keep the terminal's playback ID,
+            # weight and probability; only add unconstrained trailing states.
+            child = replace(node, key=0)
+            for _ in range(missing - 1):
+                child = DecisionNode(0, 50, 100, children=(child,))
+            return replace(node, audio_id=None, children=(child,))
+        return replace(node, children=tuple(extend(child, level + 1) for child in node.children))
+
+    return replace(event, arguments=baseline.arguments, argument_types=baseline.argument_types,
+                   root=extend(event.root, 0))
+
+
 def _only_adds_branches(event: DialogueEvent, baseline: DialogueEvent) -> bool:
     if replace(event, root=baseline.root) != baseline:
         return False
@@ -303,33 +337,59 @@ def _localized_copies_agree(localized, candidates, base) -> bool:
         return False
     selected = [_source_events(candidates[key]) for key in localized]
     priorities = {priority for group in selected for priority in group}
-    # Use a language that already contains the complete source combination;
-    # do not synthesize a union of separate language-specific voice packs.
-    if not any(set(group) == priorities for group in selected):
-        return False
+    shared = list(candidates.get(("", localized[0][1]), ()))
     for priority in priorities:
         copies = [group[priority] for group in selected if priority in group]
         if any(item.event != copies[0].event for item in copies[1:]):
             return False
-        # Missing language folders alone are not conflicting voice definitions.
-        # Only propagate pre-merged additions that preserve the entire shared
-        # vanilla tree; localized replacements and explicit author edits remain
-        # language-specific. This covers English-only Audio Mixer scaffolding.
+        # Complete, unchanged vanilla fallbacks with only new branches can be
+        # shared across languages, as with English-only Audio Mixer scaffolding.
         if len(copies) != len(selected) and (
-            baseline is None or any("_for_merging" in item.bank for item in copies)
-            or not _only_adds_branches(copies[0].event, baseline)
+            baseline is not None and not any("_for_merging" in item.bank for item in copies)
+            and _only_adds_branches(copies[0].event, baseline)
         ):
+            shared.append(copies[0])
+
+    def merged(items):
+        by_source = _source_events(items)
+        ordered = [by_source[priority] for priority in sorted(by_source, reverse=True)]
+        root = baseline.root if baseline else ordered[0].event.root
+        for item in ordered:
+            root = _overlay(root, item.event.root,
+                            None if "_for_merging" in item.bank else (baseline.root if baseline else None))
+        return replace(ordered[-1].event, root=root)
+
+    # Separately packaged translations can carry the same authored changes
+    # with newer vanilla fallbacks. Compare the actual priority-ordered result
+    # in every language against the combined result before sharing a global tree.
+    try:
+        contributions = [
+            {("_for_merging" in item.bank, merged([item])) for item in group.values()}
+            for group in selected
+        ]
+        # One language must already contain every authored contribution, allowing
+        # equivalent translations from different sources to stand for each other.
+        # Never assemble unrelated additions from separate language-only packs.
+        if not any(group == set().union(*contributions) for group in contributions):
             return False
-    return True
+        combined = merged([*shared, *(item for key in localized for item in candidates[key])])
+        return all(merged([*shared, *candidates[key]]) == combined for key in localized)
+    except VoiceCompatibilityError:
+        raise
+    except ValueError:
+        return False
 
 
-def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list[GameDataEntry], dict]:
+def build_voice_compatibility_entries(
+    sources: Sequence[DbSource], *, language_scope: str = "",
+) -> tuple[list[GameDataEntry], dict]:
     """Sources are ordered from highest to lowest Pack priority; vanilla is fallback."""
     banks = []
     base: dict[tuple[str, int], EventDefinition] = {}
     effective_banks: dict[str, SoundBank] = {}
     effective_events: dict[str, dict[int, DialogueEvent]] = {}
     bank_origins = {}
+    localized_bank_names = set()
     candidates = defaultdict(list)
     for priority, source in enumerate(sources):
         for entry in sorted(source.entries, key=lambda item: normalized_name(item.name)):
@@ -344,6 +404,8 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
                     {"source": source.name, "role": source.role, "bank": entry.name},
                 ], detail=str(exc)) from exc
             scope = bank_scope(name)
+            if language_scope and scope == language_scope:
+                localized_bank_names.add(name.rpartition("\\")[2])
             if source.role == "vanilla":
                 for event_id, event in events.items():
                     base.setdefault((scope, event_id),
@@ -356,20 +418,39 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
                 effective_events[name] = dict(events)
                 banks.append((entry, bank, effective_events[name], scope))
             elif events:
-                # Dialogue-only banks can also collide by file path. Playback
-                # objects/media in an overwritten file cannot be made reachable
-                # by merging decision trees, so never silently discard them.
+                # Same-path banks can be safely combined when their playback
+                # object IDs do not disagree. Keep the higher-priority copy
+                # for duplicate IDs and append disjoint objects from the
+                # lower-priority copy so its dialogue events remain reachable.
                 winner_objects = {payload[:4]: (kind, payload) for kind, payload in winner.objects if kind != 15}
-                if any(winner_objects.get(payload[:4]) != (kind, payload)
-                       for kind, payload in bank.objects if kind != 15) or any(
+                incoming_objects = {payload[:4]: (kind, payload) for kind, payload in bank.objects if kind != 15}
+                if any(winner_objects.get(object_id) != value
+                       for object_id, value in incoming_objects.items()
+                       if object_id in winner_objects) or any(
                     tag in {b"DATA", b"DIDX"} and (tag, data) not in winner.chunks for tag, data in bank.chunks
                 ):
                     raise VoiceCompatibilityError("bankConflict", [bank_origins[name],
                         {"source": source.name, "role": source.role, "bank": entry.name}])
+                merged_objects = list(winner.objects)
+                for kind, payload in bank.objects:
+                    if kind != 15 and payload[:4] not in winner_objects:
+                        merged_objects.append((kind, payload))
+                        winner_objects[payload[:4]] = (kind, payload)
+                effective_banks[name] = replace(winner, objects=tuple(merged_objects))
                 for event_id, event in events.items():
                     effective_events[name].setdefault(event_id, event)
             for event_id, event in events.items():
                 candidates[(scope, event_id)].append(EventDefinition(priority, source.name, source.role, name, event))
+
+    extended_keys = set()
+    for key, items in candidates.items():
+        baseline = _baseline_event(base, key)
+        if baseline is None:
+            continue
+        extended = [replace(item, event=_extend_trailing_arguments(item.event, baseline.event)) for item in items]
+        if extended != items:
+            extended_keys.add(key)
+            candidates[key] = extended
 
     replacements = {}
     stats = {"voice_pack_count": 0, "merged_event_count": 0, "merged_path_count": 0,
@@ -389,9 +470,12 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
         else:
             merge_groups.extend((key, [key], candidates[key]) for key in keys)
     for key, target_keys, items in merge_groups:
-        if len({item.priority for item in items}) < 2:
+        if len({item.priority for item in items}) < 2 and not extended_keys.intersection(target_keys):
             continue
         event_id = key[1]
+        language_selected = bool(language_scope and ("", event_id) in candidates)
+        if language_selected:
+            key = (language_scope, event_id)
         # Validate every copy that will be replaced, including discarded testing
         # copies. Replacing an incompatible copy used to conceal broken inputs.
         baseline_definition = _baseline_event(base, key)
@@ -403,15 +487,22 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
             ):
                 raise VoiceCompatibilityError("argumentMismatch", [expected.diagnostic(), item.diagnostic()], event_id)
         localized = [key for key in target_keys if key[0]]
-        if len(localized) > 1:
+        if len(localized) > 1 and not language_selected:
             if not _localized_copies_agree(localized, candidates, base):
                 involved = [*items, *(baseline for target in localized
                                       if (baseline := _baseline_event(base, target)))]
                 raise VoiceCompatibilityError("mixedLayout", [item.diagnostic() for item in involved], event_id)
+        if language_selected:
+            # Select the game's localized file before merging MOD priorities.
+            # An English-only bank is fallback; a same-name localized bank,
+            # even from another Pack, takes its place for the current language.
+            items = [item for item in items if bank_scope(item.bank) in {"", language_scope}
+                     or (bank_scope(item.bank) == "english(uk)"
+                         and item.bank.rpartition("\\")[2] not in localized_bank_names)]
         baseline = baseline_definition.event if baseline_definition else None
         by_source = _source_events(items)
         selected = [by_source[priority] for priority in sorted(by_source, reverse=True)]
-        prototype = selected[-1].event
+        prototype = baseline if language_selected and baseline else selected[-1].event
         root = baseline.root if baseline else selected[0].event.root
         edited_paths = {}
         baseline_paths = event_paths(baseline) if baseline else {}
@@ -419,13 +510,25 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
         for item in selected:
             event = item.event
             explicit = "_for_merging" in item.bank
+            incoming_base = baseline
+            if language_selected:
+                definition = _baseline_event(base, (bank_scope(item.bank), event_id))
+                incoming_base = definition.event if definition else None
+                # Unchanged English fallback metadata must not replace the
+                # current language's vanilla metadata.
+                prototype = replace(event, **{
+                    field: (getattr(prototype, field) if not explicit and incoming_base
+                            and getattr(event, field) == getattr(incoming_base, field) else getattr(event, field))
+                    for field in ("probability", "mode", "suffix")
+                })
+            incoming_base_paths = event_paths(incoming_base) if incoming_base else baseline_paths
             for path, value in event_paths(event).items():
-                if explicit or baseline_paths.get(path) != value:
+                if explicit or incoming_base_paths.get(path) != value:
                     if path in edited_paths and edited_paths[path] != value:
                         stats["conflicting_path_count"] += 1
                     edited_paths[path] = value
             try:
-                root = _overlay(root, event.root, None if explicit else (baseline.root if baseline else None))
+                root = _overlay(root, event.root, None if explicit else (incoming_base.root if incoming_base else None))
             except ValueError as exc:
                 raise VoiceCompatibilityError("treeMismatch", [origin.diagnostic() for origin in [*applied, item]],
                                               event_id) from exc
@@ -444,13 +547,14 @@ def build_voice_compatibility_entries(sources: Sequence[DbSource]) -> tuple[list
         stats["merged_path_count"] += len(event_paths(merged))
 
     entries = []
-    for entry, bank, events, scope in banks:
+    for entry, original_bank, events, scope in banks:
+        bank = effective_banks[normalized_name(entry.name)]
         original_ids = {struct.unpack_from("<I", payload)[0] for kind, payload in bank.objects if kind == 15}
         changed = {event_id: replacements[(scope, event_id)] for event_id in events
                    if (scope, event_id) in replacements}
         changed.update({event_id: encode_dialogue_event(event) for event_id, event in events.items()
                         if event_id not in original_ids and event_id not in changed})
-        if changed:
+        if changed or bank != original_bank:
             payload = bank.replace_dialogues(changed)
             if payload != entry.payload:
                 entries.append(GameDataEntry(entry.name, payload))

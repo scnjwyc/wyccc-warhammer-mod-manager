@@ -468,9 +468,11 @@ EXTRA_TABLE_SCHEMAS: dict[str, dict[int, tuple[tuple[str, str], ...]]] = {
         ),
     },
     # Recruitment gating used by the unit-data editor when a unit is disabled.
-    # Vanilla ships both tables versionless (GUID header only); mods created by
-    # RPFM keep that layout, so version 1 is the versionless fallback schema.
+    # Keep version 1 as the fallback for versionless files (GUID header only).
+    # Explicit v0 military-group permissions have the same two StringU8 fields,
+    # as verified against the bundled RPFM schema and real MOD payloads.
     "units_to_groupings_military_permissions_tables": {
+        0: (("unit", "StringU8"), ("military_group", "StringU8")),
         1: (("unit", "StringU8"), ("military_group", "StringU8")),
     },
     "units_to_exclusive_faction_permissions_tables": {

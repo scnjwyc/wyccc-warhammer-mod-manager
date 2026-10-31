@@ -22,6 +22,11 @@ PREFIX = "audio\\wwise\\"
 BASE_NAME = PREFIX + "english(uk)\\campaign_vo__core.bnk"
 
 
+@pytest.fixture(autouse=True)
+def isolated_audio_preferences(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+
 def event(values, *, event_id=100, arguments=(123,), mode=0):
     def node(key, value):
         if isinstance(value, dict):
@@ -112,10 +117,27 @@ def test_shared_file_path_merges_dialogues_and_retains_lower_unique_events():
 
 def test_shared_file_does_not_silently_lose_playback_objects():
     name = PREFIX + "shared.bnk"
-    high = source("high", {1: 111}, filename=name)
-    low = DbSource("low", (GameDataEntry(name, bank([event({2: 222})], extras=[(2, b"abcdpayload")])),))
+    high = DbSource("high", (GameDataEntry(name, bank([event({1: 111})], extras=[(2, b"abcdhigh")])),))
+    low = DbSource("low", (GameDataEntry(name, bank([event({2: 222})], extras=[(2, b"abcdlow")])),))
     with pytest.raises(ValueError, match="播放对象"):
         build_voice_compatibility_entries([high, low])
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_shared_file_unions_disjoint_playback_objects_regardless_of_priority(reverse):
+    name = PREFIX + "shared.bnk"
+    high = DbSource("high", (GameDataEntry(name, bank([event({1: 111})], extras=[(2, b"abcdhigh")])),))
+    low = DbSource("low", (GameDataEntry(name, bank([event({2: 222})], extras=[(5, b"efghlow")])),))
+    entries, _ = build_voice_compatibility_entries([
+        *( [low, high] if reverse else [high, low] ),
+        source("base", {1: 10, 2: 20}, role="vanilla"),
+    ])
+    actual = parse_soundbank(entries[0].payload)
+    assert (2, b"abcdhigh") in actual.objects
+    assert (5, b"efghlow") in actual.objects
+    assert event_paths(actual.dialogues()[100]) == {
+        (1,): (111, 50, 100), (2,): (222, 50, 100),
+    }
 
 
 def test_shared_file_keeps_higher_priority_playback_bank_when_adding_missing_dialogues():
@@ -220,6 +242,72 @@ def test_mixed_layout_does_not_copy_a_different_language_vanilla_fallback_into_t
         ])
 
 
+@pytest.mark.parametrize("scope", ["chinese", "english(uk)"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_mixed_layout_selects_current_language_bank_then_applies_mod_priority(scope, reverse):
+    mods = [
+        source("english", {1: 111, 2: 20}, event_id=165328208,
+               filename=PREFIX + "english(uk)\\voice.bnk"),
+        source("translation", {1: 222, 2: 333}, event_id=165328208,
+               filename=PREFIX + "chinese\\voice.bnk"),
+        source("mixer", {1: 10, 2: 0, 3: 300, 9: 999}, event_id=165328208,
+               filename=PREFIX + "english(uk)\\mixer.bnk"),
+        source("global", {4: 444}, event_id=165328208, filename=PREFIX + "global_for_merging.bnk"),
+    ]
+    entries, stats = build_voice_compatibility_entries([
+        *(reversed(mods) if reverse else mods),
+        source("en_base", {1: 10, 2: 20, 9: 999}, role="vanilla", event_id=165328208,
+               filename=BASE_NAME),
+        source("cn_base", {1: 10, 2: 20, 9: 900}, role="vanilla", event_id=165328208,
+               filename=PREFIX + "chinese\\campaign_vo__core.bnk"),
+    ], language_scope=scope)
+    copies = {parse_soundbank(entry.payload).dialogues()[165328208] for entry in entries}
+    assert len(entries) == 4 and len(copies) == 1
+    assert event_paths(copies.pop()) == {
+        (1,): (222 if scope == "chinese" else 111, 50, 100),
+        (2,): (333 if scope == "chinese" and not reverse else 0, 50, 100),
+        (3,): (300, 50, 100), (4,): (444, 50, 100),
+        (9,): (900 if scope == "chinese" else 999, 50, 100),
+    }
+    assert stats["merged_event_count"] == 1
+
+
+def test_current_language_bank_without_event_prevents_falling_back_to_the_english_copy():
+    translation = DbSource("translation", (
+        GameDataEntry(PREFIX + "chinese\\voice.bnk", bank([event({7: 777}, event_id=200)])),
+    ))
+    entries, _ = build_voice_compatibility_entries([
+        source("english", {1: 111}, filename=PREFIX + "english(uk)\\voice.bnk"),
+        translation,
+        source("global", {4: 444}, filename=PREFIX + "global_for_merging.bnk"),
+        source("en_base", {1: 10}, role="vanilla", filename=BASE_NAME),
+        source("cn_base", {1: 20}, role="vanilla", filename=PREFIX + "chinese\\campaign_vo__core.bnk"),
+    ], language_scope="chinese")
+    copies = {parse_soundbank(entry.payload).dialogues()[100]
+              for entry in entries if 100 in parse_soundbank(entry.payload).dialogues()}
+    assert len(copies) == 1
+    assert event_paths(copies.pop()) == {(1,): (20, 50, 100), (4,): (444, 50, 100)}
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_english_fallback_never_imports_vanilla_branches_missing_from_the_current_language(nested):
+    arguments = (123, 456) if nested else (123,)
+    english_base = {1: {2: 20}} if nested else {1: 10}
+    chinese_base = {3: {4: 40}} if nested else {3: 30}
+    english_mod = {1: {2: 20, 5: 55}} if nested else {1: 10, 5: 55}
+    global_mod = {6: {7: 77}} if nested else {6: 66}
+    entries, _ = build_voice_compatibility_entries([
+        source("english", english_mod, arguments=arguments, filename=PREFIX + "english(uk)\\voice.bnk"),
+        source("global", global_mod, arguments=arguments, filename=PREFIX + "global_for_merging.bnk"),
+        source("en_base", english_base, arguments=arguments, role="vanilla", filename=BASE_NAME),
+        source("cn_base", chinese_base, arguments=arguments, role="vanilla",
+               filename=PREFIX + "chinese\\campaign_vo__core.bnk"),
+    ], language_scope="chinese")
+    merged, = merged_events(entries)
+    assert event_paths(merged) == ({(3, 4): (40, 50, 100), (1, 5): (55, 50, 100), (6, 7): (77, 50, 100)}
+                                   if nested else {(3,): (30, 50, 100), (5,): (55, 50, 100), (6,): (66, 50, 100)})
+
+
 @pytest.mark.parametrize("reverse", [False, True])
 def test_mixed_layout_accepts_single_language_baseline_extensions(reverse):
     # Player report 3643531796: Audio Mixer exists only under english(uk),
@@ -245,6 +333,97 @@ def test_mixed_layout_accepts_single_language_baseline_extensions(reverse):
         (3,): (300, 50, 100), (4,): (444, 50, 100),
     }
     assert stats["merged_event_count"] == 1 and stats["conflicting_path_count"] == 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_mixed_layout_accepts_equivalent_localized_deltas_from_separate_mods(reverse):
+    # Report 3563368242: the English bank has an older vanilla fallback;
+    # its separately packaged Chinese copy has the same authored addition.
+    event_id = 3563368242
+    baseline = {1: 10, 2: 20, 3: 30}
+    mods = [
+        source("english", {1: 10, 5: 500}, event_id=event_id,
+               filename=PREFIX + "english(uk)\\voice.bnk"),
+        source("translation", {**baseline, 5: 500}, event_id=event_id,
+               filename=PREFIX + "chinese\\voice.bnk"),
+        source("global", {4: 444}, event_id=event_id, filename=PREFIX + "global_for_merging.bnk"),
+        source("mixer", {**baseline, 6: 600}, event_id=event_id,
+               filename=PREFIX + "english(uk)\\mixer.bnk"),
+    ]
+    entries, stats = build_voice_compatibility_entries([
+        *(reversed(mods) if reverse else mods),
+        *(source("base_" + scope, baseline, role="vanilla", event_id=event_id,
+                 filename=PREFIX + scope + "\\battle_vo_conversational__core.bnk")
+          for scope in ("english(uk)", "chinese")),
+    ])
+    copies = {parse_soundbank(entry.payload).dialogues()[event_id] for entry in entries}
+    assert len(entries) == 4 and len(copies) == 1
+    assert event_paths(copies.pop()) == {
+        (1,): (10, 50, 100), (2,): (20, 50, 100), (3,): (30, 50, 100),
+        (4,): (444, 50, 100), (5,): (500, 50, 100), (6,): (600, 50, 100),
+    }
+    assert stats["merged_event_count"] == 1 and stats["conflicting_path_count"] == 0
+
+
+@pytest.mark.parametrize("difference", ["audio", "weight", "probability", "mode", "suffix"])
+def test_mixed_layout_rejects_different_localized_results_from_separate_mods(difference):
+    english = event({1: 10, 5: 500})
+    translated = event({1: 10, 2: 20, 5: 500})
+    if difference == "audio":
+        translated = event({1: 10, 2: 20, 5: 555})
+    elif difference == "weight":
+        translated = replace(translated, root=replace(translated.root, children=(
+            *translated.root.children[:-1], replace(translated.root.children[-1], weight=99),
+        )))
+    else:
+        translated = replace(translated, **{difference: {"probability": 90, "mode": 1, "suffix": b"\1\0"}[difference]})
+    with pytest.raises(ValueError) as caught:
+        build_voice_compatibility_entries([
+            DbSource("english", (GameDataEntry(PREFIX + "english(uk)\\voice.bnk", bank([english])),)),
+            DbSource("translation", (GameDataEntry(PREFIX + "chinese\\voice.bnk", bank([translated])),)),
+            source("global", {4: 444}, filename=PREFIX + "global_for_merging.bnk"),
+            *(source("base_" + scope, {1: 10, 2: 20}, role="vanilla",
+                     filename=PREFIX + scope + "\\campaign_vo__core.bnk")
+              for scope in ("english(uk)", "chinese")),
+        ])
+    assert caught.value.details["reason"] == "mixedLayout"
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_mixed_layout_rejects_equivalent_contributions_with_different_priority_results(reverse):
+    bilingual = DbSource("bilingual", tuple(
+        entry for scope in ("english(uk)", "chinese")
+        for entry in source("bilingual", {1: 222}, filename=PREFIX + scope + "\\bilingual.bnk").entries
+    ))
+    mods = [
+        source("english", {1: 111}, filename=PREFIX + "english(uk)\\voice.bnk"),
+        bilingual,
+        source("translation", {1: 111}, filename=PREFIX + "chinese\\voice.bnk"),
+        source("global", {4: 444}, filename=PREFIX + "global_for_merging.bnk"),
+    ]
+    # Both languages have the same contributions, but their relative priorities
+    # select different audio for the existing vanilla path.
+    with pytest.raises(ValueError) as caught:
+        build_voice_compatibility_entries([
+            *(reversed(mods) if reverse else mods),
+            *(source("base_" + scope, {1: 10}, role="vanilla",
+                     filename=PREFIX + scope + "\\campaign_vo__core.bnk")
+              for scope in ("english(uk)", "chinese")),
+        ])
+    assert caught.value.details["reason"] == "mixedLayout"
+
+
+def test_mixed_layout_does_not_share_disjoint_language_additions_when_global_hides_the_difference():
+    # A global replacement can make the final trees equal while still masking
+    # unrelated voices that were never packaged together in either language.
+    with pytest.raises(ValueError) as caught:
+        build_voice_compatibility_entries([
+            source("global", {2: 222, 3: 333}, filename=PREFIX + "global_for_merging.bnk"),
+            source("english", {1: 10, 2: 200}, filename=PREFIX + "english(uk)\\voice.bnk"),
+            source("translation", {1: 10, 3: 300}, filename=PREFIX + "chinese\\voice.bnk"),
+            source("base", {1: 10}, role="vanilla", filename=BASE_NAME),
+        ])
+    assert caught.value.details["reason"] == "mixedLayout"
 
 
 @pytest.mark.parametrize("difference", ["audio", "missing", "weight", "probability", "mode",
@@ -304,6 +483,70 @@ def test_rejects_incompatible_versions_and_argument_structures():
         parse_soundbank(bank([event({1: 111})], version=135))
     with pytest.raises(ValueError, match="参数结构"):
         build_voice_compatibility_entries([source("one", {1: 111}), source("two", {2: 222}, arguments=(456,))])
+
+
+@pytest.mark.parametrize("event_id,arguments", [
+    (165328208, (3113488887, 112324978, 702015320)),
+    (855899397, (3113488887, 112324978, 702015320)),
+    (2302243677, (112324978, 495479955, 2956310662)),
+])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_legacy_trailing_argument_uses_any_without_losing_vanilla_or_author_paths(event_id, arguments, reverse):
+    author = event({5: {6: 56}}, event_id=event_id, arguments=arguments[:-1])
+    leaf = replace(author.root.children[0].children[0], weight=17, probability=91)
+    author = replace(author, root=replace(author.root, children=(
+        replace(author.root.children[0], children=(leaf,)),
+    )))
+    legacy = DbSource("trojan_archer.pack", (
+        GameDataEntry(PREFIX + "legacy_for_merging.bnk", bank([author])),
+        GameDataEntry(PREFIX + "legacy_for_testing.bnk", bank([
+            event({1: {2: 999}, 5: {6: 56}}, event_id=event_id, arguments=arguments[:-1]),
+        ])),
+    ))
+    current = source("current", {8: {9: {0: 89}}}, event_id=event_id, arguments=arguments)
+    baseline = source("vanilla", {1: {2: {0: 20, 7: 27}}}, role="vanilla",
+                      event_id=event_id, arguments=arguments)
+    entries, _ = build_voice_compatibility_entries([
+        *([current, legacy] if reverse else [legacy, current]), baseline,
+    ])
+    copies = [parse_soundbank(entry.payload).dialogues()[event_id] for entry in entries]
+    assert len(copies) == 3 and len(set(copies)) == 1
+    merged = copies[0]
+    assert merged.arguments == arguments and merged.argument_types == b"\1\1\1"
+    assert event_paths(merged) == {
+        (1, 2, 0): (20, 50, 100), (1, 2, 7): (27, 50, 100),
+        (5, 6, 0): (56, 17, 91), (8, 9, 0): (89, 50, 100),
+    }
+    assert parse_dialogue_event(encode_dialogue_event(merged)) == merged
+    assert event_paths(author) == {(5, 6): (56, 17, 91)}
+
+
+def test_legacy_arguments_are_updated_with_only_one_mod_and_multiple_new_conditions():
+    entries, stats = build_voice_compatibility_entries([
+        source("legacy", {5: 56}, arguments=(123,), filename=PREFIX + "legacy_for_merging.bnk"),
+        source("vanilla", {1: {2: {3: 20}}}, arguments=(123, 456, 789), role="vanilla"),
+    ])
+    merged, = merged_events(entries)
+    assert merged.arguments == (123, 456, 789)
+    assert event_paths(merged) == {(1, 2, 3): (20, 50, 100), (5, 0, 0): (56, 50, 100)}
+    assert stats["voice_pack_count"] == 1
+
+
+@pytest.mark.parametrize("difference", ["missing_middle", "type", "new_type", "no_vanilla"])
+def test_legacy_argument_extension_requires_a_matching_current_vanilla_prefix(difference):
+    legacy = event({1: {2: 12}}, arguments=(123, 789) if difference == "missing_middle" else (123, 456))
+    current = event({3: {4: {0: 34}}}, arguments=(123, 456, 789))
+    if difference == "type":
+        legacy = replace(legacy, argument_types=b"\1\0")
+    if difference == "new_type":
+        current = replace(current, argument_types=b"\1\1\0")
+    sources = [DbSource("legacy", (GameDataEntry(PREFIX + "legacy.bnk", bank([legacy])),)),
+               DbSource("current", (GameDataEntry(PREFIX + "current.bnk", bank([current])),))]
+    if difference != "no_vanilla":
+        sources.append(DbSource("vanilla", (GameDataEntry(BASE_NAME, bank([current])),), "vanilla"))
+    with pytest.raises(ValueError) as caught:
+        build_voice_compatibility_entries(sources)
+    assert caught.value.details["reason"] == "argumentMismatch"
 
 
 @pytest.mark.parametrize("difference", ["order", "count", "type"])
@@ -468,6 +711,55 @@ def test_builder_upgrade_rebuilds_the_cached_voice_patch(tmp_path, monkeypatch):
     monkeypatch.setattr(voice_patch_state, "BUILDER_VERSION", current_version)
     current = ensure(tmp_path, data, assets)
     assert current["status"] == "generated" and current["fingerprint"] != previous["fingerprint"]
+    assert ensure(tmp_path, data, assets)["status"] == "reused"
+
+
+@pytest.mark.parametrize("audio,steam,expected", [
+    ("", "schinese", "chinese"), ("en", "schinese", "english(uk)"),
+    ("cn", "english", "chinese"), ("de", "schinese", "german"),
+    ("", "french", "french(france)"), ("", "russian", "russian"),
+    ("unknown", "schinese", ""), ("", "unknown", ""),
+])
+def test_voice_language_uses_audio_override_before_steam_and_never_interface_language(tmp_path, audio, steam, expected):
+    from backend.voice_patch_state import _voice_language
+
+    data = tmp_path / "steamapps" / "common" / "WH3" / "data"
+    data.mkdir(parents=True)
+    manifest = tmp_path / "steamapps" / "appmanifest_1142710.acf"
+    manifest.write_text('"AppState" { "UserConfig" { "language" "' + steam + '" } }', encoding="utf-8")
+    preferences = Path(os.environ["APPDATA"]) / "The Creative Assembly" / "Warhammer3" / "scripts" / "preferences.script.txt"
+    preferences.parent.mkdir(parents=True)
+    preferences.write_text('language_audio "' + audio + '"; # audio override\nlanguage_text "en";\n', encoding="utf-8")
+    assert _voice_language(data) == expected
+
+
+def test_voice_language_change_rebuilds_cache_and_selects_the_matching_translation(tmp_path):
+    data = tmp_path / "steamapps" / "common" / "WH3" / "data"
+    manifest = tmp_path / "steamapps" / "appmanifest_1142710.acf"
+    mods = [source("english", {1: 111}, filename=PREFIX + "english(uk)\\voice.bnk"),
+            source("translation", {1: 222}, filename=PREFIX + "chinese\\voice.bnk"),
+            source("global", {4: 444}, filename=PREFIX + "global_for_merging.bnk")]
+    assets = {}
+    for mod in mods:
+        path = write_pack(tmp_path / "mods" / (mod.name + ".pack"), byte_mask=3,
+                          entries=[(entry.name, entry.payload) for entry in mod.entries])
+        assets[mod.name] = make_asset(path, mod.name, "workshop")
+    for scope, filename, value in [("english(uk)", "audio_en_bnk.pack", 10), ("chinese", "audio_cn_bnk.pack", 20)]:
+        write_pack(data / filename, entries=[(PREFIX + scope + "\\campaign_vo__core.bnk", bank([event({1: value})]))])
+    manifest.write_text('"AppState" { "UserConfig" { "language" "schinese" } }', encoding="utf-8")
+    chinese = ensure(tmp_path, data, assets)
+    assert chinese["status"] == "generated"
+    assert chinese["source_diagnostics"]["voice_language"] == "chinese"
+    assert ensure(tmp_path, data, assets)["status"] == "reused"
+    entries = [entry for entry in read_pack_entries(Path(chinese["path"])) if entry.name.endswith(".bnk")]
+    merged, = merged_events(entries)
+    assert event_paths(merged) == {(1,): (222, 50, 100), (4,): (444, 50, 100)}
+    manifest.write_text('"AppState" { "UserConfig" { "language" "english" } }', encoding="utf-8")
+    english = ensure(tmp_path, data, assets)
+    assert english["status"] == "generated" and english["fingerprint"] != chinese["fingerprint"]
+    entries = [entry for entry in read_pack_entries(Path(english["path"])) if entry.name.endswith(".bnk")]
+    merged, = merged_events(entries)
+    assert event_paths(merged) == {(1,): (111, 50, 100), (4,): (444, 50, 100)}
     assert ensure(tmp_path, data, assets)["status"] == "reused"
 
 

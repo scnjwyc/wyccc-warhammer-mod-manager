@@ -580,6 +580,34 @@ def _rows_by_key(result: Any, table_name: str) -> dict[str, dict[str, Any]]:
 
 
 class UnitDataSnapshotTests(unittest.TestCase):
+    def test_reads_explicit_military_group_permission_versions(self) -> None:
+        for version in (0, 1):
+            with self.subTest(version=version):
+                payload = (
+                    _guid_prefix("42432b02-0444-4eea-bc68-c08407460cb7")
+                    + b"\xfc\xfd\xfe\xff"
+                    + struct.pack("<i", version)
+                    + _versionless_payload([_grouping_row("inf_swordsmen", "wh_main_emp")])
+                )
+                source = DbSource(
+                    "mod.pack",
+                    (
+                        GameDataEntry(
+                            "db\\units_to_groupings_military_permissions_tables\\mod_groups",
+                            payload,
+                        ),
+                        *_fixture_source().entries,
+                    ),
+                )
+
+                snapshot = build_unit_table_snapshot(
+                    [source], {}, culture_map={"wh_main_emp_empire": "Empire"}
+                )
+                rows = {row["key"]: row for row in snapshot["units"]}
+                self.assertEqual(set(rows), {"inf_swordsmen", "veh_chariot", "art_ballista"})
+                self.assertEqual(rows["inf_swordsmen"]["race_key"], "wh_main_emp_empire")
+                self.assertEqual(rows["inf_swordsmen"]["race"], "Empire")
+
     def test_projects_all_requested_fields(self) -> None:
         source = _fixture_source()
         snapshot = build_unit_table_snapshot(
@@ -727,6 +755,40 @@ class UnitDataSnapshotTests(unittest.TestCase):
 
 
 class UnitDataPatchTests(unittest.TestCase):
+    def test_disabled_unit_preserves_version_zero_military_group_header_and_other_rows(self) -> None:
+        table_name = "units_to_groupings_military_permissions_tables"
+        entry_name = f"db\\{table_name}\\mod_groups"
+        header = (
+            _guid_prefix("42432b02-0444-4eea-bc68-c08407460cb7")
+            + b"\xfc\xfd\xfe\xff"
+            + struct.pack("<i", 0)
+        )
+        kept_row = _grouping_row("kept_unit", "mod_group")
+        source = DbSource(
+            "mod.pack",
+            (
+                GameDataEntry(
+                    entry_name,
+                    header + _versionless_payload(
+                        [
+                            _grouping_row("disabled_unit", "mod_group"),
+                            kept_row,
+                            _grouping_row("disabled_unit", "other_group"),
+                        ]
+                    ),
+                ),
+            ),
+        )
+
+        result = build_unit_data_entries([source], {}, {"disabled_unit": {"enabled": False}})
+
+        self.assertEqual(len(result.entries), 1)
+        self.assertEqual(result.entries[0].name, entry_name)
+        self.assertEqual(result.entries[0].payload, header + _versionless_payload([kept_row]))
+        parsed = parse_db_table(table_name, result.entries[0].payload)
+        self.assertEqual(parsed.version, 0)
+        self.assertEqual(parsed.rows[0].values, {"unit": "kept_unit", "military_group": "mod_group"})
+
     def test_disabled_unit_rebuilds_only_affected_permission_files_with_original_headers(self) -> None:
         target = "inf_swordsmen"
         building_guid = "11111111-1111-1111-1111-111111111111"

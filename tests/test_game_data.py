@@ -425,6 +425,104 @@ class GameDataPatchTests(unittest.TestCase):
             20,
         )
 
+    def test_voice_units_table_compatibility_merges_voice_fields_at_high_priority(self) -> None:
+        ordinary = DbSource(
+            "ordinary_mod.pack",
+            (
+                GameDataEntry(
+                    r"db\main_units_tables\z_ordinary",
+                    _table_payload(
+                        "main_units_tables",
+                        36,
+                        [{
+                            "unit": "shared_unit",
+                            "num_men": 60,
+                            "audio_voiceover_culture": "ordinary_culture",
+                            "audio_voiceover_culture_override": "ordinary_override",
+                            "audio_voiceover_actor_group": "ordinary_actor",
+                            "has_spoken_vo": False,
+                        }],
+                    ),
+                ),
+            ),
+        )
+        voice = DbSource(
+            "voice_mod.pack",
+            (
+                GameDataEntry(
+                    r"db\main_units_tables\!voice",
+                    _table_payload(
+                        "main_units_tables",
+                        36,
+                        [{
+                            "unit": "shared_unit",
+                            "num_men": 10,
+                            "audio_voiceover_culture": "voice_culture",
+                            "audio_voiceover_culture_override": "voice_override",
+                            "audio_voiceover_actor_group": "voice_actor",
+                            "has_spoken_vo": True,
+                        }],
+                    ),
+                ),
+            ),
+            voice_units_table_compatibility=True,
+        )
+
+        effective = _collect_effective_rows(
+            [ordinary, voice],
+            {"main_units_tables"},
+        )
+        values = effective["main_units_tables"]["shared_unit"].row.values
+
+        self.assertEqual(values["num_men"], 60)
+        self.assertEqual(values["audio_voiceover_culture"], "voice_culture")
+        self.assertEqual(values["audio_voiceover_culture_override"], "voice_override")
+        self.assertEqual(values["audio_voiceover_actor_group"], "voice_actor")
+        self.assertTrue(values["has_spoken_vo"])
+
+    def test_voice_units_table_compatibility_still_outranks_vanilla(self) -> None:
+        vanilla = DbSource(
+            "db.pack",
+            (
+                GameDataEntry(
+                    r"db\main_units_tables\!vanilla",
+                    _table_payload(
+                        "main_units_tables",
+                        36,
+                        [{"unit": "vanilla_unit", "num_men": 24}],
+                    ),
+                ),
+            ),
+            role="vanilla",
+        )
+        voice = DbSource(
+            "voice_mod.pack",
+            (
+                GameDataEntry(
+                    r"db\main_units_tables\zzz_voice",
+                    _table_payload(
+                        "main_units_tables",
+                        36,
+                        [{
+                            "unit": "vanilla_unit",
+                            "num_men": 10,
+                            "audio_voiceover_culture": "voice_culture",
+                        }],
+                    ),
+                ),
+            ),
+            voice_units_table_compatibility=True,
+        )
+
+        effective = _collect_effective_rows(
+            [voice, vanilla],
+            {"main_units_tables"},
+        )
+        values = effective["main_units_tables"]["vanilla_unit"].row.values
+
+        self.assertEqual(values["num_men"], 10)
+        self.assertEqual(values["audio_voiceover_culture"], "voice_culture")
+
     def test_generated_tables_outrank_high_priority_mod_table_names(self) -> None:
         source_internal_name = "!!!!!!!overhaul"
         source = DbSource(

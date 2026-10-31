@@ -170,15 +170,15 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         changelog = get_all_changelogs()
 
-        self.assertEqual(APP_VERSION, "1.3.5")
+        self.assertEqual(APP_VERSION, "1.3.6")
         self.assertEqual(project["project"]["version"], APP_VERSION)
         self.assertEqual(frontend["version"], APP_VERSION)
-        self.assertIn("appVersion: '1.3.5'", frontend_store)
-        self.assertIn("filevers=(1, 3, 5, 0)", version_info)
-        self.assertIn("prodvers=(1, 3, 5, 0)", version_info)
-        self.assertIn("StringStruct('ProductVersion', '1.3.5')", version_info)
-        self.assertIn("`1.3.5`", readme)
-        self.assertIn("`1.3.5`", readme_en)
+        self.assertIn("appVersion: '1.3.6'", frontend_store)
+        self.assertIn("filevers=(1, 3, 6, 0)", version_info)
+        self.assertIn("prodvers=(1, 3, 6, 0)", version_info)
+        self.assertIn("StringStruct('ProductVersion', '1.3.6')", version_info)
+        self.assertIn("`1.3.6`", readme)
+        self.assertIn("`1.3.6`", readme_en)
         self.assertEqual(update_manifest["schema_version"], 1)
         self.assertEqual(update_manifest["app"], APP_NAME)
         self.assertFalse(is_newer_version(update_manifest["version"], APP_VERSION))
@@ -197,8 +197,8 @@ class PackagedRuntimeTests(unittest.TestCase):
         self.assertEqual(len(update_manifest["download"]["sha256"]), 64)
         self.assertGreater(update_manifest["download"]["size"], 0)
         self.assertEqual(
-            [release["version"] for release in changelog[:25]],
-            ["1.3.5", "1.3.4", "1.3.3", "1.3.2", "1.3.1", "1.3.0", "1.2.9", "1.2.8", "1.2.7", "1.2.6", "1.2.5", "1.2.4", "1.2.3", "1.2.2", "1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8"],
+            [release["version"] for release in changelog[:26]],
+            ["1.3.6", "1.3.5", "1.3.4", "1.3.3", "1.3.2", "1.3.1", "1.3.0", "1.2.9", "1.2.8", "1.2.7", "1.2.6", "1.2.5", "1.2.4", "1.2.3", "1.2.2", "1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8"],
         )
         self.assertEqual(
             next(item for item in changelog if item["version"] == "1.0.1")["version"],
@@ -206,20 +206,20 @@ class PackagedRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             [change["type"] for entry in changelog[0]["entries"] for change in entry["changes"]],
-            ["fix"],
+            ["improvement"],
         )
         self.assertEqual(
             [change["text"] for entry in changelog[0]["entries"] for change in entry["changes"]],
             [
-                "修复-启动器一些功能使用后报错“`[Errno 2] No such file or directory`  ”的问题",
+                "优化-语音兼容补丁，游戏数据修改等功能提高对各个MOD的兼容性",
             ],
         )
         self.assertEqual(
-            [change["type"] for entry in changelog[14]["entries"] for change in entry["changes"]],
+            [change["type"] for entry in changelog[15]["entries"] for change in entry["changes"]],
             ["improvement", "improvement", "feature"],
         )
         self.assertEqual(
-            [change["text"] for entry in changelog[14]["entries"] for change in entry["changes"]],
+            [change["text"] for entry in changelog[15]["entries"] for change in entry["changes"]],
             [
                 "文件夹现在可以拖动排序了",
                 "文件夹现在可以跨播放集保存",
@@ -246,12 +246,12 @@ class PackagedRuntimeTests(unittest.TestCase):
 
         for releases in localized.values():
             self.assertEqual(
-                [release["version"] for release in releases[:25]],
-                ["1.3.5", "1.3.4", "1.3.3", "1.3.2", "1.3.1", "1.3.0", "1.2.9", "1.2.8", "1.2.7", "1.2.6", "1.2.5", "1.2.4", "1.2.3", "1.2.2", "1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8"],
+                [release["version"] for release in releases[:26]],
+                ["1.3.6", "1.3.5", "1.3.4", "1.3.3", "1.3.2", "1.3.1", "1.3.0", "1.2.9", "1.2.8", "1.2.7", "1.2.6", "1.2.5", "1.2.4", "1.2.3", "1.2.2", "1.2.1", "1.2.0", "1.1.9", "1.1.8", "1.1.7", "1.1.6", "1.1.5", "1.1.1", "1.1.0", "1.0.9", "1.0.8"],
             )
             self.assertEqual(len(releases[0]["entries"]), 1)
-            self.assertEqual(len(releases[10]["entries"]), 2)
-            self.assertEqual(len(releases[14]["entries"]), 3)
+            self.assertEqual(len(releases[11]["entries"]), 2)
+            self.assertEqual(len(releases[15]["entries"]), 3)
             release_115 = next(release for release in releases if release["version"] == "1.1.5")
             self.assertEqual(len(release_115["entries"]), 2)
             release_080 = next(release for release in releases if release["version"] == "0.8.0")

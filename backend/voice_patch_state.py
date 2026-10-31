@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .constants import INTERNAL_RUNTIME_PACK_NAMES, VOICE_COMPATIBILITY_PATCH_NAME
+from .constants import INTERNAL_RUNTIME_PACK_NAMES, VOICE_COMPATIBILITY_PATCH_NAME, WH3_APP_ID
 from .game_data import DbSource, GameDataEntry
 from .json_store import AtomicJsonStore
 from .models import ModAsset
 from .pack_reader import read_pack_index
+from .steam_paths import parse_vdf
 from .start_options import PackEntry, read_pack_entries, resolve_game_data_source_specs, write_pfh5_pack
 from .voice_compatibility import (
     VOICE_RUNTIME_MARKER,
@@ -21,7 +24,7 @@ from .voice_compatibility import (
     normalized_name,
 )
 
-BUILDER_VERSION = 4
+BUILDER_VERSION = 7
 MANIFEST_NAME = "!!!!wyccc_voice_compatibility.json"
 _LANGUAGE_PACKS = {
     "english(uk)": "audio_en_bnk.pack", "chinese": "audio_cn_bnk.pack",
@@ -35,6 +38,37 @@ _CORE_BANKS = {
         "campaign_vo_conversational", "frontend_vo",
     )
 }
+_VOICE_LANGUAGE_CODES = {
+    code: scope for scope, codes in {
+        "english(uk)": ("en", "english"), "chinese": ("cn", "zh", "schinese", "tchinese", "chinese"),
+        "french(france)": ("fr", "french"), "german": ("de", "german"), "italian": ("it", "italian"),
+        "polish": ("pl", "polish"), "russian": ("ru", "russian"), "spanish(spain)": ("es", "spanish"),
+    }.items() for code in codes
+}
+
+
+def _voice_language(data_path: str | Path) -> str:
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        preferences = Path(appdata) / "The Creative Assembly" / "Warhammer3" / "scripts" / "preferences.script.txt"
+        try:
+            raw = preferences.read_bytes()
+            text = raw.decode("utf-16" if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig", errors="replace")
+            match = re.search(r'^\s*language_audio\s+"([^"]*)"\s*;', text, re.MULTILINE)
+            if match and match[1].strip():
+                return _VOICE_LANGUAGE_CODES.get(match[1].strip().casefold(), "")
+        except OSError:
+            pass
+    steamapps = Path(data_path).parent.parent.parent
+    try:
+        parsed = parse_vdf((steamapps / f"appmanifest_{WH3_APP_ID}.acf")
+                           .read_text(encoding="utf-8-sig", errors="replace"))
+        state = parsed.get("AppState", parsed.get("appstate", {}))
+        config = state.get("UserConfig", {}) if isinstance(state, dict) else {}
+        language = config.get("language", "") if isinstance(config, dict) else ""
+        return _VOICE_LANGUAGE_CODES.get(str(language).strip().casefold(), "")
+    except (OSError, ValueError):
+        return ""
 
 
 def voice_compatibility_requested(settings: Mapping[str, Any]) -> bool:
@@ -68,7 +102,7 @@ def _read_source(path: Path, *, vanilla: bool = False) -> tuple[DbSource | None,
                     role="vanilla" if vanilla else "mod"), record
 
 
-def _snapshot(data_path, assets, active_ids):
+def _snapshot(data_path, assets, active_ids, language_scope=""):
     sources, records = [], []
     for spec in resolve_game_data_source_specs(data_path, assets, active_ids):
         if spec.role == "vanilla" or spec.path.name.casefold() in INTERNAL_RUNTIME_PACK_NAMES:
@@ -94,6 +128,10 @@ def _snapshot(data_path, assets, active_ids):
     data_root = Path(data_path)
     vanilla_paths = {data_root / _LANGUAGE_PACKS[scope] for scope in scopes
                      if scope in _LANGUAGE_PACKS and (data_root / _LANGUAGE_PACKS[scope]).is_file()}
+    if scopes and language_scope in _LANGUAGE_PACKS:
+        preferred = data_root / _LANGUAGE_PACKS[language_scope]
+        if preferred.is_file():
+            vanilla_paths.add(preferred)
     if scopes and ("" in scopes or len(vanilla_paths) < len(scopes)):
         fallback = next((data_root / name for name in _LANGUAGE_PACKS.values()
                          if (data_root / name).is_file()), None)
@@ -140,9 +178,10 @@ def ensure_voice_compatibility_patch(
                 "fingerprint": "", "entry_count": 0, "stats": {}, "source_diagnostics": {}}
 
     for attempt in range(2):
-        sources, records = _snapshot(data_path, assets, active_ids)
+        language_scope = _voice_language(data_path)
+        sources, records = _snapshot(data_path, assets, active_ids, language_scope)
         inputs = {"builder_version": BUILDER_VERSION, "playset_id": str(playset_id),
-                  "active_ids": list(active_ids), "sources": records}
+                  "voice_language": language_scope, "active_ids": list(active_ids), "sources": records}
         fingerprint = _fingerprint(inputs)
         previous = store.load()
         if previous.get("fingerprint") == fingerprint:
@@ -154,17 +193,19 @@ def ensure_voice_compatibility_patch(
             ):
                 return {**result, "status": "reused" if output_hash else "zero_modification"}
 
-        entries, stats = build_voice_compatibility_entries(sources)
+        entries, stats = build_voice_compatibility_entries(sources, language_scope=language_scope)
         if entries and not any(source.entries for source in sources if source.role == "vanilla"):
             raise ValueError("语音兼容未找到原版对话事件库，无法保留原版语音分支")
-        _, verified = _snapshot(data_path, assets, active_ids)
-        if records == verified:
+        verified_language = _voice_language(data_path)
+        _, verified = _snapshot(data_path, assets, active_ids, verified_language)
+        if records == verified and language_scope == verified_language:
             break
         if attempt:
             raise ValueError("语音兼容的数据源在生成期间连续变化，请等待 MOD 更新完成后重试")
 
     diagnostics = {"source_pack_names": [source.name for source in sources if source.role != "vanilla"],
-                   "vanilla_pack_names": [source.name for source in sources if source.role == "vanilla"]}
+                   "vanilla_pack_names": [source.name for source in sources if source.role == "vanilla"],
+                   "voice_language": language_scope}
     if entries:
         marker = json.dumps({"builder_version": BUILDER_VERSION, "stats": stats},
                             sort_keys=True).encode("utf-8")

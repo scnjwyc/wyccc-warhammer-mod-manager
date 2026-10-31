@@ -9,6 +9,13 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.3.6",
+        "date": "2026-10-31",
+        "entries": (
+            ("v136_adjusted_title", (("improvement", "v136_mod_compatibility"),)),
+        ),
+    },
+    {
         "version": "1.3.5",
         "date": "2026-10-28",
         "entries": (
@@ -792,6 +799,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v136_adjusted_title": "调整",
+        "v136_mod_compatibility": "优化-语音兼容补丁，游戏数据修改等功能提高对各个MOD的兼容性",
         "v135_fixed_title": "修复",
         "v135_network_file_not_found": "修复-启动器一些功能使用后报错“`[Errno 2] No such file or directory`  ”的问题",
         "v134_adjusted_title": "调整",
@@ -1075,6 +1084,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v136_adjusted_title": "Adjusted",
+        "v136_mod_compatibility": "Improved - The voice compatibility patch, game data modification, and other features now offer better compatibility with various MODs.",
         "v135_fixed_title": "Fixed",
         "v135_network_file_not_found": "Fixed - Resolved the `[Errno 2] No such file or directory` error when using some launcher features.",
         "v134_adjusted_title": "Adjusted",
@@ -1358,6 +1369,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v136_adjusted_title": "조정",
+        "v136_mod_compatibility": "개선 - 음성 호환 패치, 게임 데이터 수정 등의 기능이 다양한 MOD와 더 잘 호환되도록 개선했습니다.",
         "v135_fixed_title": "수정",
         "v135_network_file_not_found": "수정 - 런처의 일부 기능을 사용할 때 `[Errno 2] No such file or directory` 오류가 발생하던 문제를 수정했습니다.",
         "v134_adjusted_title": "조정",
@@ -1641,6 +1654,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v136_adjusted_title": "Изменено",
+        "v136_mod_compatibility": "Улучшено — повышена совместимость патча озвучки, изменения игровых данных и других функций с различными MOD.",
         "v135_fixed_title": "Исправлено",
         "v135_network_file_not_found": "Исправлено — ошибка `[Errno 2] No such file or directory` при использовании некоторых функций лаунчера.",
         "v134_adjusted_title": "Изменено",
@@ -1924,6 +1939,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v136_adjusted_title": "調整",
+        "v136_mod_compatibility": "改善 - 音声互換パッチ、ゲームデータ変更などの機能を改善し、さまざまな MOD との互換性を高めました。",
         "v135_fixed_title": "修正",
         "v135_network_file_not_found": "修正 - ランチャーの一部機能を使用すると `[Errno 2] No such file or directory` エラーが発生する問題を修正しました。",
         "v134_adjusted_title": "調整",
@@ -2207,6 +2224,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v136_adjusted_title": "Ajustado",
+        "v136_mod_compatibility": "Mejorado - El parche de compatibilidad de voces, la modificación de datos del juego y otras funciones ofrecen mayor compatibilidad con distintos MODs.",
         "v135_fixed_title": "Corregido",
         "v135_network_file_not_found": "Corregido - Se ha resuelto el error `[Errno 2] No such file or directory` al utilizar algunas funciones del lanzador.",
         "v134_adjusted_title": "Ajustado",

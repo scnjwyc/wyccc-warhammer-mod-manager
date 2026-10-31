@@ -14,7 +14,7 @@ from pathlib import Path
 from backend.models import ModAsset
 from backend.start_options import read_pack_entries
 from backend.voice_compatibility import bank_scope, build_voice_compatibility_entries, event_paths, parse_soundbank
-from backend.voice_patch_state import _snapshot, ensure_voice_compatibility_patch
+from backend.voice_patch_state import _snapshot, _voice_language, ensure_voice_compatibility_patch
 
 
 def digest(path):
@@ -36,8 +36,9 @@ def validate(data_path: Path, packs: list[Path], reference: Path, output_dir: Pa
     assert cached["status"] == "reused", cached
     output = Path(result["path"])
     entries = read_pack_entries(output)
-    sources, _ = _snapshot(data_path, assets, list(assets))
-    current_entries, current_stats = build_voice_compatibility_entries(sources)
+    language_scope = _voice_language(data_path)
+    sources, _ = _snapshot(data_path, assets, list(assets), language_scope)
+    current_entries, current_stats = build_voice_compatibility_entries(sources, language_scope=language_scope)
     assert current_stats == result["stats"]
     assert {e.name: e.payload for e in current_entries} == {
         e.name: e.payload for e in entries if e.name.casefold().endswith(".bnk")
