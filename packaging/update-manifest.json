@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.3.5",
-  "published_at": "2026-10-28",
+  "version": "1.3.6",
+  "published_at": "2026-10-31",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.5/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.6/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.5/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.3.5/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.6/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.3.6/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "18964F3A8FC43339DEB940DB7D250DD795F1044F93DBB0CFA5212F6A063AE687",
-    "size": 65781173
+    "sha256": "DAD88434149FCA56F45AB56B91E8FA8CADF2F1CF9792EC6653EDC759236F40F3",
+    "size": 65689386
   },
   "changelog": [
     {
-      "title": "修复",
+      "title": "调整",
       "changes": [
         {
-          "type": "fix",
-          "text": "修复-启动器一些功能使用后报错“`[Errno 2] No such file or directory`  ”的问题"
+          "type": "improvement",
+          "text": "优化-语音兼容补丁，游戏数据修改等功能提高对各个MOD的兼容性"
         }
       ]
     }
