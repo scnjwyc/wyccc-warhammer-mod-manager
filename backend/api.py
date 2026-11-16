@@ -2058,6 +2058,7 @@ class API:
                 executable_name=paths.game_definition.executable_name,
                 process_name=paths.game_definition.process_name,
                 app_id=paths.game_definition.app_id,
+                enable_audio_pool_expansion=bool(settings.get("enable_audio_pool_expansion")),
             )
             self.set_game_running(True, force=True)
             return {
@@ -2207,6 +2208,10 @@ class API:
             app_id=paths.game_definition.app_id,
             launch_executable_name=paths.game_definition.launch_executable_name,
             uses_mod_list=paths.game_definition.uses_mod_list,
+            enable_audio_pool_expansion=(
+                paths.game_id == "warhammer3"
+                and bool(self.settings_service.get().get("enable_audio_pool_expansion"))
+            ),
         )
         external_mod_manager = not paths.game_definition.uses_mod_list
         running = self.detect_game_running() if external_mod_manager else True

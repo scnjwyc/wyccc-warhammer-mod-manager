@@ -9,6 +9,13 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.3.8",
+        "date": "2026-11-16",
+        "entries": (
+            ("v138_added_title", (("feature", "v138_audio_pool_expansion"),)),
+        ),
+    },
+    {
         "version": "1.3.7",
         "date": "2026-11-02",
         "entries": (
@@ -806,6 +813,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v138_added_title": "新增",
+        "v138_audio_pool_expansion": "新增-设置中支持音频池扩容，如果你在玩某些mod遇到突然游戏没声音了的问题，可以试着开启这个功能",
         "v137_adjusted_title": '调整',
         "v137_voice_compatibility": '优化 - 再次提高了语音补丁的兼容性，经测试，同时开启工坊中二十多个有新语音的MOD，现在可以完全正常的无冲突运行',
         "v136_adjusted_title": "调整",
@@ -1093,6 +1102,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v138_added_title": "Added",
+        "v138_audio_pool_expansion": "Added - Audio pool expansion is now available in Settings. If the game suddenly loses sound while using certain mods, try enabling this option.",
         "v137_adjusted_title": 'Adjusted',
         "v137_voice_compatibility": 'Improved - Further improved voice patch compatibility. In testing, more than 20 Workshop MODs with new voice lines could run together normally without conflicts.',
         "v136_adjusted_title": "Adjusted",
@@ -1380,6 +1391,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v138_added_title": "추가",
+        "v138_audio_pool_expansion": "추가 - 설정에서 오디오 메모리 풀을 확장할 수 있습니다. 특정 모드를 사용하다 게임 소리가 갑자기 사라지면 이 기능을 켜 보세요.",
         "v137_adjusted_title": '조정',
         "v137_voice_compatibility": '개선 - 음성 패치의 호환성을 다시 높였습니다. 테스트 결과 새로운 음성이 포함된 창작마당 MOD 20개 이상을 동시에 활성화해도 충돌 없이 정상적으로 실행됩니다.',
         "v136_adjusted_title": "조정",
@@ -1667,6 +1680,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v138_added_title": "Добавлено",
+        "v138_audio_pool_expansion": "Добавлено — в настройках можно включить расширение аудиопамяти. Если при игре с некоторыми модами внезапно пропадает звук, попробуйте включить эту функцию.",
         "v137_adjusted_title": 'Изменено',
         "v137_voice_compatibility": 'Улучшено — совместимость голосового патча снова повышена. При проверке более 20 MOD из Мастерской с новой озвучкой работали одновременно без конфликтов.',
         "v136_adjusted_title": "Изменено",
@@ -1954,6 +1969,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v138_added_title": "追加",
+        "v138_audio_pool_expansion": "追加 - 設定でオーディオメモリプールを拡張できるようになりました。特定のMODで遊んでいるときに突然ゲームの音が消える場合は、この機能を有効にしてみてください。",
         "v137_adjusted_title": '調整',
         "v137_voice_compatibility": '改善 - 音声パッチの互換性をさらに高めました。テストでは、新しい音声を含むワークショップの MOD を20以上同時に有効にしても、競合なく正常に動作しました。',
         "v136_adjusted_title": "調整",
@@ -2241,6 +2258,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v138_added_title": "Añadido",
+        "v138_audio_pool_expansion": "Añadido - Ahora puedes ampliar la memoria de audio desde Ajustes. Si el juego se queda sin sonido de repente al usar ciertos mods, prueba a activar esta función.",
         "v137_adjusted_title": 'Ajustado',
         "v137_voice_compatibility": 'Mejorado - Se ha incrementado de nuevo la compatibilidad del parche de voces. En las pruebas, más de 20 MODs del Workshop con voces nuevas funcionaron a la vez con normalidad y sin conflictos.',
         "v136_adjusted_title": "Ajustado",

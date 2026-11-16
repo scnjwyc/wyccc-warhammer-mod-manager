@@ -168,12 +168,14 @@ class GameProbe:
     Only processes observed after this probe's launch are eligible for cleanup.
     """
 
-    def __init__(self, paths, user_dir: Path, *, launch_root: str = "", timeout: float = 600, poll: float = 0.5):
+    def __init__(self, paths, user_dir: Path, *, launch_root: str = "", timeout: float = 600,
+                 poll: float = 0.5, enable_audio_pool_expansion: bool = False):
         self.paths = paths
         self.launch_root = launch_root or paths.game_path
         self.user_dir = user_dir
         self.timeout = timeout
         self.poll = poll
+        self.enable_audio_pool_expansion = bool(enable_audio_pool_expansion and paths.game_id == "warhammer3")
 
     def run(
         self, list_path: str, cancel: threading.Event,
@@ -197,6 +199,7 @@ class GameProbe:
             launched = launcher.launch_game(
                 self.launch_root, list_path, executable_name=game.executable_name,
                 process_name=game.process_name, app_id=game.app_id,
+                enable_audio_pool_expansion=self.enable_audio_pool_expansion,
             )
             launched_pid = int(launched["pid"])
             owned.add(launched_pid)

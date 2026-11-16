@@ -237,7 +237,9 @@ class ModDiagnosticsService:
                          for mod_id in ids},
             }
             probe = GameProbe(paths, game_user_directory(paths.game_definition.save_directory_name),
-                              launch_root=mapping.map_path(paths.game_path))
+                              launch_root=mapping.map_path(paths.game_path),
+                              enable_audio_pool_expansion=bool(
+                                  self.api.settings_service.get().get("enable_audio_pool_expansion")))
             self._freeze_previous_launch(paths)
 
             def trial(selected_ids, cancel, manual, progress, kind):

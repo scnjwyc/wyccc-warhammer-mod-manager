@@ -5,6 +5,7 @@ import { folderEntries } from './folderLanguages'
 import { schemaEntries } from './schemaLanguages'
 import { launchComparisonEntries } from './launchComparisonLanguages'
 import { exceptionProbeEntries } from './exceptionProbeLanguages'
+import { audioPoolEntries } from './audioPoolLanguages'
 import { aiAnalysisEntries } from './aiAnalysisLanguages'
 import { voiceCompatibilityEntries } from './voiceCompatibilityLanguages'
 
@@ -1848,7 +1849,7 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
-for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries, ...exceptionProbeEntries, ...aiAnalysisEntries, ...voiceCompatibilityEntries })) {
+for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries, ...exceptionProbeEntries, ...audioPoolEntries, ...aiAnalysisEntries, ...voiceCompatibilityEntries })) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
 }
@@ -1937,6 +1938,7 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
   if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(folderEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(schemaEntries, value)) return t(value)
+  if (Object.prototype.hasOwnProperty.call(audioPoolEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(launchComparisonEntries, value)) return t(value)
   const schemaError = value.match(/^(.*?): (schemaUpdate\.[A-Za-z]+)$/)
   if (schemaError && Object.prototype.hasOwnProperty.call(schemaEntries, schemaError[2])) {

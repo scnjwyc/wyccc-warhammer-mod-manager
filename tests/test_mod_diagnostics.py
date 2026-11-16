@@ -239,6 +239,19 @@ def test_preexisting_game_is_never_terminated(tmp_path):
         terminate.assert_not_called()
 
 
+@pytest.mark.parametrize("game_id,enabled", [("warhammer3", True), ("three_kingdoms", False)])
+def test_probe_preserves_audio_pool_setting_only_for_warhammer(tmp_path, game_id, enabled):
+    probe = GameProbe(GamePaths(game_path=str(tmp_path), game_id=game_id), tmp_path,
+                      enable_audio_pool_expansion=True, timeout=0)
+    with (
+        patch("backend.mod_diagnostics.launcher.is_game_running", return_value=False),
+        patch("backend.mod_diagnostics.launcher.launch_game", return_value={"pid": 12}) as launch,
+        patch("backend.mod_diagnostics.launcher.terminate_game_processes"),
+    ):
+        probe.run("trial.txt", threading.Event(), lambda: "", lambda _phase: None)
+    assert launch.call_args.kwargs["enable_audio_pool_expansion"] is enabled
+
+
 @pytest.fixture
 def diagnostic_api(tmp_path):
     game = tmp_path / "game"

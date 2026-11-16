@@ -11,6 +11,7 @@ import {
   languageLabel,
   normalizeLanguage,
   hasTranslation,
+  localizeBackendMessage,
   t,
 } from '../../languages'
 
@@ -27,6 +28,37 @@ describe('language settings', () => {
       global: { plugins: [pinia] },
     })
   }
+
+  it('explains audio pool expansion in Features and saves either switch value', async () => {
+    const wrapper = mountProbeSettings()
+    await wrapper.get('[data-testid="settings-tab-features"]').trigger('click')
+    const page = wrapper.get('[data-testid="settings-page-features"]')
+    expect(page.text()).toContain('音频池扩容')
+    expect(page.text()).toContain('联机')
+    expect(page.text()).toContain('没有任何声音')
+    expect(page.text()).toContain('512 MiB')
+    const checkbox = page.get('[data-testid="audio-pool-expansion"]')
+    expect(checkbox.element.checked).toBe(false)
+    await checkbox.setValue(true)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('save')[0][0].enable_audio_pool_expansion).toBe(true)
+    await checkbox.setValue(false)
+    await wrapper.get('.primary-button').trigger('click')
+    expect(wrapper.emitted('save')[1][0].enable_audio_pool_expansion).toBe(false)
+  })
+
+  it('limits audio pool expansion to Warhammer III and translates all its text', () => {
+    const wrapper = mountProbeSettings({ selected_game: 'three_kingdoms' })
+    expect(wrapper.get('[data-testid="audio-pool-expansion"]').attributes('disabled')).toBeDefined()
+    for (const key of ['settings.audioPoolExpansion', 'settings.audioPoolExpansionHelp', 'settings.audioPoolExpansionNote', 'audioPool.unsupportedPlatform', 'audioPool.unsupportedVersion', 'audioPool.signatureMismatch', 'audioPool.alreadyInitialized', 'audioPool.launchFailed']) {
+      expect(hasTranslation(key)).toBe(true)
+      for (const language of LANGUAGE_OPTIONS) {
+        applyInterfaceLanguage(language.code)
+        expect(t(key)).not.toBe(key)
+        if (key.startsWith('audioPool.')) expect(localizeBackendMessage(key)).toBe(t(key))
+      }
+    }
+  })
 
   it('saves the exception probe and displays the exact requested help and dependency', async () => {
     const wrapper = mountProbeSettings()

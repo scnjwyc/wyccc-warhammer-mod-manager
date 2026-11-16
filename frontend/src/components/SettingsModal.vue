@@ -63,6 +63,7 @@ const activeInstallation = computed(() => (
 ))
 const requiresManualPath = computed(() => !props.health.game_ready)
 const exceptionProbeSupported = computed(() => selectedGameOption.value.id === 'warhammer3')
+const audioPoolSupported = computed(() => selectedGameOption.value.id === 'warhammer3')
 const memreaderPlusReady = computed(() => {
   const active = new Set(store.activeIds)
   return store.mods.some(mod => active.has(mod.id)
@@ -123,6 +124,7 @@ watch(
     if (!draft.language) draft.language = DEFAULT_LANGUAGE
     if (typeof draft.auto_low_consumption_mode !== 'boolean') draft.auto_low_consumption_mode = true
     if (typeof draft.enable_exception_probe !== 'boolean') draft.enable_exception_probe = false
+    if (typeof draft.enable_audio_pool_expansion !== 'boolean') draft.enable_audio_pool_expansion = false
     if (typeof draft.keyboard_shortcuts_enabled !== 'boolean') draft.keyboard_shortcuts_enabled = true
     draft.keyboard_shortcuts = normalizeShortcutMap(props.settings?.keyboard_shortcuts)
     shortcutCaptureId.value = ''
@@ -374,6 +376,14 @@ const closeSettings = () => {
               <label class="switch-row">
                 <input v-model="draft.skip_intro_movies" type="checkbox" data-testid="skip-intro-movies" />
                 <span><strong>{{ t('settings.skipIntro') }}</strong><small>{{ t('settings.skipIntroHelp') }}</small></span>
+              </label>
+              <label class="switch-row">
+                <input v-model="draft.enable_audio_pool_expansion" type="checkbox" :disabled="!audioPoolSupported" data-testid="audio-pool-expansion" />
+                <span>
+                  <strong>{{ t('settings.audioPoolExpansion') }}</strong>
+                  <small>{{ t('settings.audioPoolExpansionHelp') }}</small>
+                  <small>{{ t('settings.audioPoolExpansionNote') }}</small>
+                </span>
               </label>
               <label class="switch-row">
                 <input v-model="draft.enable_exception_probe" type="checkbox" :disabled="!exceptionProbeSupported" data-testid="exception-probe" />

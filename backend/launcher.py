@@ -5,12 +5,20 @@ import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
+from .audio_pool import launch_with_audio_pool
 from .constants import WH3_EXECUTABLE, WH3_PROCESS_NAME
 from .game_environment import prepare_game_environment
 
-_LAUNCHED_PROCESSES: dict[int, subprocess.Popen] = {}
+
+class _ChildProcess(Protocol):
+    pid: int
+
+    def poll(self) -> int | None: ...
+
+
+_LAUNCHED_PROCESSES: dict[int, _ChildProcess] = {}
 _LAUNCH_LOCK = threading.Lock()
 
 
@@ -263,6 +271,7 @@ def launch_game(
     app_id: str = "",
     launch_executable_name: str = "",
     uses_mod_list: bool = True,
+    enable_audio_pool_expansion: bool = False,
 ) -> dict[str, Any]:
     game_root = Path(game_path)
     executable = game_root / str(executable_name or WH3_EXECUTABLE)
@@ -308,13 +317,18 @@ def launch_game(
     if normalized_app_id.isdigit():
         environment["SteamAppId"] = normalized_app_id
         environment["SteamGameId"] = normalized_app_id
-    process = subprocess.Popen(
-        [str(launch_executable), *arguments],
-        cwd=str(game_root),
-        close_fds=True,
-        creationflags=creationflags,
-        env=environment,
-    )
+    audio_pool = {"state": "disabled"}
+    if enable_audio_pool_expansion:
+        process, audio_pool = launch_with_audio_pool(
+            launch_executable, arguments, cwd=game_root,
+            env=environment, creationflags=creationflags,
+        )
+    else:
+        process = subprocess.Popen(
+            [str(launch_executable), *arguments],
+            cwd=str(game_root), close_fds=True,
+            creationflags=creationflags, env=environment,
+        )
     with _LAUNCH_LOCK:
         for pid, previous in list(_LAUNCHED_PROCESSES.items()):
             if previous.poll() is not None:
@@ -326,4 +340,5 @@ def launch_game(
         "arguments": arguments,
         "executable": str(launch_executable),
         "profile_compatibility": prepared.compatibility,
+        "audio_pool": audio_pool,
     }
