@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
-import { localizeBackendMessage, t } from '../languages'
+import { currentLocale, localizeBackendMessage, t } from '../languages'
 import SortMenu from './SortMenu.vue'
 import TagSearchBox from './TagSearchBox.vue'
 import ThemedSelect from './ThemedSelect.vue'
@@ -35,6 +35,7 @@ const props = defineProps({
   unitDataModIds: { type: Array, default: () => [] },
   folders: { type: Array, default: () => [] },
   folderLayout: { type: Array, default: () => [] },
+  foldersVisible: { type: Boolean, default: false },
   folderFilter: { type: String, default: '' },
   folderModCounts: { type: Object, default: () => ({}) },
   busy: { type: Boolean, default: false },
@@ -60,6 +61,9 @@ const emit = defineEmits([
   'update:sort-descending',
   'open-unit-data',
   'toggle-folder',
+  'update:folders-visible',
+  'create-folder',
+  'folder-context-menu',
   'rename-folder',
   'delete-folder',
   'move-folder',
@@ -86,10 +90,24 @@ const folderFilterOptions = computed(() => [
   ...props.folders.map(folder => ({ value: folder.id, label: folder.name })),
 ])
 const displayGroups = computed(() => {
+  if (!props.foldersVisible) return props.mods.map(mod => ({
+    key: `mod:${mod.id}`, folder: null, mods: [mod], visibleMods: [mod], expanded: true,
+  }))
   const searching = props.searchTokens.length > 0 || props.searchActive || props.warningsOnly
   const folders = props.folderFilter === UNGROUPED_FOLDER ? []
     : props.folders.filter(folder => !props.folderFilter || folder.id === props.folderFilter)
   const groups = buildFolderGroups(props.mods, folders, props.folderLayout)
+  if (!props.active && !searching && !props.folderFilter) {
+    for (const folder of folders) {
+      if (!(folder.mod_ids || []).length) groups.push({ key: `folder:${folder.id}`, folder, mods: [] })
+    }
+  }
+  const names = new Intl.Collator(currentLocale(), { numeric: true, sensitivity: 'base' })
+  groups.sort((left, right) => {
+    if (left.folder && right.folder) return names.compare(left.folder.name, right.folder.name)
+      || names.compare(left.folder.id, right.folder.id)
+    return left.folder ? -1 : right.folder ? 1 : 0
+  })
   return groups.map(group => {
     const collapsed = Boolean(group.folder?.[props.active ? 'collapsed_active' : 'collapsed_inactive'])
     const expanded = !collapsed || searching || group.mods.some(mod => mod.id === props.searchFocusId)
@@ -137,6 +155,7 @@ const folderMembers = computed(() => new Map(
 ))
 const groupedModIds = computed(() => new Set(props.folders.flatMap(folder => folder.mod_ids || [])))
 const shouldAssignFolder = (folderId, payload = currentDragSource()) => {
+  if (!props.foldersVisible) return false
   if (!payload?.ids?.length) return false
   if (!folderId) return payload.ids.some(id => groupedModIds.value.has(id))
   const members = folderMembers.value.get(folderId)
@@ -432,6 +451,14 @@ watch(
         </button>
         <span class="count-badge">{{ mods.length }}</span>
       </div>
+      <div class="panel-folder-controls">
+        <button v-if="!active" type="button" class="secondary-button" :disabled="busy"
+          data-testid="create-empty-folder" @click="emit('create-folder')">{{ t('folders.create') }}</button>
+        <button type="button" class="secondary-button" :disabled="busy" :aria-pressed="foldersVisible"
+          data-testid="toggle-folder-view" @click="emit('update:folders-visible', !foldersVisible)">
+          {{ t(foldersVisible ? 'folders.hide' : 'folders.show') }}
+        </button>
+      </div>
       <div class="panel-search-controls">
         <TagSearchBox
           :tokens="searchTokens"
@@ -465,7 +492,7 @@ watch(
           @update:descending="emit('update:sort-descending', $event)"
         />
       </div>
-      <div v-if="folders.length || folderFilter" class="panel-folder-filter">
+      <div v-if="foldersVisible && (folders.length || folderFilter)" class="panel-folder-filter">
         <span>{{ t('folders.filter') }}</span>
         <ThemedSelect
           :model-value="folderFilter"
@@ -489,7 +516,8 @@ watch(
     >
       <template v-for="group in displayGroups" :key="group.key">
         <div v-if="group.folder" class="mod-folder-row" :data-testid="`mod-folder-${group.folder.id}`"
-          :draggable="!busy"
+          @contextmenu.prevent.stop="emit('folder-context-menu', { folder: group.folder, x: $event.clientX, y: $event.clientY })"
+          :draggable="false"
           @dragstart.stop="onFolderDragStart($event, group.folder.id)"
           @dragend.stop="clearDragging"
           @dragover.stop="onFolderDragOver($event, group.folder.id)"
@@ -503,17 +531,17 @@ watch(
             :title="t('folders.orderHelp') + ' ' + t('folders.dropHelp')"
             @click="emit('toggle-folder', group.folder.id, active ? 'active' : 'inactive')"
           >
-            <span class="mod-folder-chevron" aria-hidden="true">{{ group.expanded ? '▾' : '▸' }}</span>
+            <span class="mod-folder-chevron" aria-hidden="true">{{ group.expanded ? '−' : '+' }}</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3z" /></svg>
             <span class="mod-folder-name" :title="group.folder.name">{{ group.folder.name }}</span>
             <span class="count-badge">{{ folderCount(group, active ? 'active' : 'inactive') }}</span>
           </button>
-          <button type="button" class="icon-button mod-folder-enable"
+          <button v-if="!active" type="button" class="icon-button mod-folder-enable"
             :disabled="busy || !folderCount(group, 'inactive')"
             :data-testid="`enable-folder-${group.folder.id}`"
             :title="t('folders.enableAll')" :aria-label="t('folders.enableAll')"
             @click="emit('enable-folder', group.folder.id)">+</button>
-          <button type="button" class="icon-button mod-folder-disable"
+          <button v-if="active" type="button" class="icon-button mod-folder-disable"
             :disabled="busy || !folderCount(group, 'active')"
             :data-testid="`disable-folder-${group.folder.id}`"
             :title="t('folders.disableAll')" :aria-label="t('folders.disableAll')"

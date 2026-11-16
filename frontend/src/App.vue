@@ -13,6 +13,7 @@ import GameDataModificationModal from './components/GameDataModificationModal.vu
 import UnitDataModificationModal from './components/UnitDataModificationModal.vue'
 import UnitEncyclopediaModal from './components/UnitEncyclopediaModal.vue'
 import ModContextMenu from './components/ModContextMenu.vue'
+import FolderContextMenu from './components/FolderContextMenu.vue'
 import ModDetails from './components/ModDetails.vue'
 import ModDiagnosticsModal from './components/ModDiagnosticsModal.vue'
 import ModAIAnalysisModal from './components/ModAIAnalysisModal.vue'
@@ -75,6 +76,8 @@ const unitDataSearch = ref('')
 const unitDataUnitKey = ref('')
 const unitDataSnapshotToken = ref('')
 const contextMenu = reactive({ open: false, x: 0, y: 0, modId: '' })
+const folderViews = reactive({ active: false, inactive: false })
+const folderMenu = reactive({ open: false, x: 0, y: 0, folder: null })
 const workshopPublish = reactive({ open: false, mode: 'upload', modId: '', queue: [] })
 const confirmationDialog = reactive({ open: false, message: '', confirmLabel: '', danger: false })
 const folderDialog = reactive({ open: false, rename: false, folderId: '', name: '', modIds: [], error: '' })
@@ -544,6 +547,7 @@ const shortcutsBlocked = () => (
   || schemaUpdate.open
   || updateDialog.open
   || contextMenu.open
+  || folderMenu.open
   || confirmationDialog.open
   || folderDialog.open
   || workshopPublish.open
@@ -629,6 +633,39 @@ const deleteModFolder = async folder => {
   try { await store.deleteModFolder(folder.id) } catch {
     // Store actions surface failures through the shared toast.
   }
+}
+
+const createEmptyFolder = () => {
+  folderViews.inactive = true
+  Object.assign(folderDialog, { open: true, rename: false, folderId: '', name: '', modIds: [], error: '' })
+}
+const openFolderMenu = payload => {
+  contextMenu.open = false
+  Object.assign(folderMenu, payload, { open: true })
+}
+const handleFolderAction = async action => {
+  const folder = folderMenu.folder
+  if (!folder || store.busy) return
+  try {
+    if (action === 'rename') renameModFolder(folder)
+    else if (action === 'release') await store.releaseModFolder(folder.id)
+    else if (action === 'delete') await deleteModFolder(folder)
+    else if (action === 'unsubscribe') {
+      const preview = await store.previewFolderUnsubscribe(folder.id)
+      const message = [
+        t('folders.unsubscribeConfirm', { name: preview.folder.name, count: new Set(preview.targets.map(item => item.workshop_id)).size }),
+        ...preview.affected_mods.map(item => `• ${item.name}`),
+        t('folders.affectedPlaysets', { names: preview.affected_playsets.join(', ') || '—' }),
+        t('folders.skipped', { count: preview.skipped.length }),
+      ].join('\n')
+      if (!await requestConfirmation({ message, confirmLabel: t('folders.unsubscribe'), danger: true })) return
+      const result = await store.unsubscribeModFolder(preview.token)
+      if (result.failed_count) {
+        await requestConfirmation({ message: [t('folders.partialFailure'),
+          ...result.failures.map(item => `${item.workshop_id}: ${item.error}`)].join('\n') })
+      } else store.notify(t('toast.unsubscribeRemoved', { count: result.completed_count }))
+    }
+  } catch { /* Store actions show errors through the shared toast. */ }
 }
 
 const handleContextAction = async ({ action, value, mod }) => {
@@ -1109,8 +1146,9 @@ watch(activeGame, () => {
   crashDiagnosis.value = {}
   diagnosticHistory.value = []
   folderDialog.open = false
+  folderMenu.open = false
 })
-watch(() => store.currentPlaysetId, () => { folderDialog.open = false })
+watch(() => store.currentPlaysetId, () => { folderDialog.open = false; folderMenu.open = false })
 
 onMounted(() => {
   initialize()
@@ -1212,6 +1250,10 @@ onBeforeUnmount(() => {
         :title="t('app.inactiveMods')"
         :mods="store.inactiveMods"
         :folders="store.modFolders"
+        :folders-visible="folderViews.inactive"
+        @update:folders-visible="value => { folderViews.inactive = value; if (!value) store.setModFolderFilter('inactive', '') }"
+        @create-folder="createEmptyFolder"
+        @folder-context-menu="openFolderMenu"
         :folder-layout="store.modFolderLayouts.inactive"
         :folder-filter="store.modFolderFilter('inactive')"
         :folder-mod-counts="store.modFolderCounts"
@@ -1268,6 +1310,9 @@ onBeforeUnmount(() => {
         active
         :mods="store.activeMods"
         :folders="store.modFolders"
+        :folders-visible="folderViews.active"
+        @update:folders-visible="value => { folderViews.active = value; if (!value) store.setModFolderFilter('active', '') }"
+        @folder-context-menu="openFolderMenu"
         :folder-layout="store.modFolderLayouts.active"
         :folder-filter="store.modFolderFilter('active')"
         :folder-mod-counts="store.modFolderCounts"
@@ -1623,6 +1668,9 @@ onBeforeUnmount(() => {
       @submit="submitWorkshopPublish"
     />
 
+    <FolderContextMenu :open="folderMenu.open" :x="folderMenu.x" :y="folderMenu.y"
+      :busy="!!store.busy" :game-running="store.runtime.running"
+      @close="folderMenu.open = false" @action="handleFolderAction" />
     <ModContextMenu
       :open="contextMenu.open"
       :x="contextMenu.x"

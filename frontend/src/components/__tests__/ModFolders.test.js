@@ -5,9 +5,37 @@ import ModContextMenu from '../ModContextMenu.vue'
 
 const mods = ['a', 'b', 'c'].map(id => ({ id, effective_name: id, pack_name: `${id}.pack`, source: 'data' }))
 const folder = { id: 'folder', name: '界面', mod_ids: ['a', 'c'], collapsed_active: false, collapsed_inactive: false }
-const list = (overrides = {}) => mount(ModList, { props: { title: 'MOD', mods, folders: [folder], ...overrides } })
+const list = (overrides = {}) => mount(ModList, { props: { title: 'MOD', mods, folders: [folder], foldersVisible: true, ...overrides } })
 
 describe('MOD folder list', () => {
+  it.each([false, true])('puts name-sorted folders before loose MODs in the active=%s panel', async active => {
+    const folders = [
+      { id: 'last', name: 'Group 10', mod_ids: ['a'] },
+      { id: 'empty', name: 'Alpha', mod_ids: [] },
+      { id: 'first', name: 'Group 2', mod_ids: ['c'] },
+    ]
+    const wrapper = list({ active, mods: [mods[1], mods[0], mods[2]], folders,
+      folderLayout: ['mod:b', 'folder:last', 'folder:first'] })
+    expect(wrapper.findAll('.mod-folder-name').map(item => item.text()))
+      .toEqual(active ? ['Group 2', 'Group 10'] : ['Alpha', 'Group 2', 'Group 10'])
+    const children = [...wrapper.get('.mod-list').element.children].filter(item => item.matches('.mod-row, .mod-folder-row'))
+    expect(children.at(-1).dataset.modId).toBe('b')
+    await wrapper.setProps({ folders: folders.map(item => item.id === 'last' ? { ...item, name: 'Aardvark' } : item) })
+    expect(wrapper.findAll('.mod-folder-name')[0].text()).toBe('Aardvark')
+    await wrapper.setProps({ foldersVisible: false })
+    expect(wrapper.findAll('.row-title').map(item => item.text())).toEqual(['b', 'a', 'c'])
+    wrapper.unmount()
+  })
+  it('keeps flat-view dragging as an ordering operation without removing folder membership', async () => {
+    const wrapper = list({ foldersVisible: false, active: true, orderIds: ['a', 'b', 'c'] })
+    expect(wrapper.findAll('.row-title').map(item => item.text())).toEqual(['a', 'b', 'c'])
+    await wrapper.get('[data-mod-id="a"]').trigger('dragstart')
+    await wrapper.get('[data-mod-id="b"]').trigger('drop')
+    expect(wrapper.emitted('drop-in-folder')).toBeUndefined()
+    expect(wrapper.emitted('drop-mods')[0][0]).toMatchObject({ ids: ['a'], targetId: 'b' })
+    expect(wrapper.props('folders')[0].mod_ids).toEqual(['a', 'c'])
+    wrapper.unmount()
+  })
   it('accepts a MOD transfer onto the header and ignores unrelated or invalid drag data', async () => {
     const wrapper = list()
     const target = wrapper.get('[data-testid="mod-folder-folder"]')
@@ -73,7 +101,7 @@ describe('MOD folder list', () => {
     const wrapper = list({ active: true, orderIds: ['a', 'b', 'c'], folders: [folder, other] })
     const source = wrapper.get('[data-testid="mod-folder-folder"]')
     const target = wrapper.get('[data-testid="mod-folder-other"]')
-    expect(source.attributes('draggable')).toBe('true')
+    expect(source.attributes('draggable')).toBe('false')
     await source.trigger('dragstart')
     await target.trigger('dragover', { clientY: 1 })
     await target.trigger('drop', { clientY: 1 })
@@ -117,10 +145,10 @@ describe('MOD folder list', () => {
     expect(wrapper.findAll('.row-title').map(item => item.text())).toEqual(['b'])
   })
 
-  it('hides empty folders and folders with no results in a filtered list', async () => {
+  it('shows empty folders in the inactive panel but hides them during search', async () => {
     const wrapper = list({ folders: [folder, { ...folder, id: 'empty', name: '空文件夹', mod_ids: [] }] })
-    expect(wrapper.findAll('.mod-folder-row')).toHaveLength(1)
-    expect(wrapper.find('[data-testid="mod-folder-empty"]').exists()).toBe(false)
+    expect(wrapper.findAll('.mod-folder-row')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="mod-folder-empty"]').exists()).toBe(true)
     await wrapper.setProps({ mods: [mods[1]], searchTokens: [{ value: 'b' }] })
     expect(wrapper.findAll('.mod-folder-row')).toHaveLength(0)
   })
@@ -157,7 +185,7 @@ describe('MOD folder list', () => {
       folderId: 'folder', targetFolderId: '', targetModId: 'b', placement: 'after', listName: 'inactive',
     })
     await wrapper.setProps({ folderLayout: ['mod:b', 'folder:folder'] })
-    expect(wrapper.get('.mod-list').element.firstElementChild.classList.contains('mod-row')).toBe(true)
+    expect(wrapper.get('.mod-list').element.firstElementChild.classList.contains('mod-folder-row')).toBe(true)
     expect(wrapper.get('.mod-folder-toggle').attributes('aria-expanded')).toBe('false')
   })
 

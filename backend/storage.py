@@ -1281,6 +1281,17 @@ class StateRepository:
             self._ensure_folder_name_available(connection, game_id, clean, folder_id)
             connection.execute("UPDATE mod_folders SET name = ? WHERE id = ?", (clean, folder_id))
 
+    def release_mod_folder(
+        self, playset_id: str, folder_id: str, game_id: str = DEFAULT_GAME_ID,
+    ) -> None:
+        game_id = _normalized_game_id(game_id)
+        with self._lock, self._connect() as connection:
+            self._require_playset_in_game(connection, playset_id, game_id)
+            self._require_mod_folder(connection, game_id, folder_id)
+            connection.execute(
+                "DELETE FROM mod_folder_items WHERE game_id = ? AND folder_id = ?", (game_id, folder_id)
+            )
+
     def delete_mod_folder(
         self, playset_id: str, folder_id: str, game_id: str = DEFAULT_GAME_ID,
     ) -> None:

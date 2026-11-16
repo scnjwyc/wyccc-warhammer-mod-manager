@@ -23,6 +23,7 @@ describe('folder filtering, batch enablement and MOD drops through the actual li
   const mountApp = async () => {
     wrapper = mount(App, { global: { plugins: [pinia] } })
     await flushPromises()
+    for (const toggle of wrapper.findAll('[data-testid="toggle-folder-view"]')) await toggle.trigger('click')
     invokeMock.mockClear()
   }
 
@@ -173,7 +174,7 @@ describe('folder filtering, batch enablement and MOD drops through the actual li
   it('keeps hidden empty folders in the context menu and restores them after assigning a MOD', async () => {
     await mountApp()
     expect(panel(true).find('[data-testid="mod-folder-empty"]').exists()).toBe(false)
-    expect(panel(false).find('[data-testid="mod-folder-empty"]').exists()).toBe(false)
+    expect(panel(false).find('[data-testid="mod-folder-empty"]').exists()).toBe(true)
     const source = panel(false).get('.mod-row')
     await source.trigger('contextmenu', { clientX: 100, clientY: 100 })
     await wrapper.get('[data-testid="context-add-folder-empty"]').trigger('click')

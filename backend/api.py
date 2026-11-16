@@ -218,6 +218,7 @@ class API:
         self._order_lock = threading.Lock()
         self._delete_preview_lock = threading.Lock()
         self._delete_previews: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._folder_unsubscribe_preview: tuple[str, float, dict[str, Any]] | None = None
         self._mod_revision_lock = threading.Lock()
         self._mod_revision = 0
         self._runtime_lock = threading.Lock()
@@ -314,6 +315,9 @@ class API:
             "assign_mod_folder": self._assign_mod_folder,
             "rename_mod_folder": self._rename_mod_folder,
             "delete_mod_folder": self._delete_mod_folder,
+            "release_mod_folder": self._release_mod_folder,
+            "preview_folder_unsubscribe": self._preview_folder_unsubscribe,
+            "unsubscribe_mod_folder": self._unsubscribe_mod_folder,
             "set_mod_folder_collapsed": self._set_mod_folder_collapsed,
             "list_backups": self._list_backups,
             "export_share": self._export_share,
@@ -2461,6 +2465,72 @@ class API:
             game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
             self.state_repository.delete_mod_folder(playset_id, folder_id, game_id)
             return self._mod_folder_result(game_id, playset_id)
+
+    def _release_mod_folder(
+        self, folder_id: str, expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            self.state_repository.release_mod_folder(playset_id, folder_id, game_id)
+            return self._mod_folder_result(game_id, playset_id)
+
+    def _folder_unsubscribe_snapshot(self, folder_id: str, game_id: str, playset_id: str) -> dict[str, Any]:
+        folder = next((item for item in self._mod_folders_payload(game_id, playset_id)
+                       if item["id"] == folder_id), None)
+        if folder is None:
+            raise ValueError("folders.notFound")
+        targets = []
+        skipped = []
+        for mod_id in folder["mod_ids"]:
+            asset = self._assets.get(mod_id)
+            if asset is None or not asset.workshop_id:
+                skipped.append(mod_id)
+                continue
+            targets.append({"id": mod_id, "workshop_id": asset.workshop_id,
+                            "name": asset.effective_name})
+        workshop_ids = {item["workshop_id"] for item in targets}
+        # A Workshop item may supply several packs, including packs outside this folder.
+        affected_ids = {asset.id for asset in self._assets.values() if asset.workshop_id in workshop_ids}
+        affected_playsets = [item["name"] for item in self.state_repository.list_playsets(game_id)
+                            if affected_ids.intersection(self._canonicalize_mod_ids(item["mod_ids"]))]
+        return {"game_id": game_id, "playset_id": playset_id, "folder": folder,
+                "targets": targets, "skipped": skipped, "affected_playsets": affected_playsets,
+                "affected_mods": [{"id": asset.id, "name": asset.effective_name}
+                                  for asset in self._assets.values() if asset.id in affected_ids]}
+
+    def _preview_folder_unsubscribe(
+        self, folder_id: str, expected_game_id: str = "", expected_playset_id: str = "",
+    ) -> dict[str, Any]:
+        with self._context_lock:
+            game_id, playset_id = self._mod_folder_context(expected_game_id, expected_playset_id)
+            preview = self._folder_unsubscribe_snapshot(folder_id, game_id, playset_id)
+            token = uuid.uuid4().hex
+            self._folder_unsubscribe_preview = (token, time.monotonic(), preview)
+            return {**preview, "token": token}
+
+    @_requires_idle_game
+    def _unsubscribe_mod_folder(self, token: str) -> dict[str, Any]:
+        with self._context_lock:
+            saved = self._folder_unsubscribe_preview
+            self._folder_unsubscribe_preview = None
+            if saved is None or saved[0] != token or time.monotonic() - saved[1] > 300:
+                raise ValueError("folders.previewExpired")
+            preview = saved[2]
+            game_id, playset_id = self._mod_folder_context(preview["game_id"], preview["playset_id"])
+            folder_id = preview["folder"]["id"]
+            if preview != self._folder_unsubscribe_snapshot(folder_id, game_id, playset_id):
+                raise ValueError("folders.previewExpired")
+            if preview["targets"]:
+                result = self._unsubscribe_workshop_mods([item["id"] for item in preview["targets"]])
+            else:
+                result = {"completed": [], "failures": [], "completed_count": 0, "failed_count": 0}
+            # Keep the folder after partial failure so the user can inspect and retry it.
+            if not result["failed_count"]:
+                self.state_repository.delete_mod_folder(playset_id, folder_id, game_id)
+            folders = self._mod_folder_result(game_id, playset_id)
+            if "scan" in result:
+                result["scan"].update(folders)
+            return {**result, **folders, "folder_deleted": not bool(result["failed_count"])}
 
     def _set_mod_folder_collapsed(
         self, folder_id: str, list_name: str, collapsed: bool,

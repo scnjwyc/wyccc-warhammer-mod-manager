@@ -54,22 +54,23 @@ describe('folder movement and playset recovery through the actual lists', () => 
     vi.restoreAllMocks()
   })
 
-  it('drags a folder below a loose MOD, saves the position and retains it when switching playsets', async () => {
+  it('keeps folders name-sorted above loose MODs despite legacy layout changes and playset switching', async () => {
     wrapper = mount(App, { global: { plugins: [pinia] } })
+    for (const toggle of wrapper.findAll('[data-testid="toggle-folder-view"]')) await toggle.trigger('click')
     await flushPromises()
     const active = wrapper.get('.active-panel')
-    expect(groupNames(active)).toEqual(['UI', 'a', 'b', '单位', 'c'])
+    expect(groupNames(active)).toEqual(['单位', 'c', 'UI', 'a', 'b'])
     await active.get('[data-testid="mod-folder-ui"]').trigger('dragstart')
     const loose = active.findAll('.mod-row').find(row => row.get('.row-title').text() === 'b')
     await loose.trigger('dragover', { clientY: 1 })
     await loose.trigger('drop', { clientY: 1 })
     await flushPromises()
-    expect(groupNames(active)).toEqual(['b', 'UI', 'a', '单位', 'c'])
+    expect(groupNames(active)).toEqual(['单位', 'c', 'UI', 'a', 'b'])
     expect(invokeMock).toHaveBeenCalledWith('reorder_mod_folder_groups', 'active',
       ['mod:b', 'folder:ui', 'folder:units'], 'warhammer3', 'default')
     expect(store.activeIds).toEqual(['a', 'b', 'c'])
     expect(invokeMock.mock.calls.some(([method]) => ['update_playset', 'save_load_order'].includes(method))).toBe(false)
-    expect(active.findAll('.thumbnail-order').map(item => item.text())).toEqual(['2', '1', '3'])
+    expect(active.findAll('.thumbnail-order').map(item => item.text())).toEqual(['3', '1', '2'])
 
     await store.switchPlayset('other')
     await store.flushPlaysetUpdates()
@@ -80,13 +81,14 @@ describe('folder movement and playset recovery through the actual lists', () => 
     await store.switchPlayset('default')
     await store.flushPlaysetUpdates()
     await flushPromises()
-    expect(groupNames(active)).toEqual(['b', 'UI', 'a', '单位', 'c'])
+    expect(groupNames(active)).toEqual(['单位', 'c', 'UI', 'a', 'b'])
     expect(store.activeIds).toEqual(['a', 'b', 'c'])
   })
 
   it('moves collapsed folders in the inactive panel independently of active positions', async () => {
     store.activeIds = ['b']
     wrapper = mount(App, { global: { plugins: [pinia] } })
+    for (const toggle of wrapper.findAll('[data-testid="toggle-folder-view"]')) await toggle.trigger('click')
     await flushPromises()
     const inactive = wrapper.get('.list-panel:not(.active-panel)')
     await inactive.get('[data-testid="mod-folder-ui"]').trigger('dragstart')
@@ -101,13 +103,14 @@ describe('folder movement and playset recovery through the actual lists', () => 
 
   it('keeps the original display and saved state when dragging cannot be saved', async () => {
     wrapper = mount(App, { global: { plugins: [pinia] } })
+    for (const toggle of wrapper.findAll('[data-testid="toggle-folder-view"]')) await toggle.trigger('click')
     await flushPromises()
     const active = wrapper.get('.active-panel')
     invokeMock.mockRejectedValueOnce(new Error('save failed'))
     await active.get('[data-testid="mod-folder-ui"]').trigger('dragstart')
     await active.get('[data-testid="mod-folder-units"]').trigger('drop', { clientY: 1 })
     await flushPromises()
-    expect(groupNames(active)).toEqual(['UI', 'a', 'b', '单位', 'c'])
+    expect(groupNames(active)).toEqual(['单位', 'c', 'UI', 'a', 'b'])
     expect(store.modFolderLayouts.active).toEqual([])
     expect(store.toast.type).toBe('error')
     expect(store.busy).toBe('')

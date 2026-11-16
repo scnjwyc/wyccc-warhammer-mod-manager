@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+from unittest.mock import patch
 from pathlib import Path
 
 from backend.api import API
@@ -210,6 +211,92 @@ class ModFolderApiTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertFalse(self.api.call("assign_mod_folder", args)["ok"])
                 self.assertEqual(self.api._current_playset_payload()["mod_folders"][0]["mod_ids"], ["canonical"])
+
+    def test_release_keeps_empty_folder_and_playset_order_after_restart(self):
+        self.api.state_repository.update_current_playset(["canonical"])
+        folder = self.call("create_mod_folder", "UI", ["old-source"])["mod_folders"][0]
+        result = self.call("release_mod_folder", folder["id"], "warhammer3", "default")
+        self.assertEqual(result["mod_folders"][0]["mod_ids"], [])
+        restored = StateRepository(self.api.state_repository.database_path)
+        self.assertEqual(restored.get_enabled_order(), ["canonical"])
+        self.assertEqual(restored.list_mod_folders("default")[0]["id"], folder["id"])
+
+    def workshop_folder(self):
+        first = make_asset(write_pack(self.root / "one.pack"), "one", "workshop", "123")
+        second = make_asset(write_pack(self.root / "two.pack"), "two", "workshop", "123")
+        self.api._assets.update({first.id: first, second.id: second})
+        self.api.state_repository.create_playset("Other campaign", ["two"])
+        self.api.state_repository.switch_playset("default")
+        folder = self.call("create_mod_folder", "UI", ["one", "canonical", "missing"])["mod_folders"][0]
+        return folder
+
+    def test_unsubscribe_preview_lists_shared_workshop_packs_playsets_and_local_skips(self):
+        folder = self.workshop_folder()
+        preview = self.call("preview_folder_unsubscribe", folder["id"], "warhammer3", "default")
+        self.assertEqual([item["id"] for item in preview["targets"]], ["one"])
+        self.assertEqual(set(preview["skipped"]), {"canonical", "missing"})
+        self.assertEqual({item["id"] for item in preview["affected_mods"]}, {"one", "two"})
+        self.assertIn("Other campaign", preview["affected_playsets"])
+
+    def test_unsubscribe_deletes_folder_only_after_success_and_token_cannot_be_reused(self):
+        folder = self.workshop_folder()
+        preview = self.call("preview_folder_unsubscribe", folder["id"])
+        with patch.object(self.api, "detect_game_running", return_value=False), patch.object(
+            self.api, "_unsubscribe_workshop_mods", return_value={
+                "completed": [{"workshop_id": "123"}], "failures": [], "completed_count": 1,
+                "failed_count": 0, "scan": {},
+            }
+        ) as unsubscribe:
+            result = self.call("unsubscribe_mod_folder", preview["token"])
+            unsubscribe.assert_called_once_with(["one"])
+            self.assertTrue(result["folder_deleted"])
+            self.assertEqual(result["scan"]["mod_folders"], [])
+            self.assertFalse(self.api.call("unsubscribe_mod_folder", [preview["token"]])["ok"])
+            unsubscribe.assert_called_once()
+        self.assertTrue((self.root / "a.pack").is_file())
+
+    def test_unsubscribe_partial_failure_retains_folder_and_reports_each_failure(self):
+        folder = self.workshop_folder()
+        preview = self.call("preview_folder_unsubscribe", folder["id"])
+        with patch.object(self.api, "detect_game_running", return_value=False), patch.object(
+            self.api, "_unsubscribe_workshop_mods", return_value={
+                "completed": [], "failures": [{"workshop_id": "123", "error": "Steam offline"}],
+                "completed_count": 0, "failed_count": 1,
+            }
+        ):
+            result = self.call("unsubscribe_mod_folder", preview["token"])
+        self.assertFalse(result["folder_deleted"])
+        self.assertEqual(result["failures"][0]["error"], "Steam offline")
+        self.assertEqual(result["mod_folders"][0]["id"], folder["id"])
+
+    def test_unsubscribe_rejects_stale_membership_context_and_expired_confirmation(self):
+        folder = self.workshop_folder()
+        with patch.object(self.api, "detect_game_running", return_value=False), patch.object(
+            self.api, "_unsubscribe_workshop_mods"
+        ) as unsubscribe:
+            for change in ("membership", "context", "expiry"):
+                with self.subTest(change=change):
+                    preview = self.call("preview_folder_unsubscribe", folder["id"])
+                    if change == "membership":
+                        self.call("assign_mod_folder", ["two"], folder["id"])
+                    elif change == "context":
+                        other = self.api.state_repository.create_playset("Next", [])["id"]
+                        self.api.state_repository.switch_playset(other)
+                    else:
+                        token, created, snapshot = self.api._folder_unsubscribe_preview
+                        self.api._folder_unsubscribe_preview = (token, created - 301, snapshot)
+                    self.assertFalse(self.api.call("unsubscribe_mod_folder", [preview["token"]])["ok"])
+                    self.api.state_repository.switch_playset("default")
+            unsubscribe.assert_not_called()
+
+    def test_unsubscribe_while_game_running_is_blocked(self):
+        folder = self.workshop_folder()
+        preview = self.call("preview_folder_unsubscribe", folder["id"])
+        with patch.object(self.api, "detect_game_running", return_value=True), patch.object(
+            self.api, "_unsubscribe_workshop_mods"
+        ) as unsubscribe:
+            self.assertFalse(self.api.call("unsubscribe_mod_folder", [preview["token"]])["ok"])
+            unsubscribe.assert_not_called()
 
     def test_switching_to_an_existing_playset_retains_folders_and_membership(self):
         other = self.api.state_repository.create_playset("Other", ["canonical"])["id"]

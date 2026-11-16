@@ -789,6 +789,28 @@ export const useAppStore = defineStore('app', {
     deleteModFolder(folderId) {
       return this.updateModFolders('delete_mod_folder', folderId)
     },
+    releaseModFolder(folderId) {
+      return this.updateModFolders('release_mod_folder', folderId)
+    },
+    previewFolderUnsubscribe(folderId) {
+      return this.withBusy(t('folders.saving'), async () => {
+        // Include the latest enablement in the affected-playset warning. A failed
+        // pending save must be resolved before confirming a destructive action.
+        await playsetWriteQueue
+        return invoke('preview_folder_unsubscribe', folderId,
+          this.settings.selected_game || 'warhammer3', this.currentPlaysetId)
+      })
+    },
+    async unsubscribeModFolder(token) {
+      this.modFolderRevision += 1
+      return this.withBusy(t('busy.unsubscribeWorkshop'), async () => {
+        const data = await invoke('unsubscribe_mod_folder', token)
+        if (data.scan) await this.applyExternalScan(data.scan)
+        this.modFolders = data.mod_folders
+        this.modFolderLayouts = data.mod_folder_layouts
+        return data
+      })
+    },
     toggleModFolder(folderId, listName) {
       const folder = this.modFolders.find(item => item.id === folderId)
       if (!folder) return Promise.resolve()

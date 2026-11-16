@@ -14,7 +14,7 @@ describe('folder drag feedback with a large MOD list', () => {
       { id: 'target', name: 'Target', mod_ids: [mods[1].id] },
     ]
     const wrapper = mount(ModList, { props: {
-      title: 'MOD', mods, folders, active: true, orderIds: mods.map(mod => mod.id),
+      title: 'MOD', mods, folders, foldersVisible: true, active: true, orderIds: mods.map(mod => mod.id),
     } })
     try {
       await wrapper.get('[data-testid="mod-folder-source"]').trigger('dragstart')
@@ -51,7 +51,7 @@ describe('folder drag feedback with a large MOD list', () => {
 
 const mods = ['a', 'b'].map(id => ({ id, effective_name: id, pack_name: `${id}.pack`, source: 'data' }))
 const folder = { id: 'folder', name: 'Folder', mod_ids: ['a'] }
-const createList = (props = {}) => mount(ModList, { props: { title: 'MOD', mods, folders: [folder], ...props } })
+const createList = (props = {}) => mount(ModList, { props: { title: 'MOD', mods, folders: [folder], foldersVisible: true, ...props } })
 
 describe('folder drag feedback lifecycle', () => {
   it('avoids redundant DOM updates while hovering in the same position and clears feedback on cancellation', async () => {
