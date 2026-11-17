@@ -237,6 +237,13 @@ textarea {
   padding: 3px 8px;
 }
 
+.flat-list-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
 .header-center {
   justify-content: center;
   gap: 6px;

@@ -77,7 +77,7 @@ class GameIsolationTests(unittest.TestCase):
 
     def test_import_rejects_wrong_game_before_changing_playset_or_subscribing(self):
         game, _ = self.select_game("three_kingdoms")
-        asset = make_asset(write_pack(game / "data" / "same.pack"), "same", "data")
+        asset = make_asset(write_pack(game / "data" / "same.pack"), "same", "workshop", "123")
         self.api._assets = {asset.id: asset}
         code = export_share([asset], "warhammer3")
         with patch("backend.api.subscribe_workshop_items") as subscribe:
@@ -86,7 +86,7 @@ class GameIsolationTests(unittest.TestCase):
             subscribe.assert_not_called()
         self.assertEqual(self.api.state_repository.get_enabled_order("three_kingdoms"), [])
         exported = self.api.call("export_share", [[asset.id]])["data"]["share_code"]
-        self.assertEqual(parse_share(exported, "three_kingdoms")[0]["id"], asset.id)
+        self.assertEqual(parse_share(exported, "three_kingdoms")[0]["pack_name"], asset.pack_name)
 
     def test_three_kingdoms_mod_with_warhammer_feature_name_is_visible_and_enableable(self):
         game, _ = self.select_game("three_kingdoms")

@@ -92,7 +92,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.3.8',
+    appVersion: '1.3.9',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -102,6 +102,7 @@ export const useAppStore = defineStore('app', {
     modFolders: [],
     modFolderLayouts: { active: [], inactive: [] },
     modFolderFilters: { active: '', inactive: '' },
+    hideModFolders: false,
     modFolderRevision: 0,
     activeIds: [],
     inactiveOrderIds: [],
@@ -262,6 +263,7 @@ export const useAppStore = defineStore('app', {
       ))
     },
     modFolderFilter: state => listName => {
+      if (state.hideModFolders) return ''
       const id = state.modFolderFilters[listName] || ''
       return id === UNGROUPED_FOLDER || state.modFolders.some(folder => folder.id === id) ? id : ''
     },

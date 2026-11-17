@@ -9,6 +9,15 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.3.9",
+        "date": "2026-11-17",
+        "entries": (
+            ("v139_adjusted_title", (("improvement", "v139_official_sharing"),)),
+            ("v139_added_title", (("feature", "v139_hide_folders"),)),
+            ("v139_adjusted_title", (("improvement", "v139_diagnostics_entry"),)),
+        ),
+    },
+    {
         "version": "1.3.8",
         "date": "2026-11-16",
         "entries": (
@@ -813,6 +822,11 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v139_adjusted_title": "调整",
+        "v139_added_title": "新增",
+        "v139_official_sharing": "调整-分享码导入导出功能改为使用官方新启动器的分享码，以提高适配性",
+        "v139_hide_folders": "新增-隐藏文件夹功能，可以暂时不按照文件夹来展示列表",
+        "v139_diagnostics_entry": "调整-自动排障按钮移到了设置-功能里面，这个功能局限性太大，只建议真正有需要且懂得这个功能意义的玩家使用",
         "v138_added_title": "新增",
         "v138_audio_pool_expansion": "新增-设置中支持音频池扩容，如果你在玩某些mod遇到突然游戏没声音了的问题，可以试着开启这个功能",
         "v137_adjusted_title": '调整',
@@ -1102,6 +1116,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v139_adjusted_title": "Adjusted",
+        "v139_added_title": "Added",
+        "v139_official_sharing": "Adjusted - Share-code import and export now use the official new launcher's format for better compatibility.",
+        "v139_hide_folders": "Added - Hide folders to temporarily display MOD lists without folder grouping.",
+        "v139_diagnostics_entry": "Adjusted - Moved the automatic diagnostics button to Settings > Features. This feature has significant limitations and is recommended only for players who need it and understand its purpose.",
         "v138_added_title": "Added",
         "v138_audio_pool_expansion": "Added - Audio pool expansion is now available in Settings. If the game suddenly loses sound while using certain mods, try enabling this option.",
         "v137_adjusted_title": 'Adjusted',
@@ -1391,6 +1410,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v139_adjusted_title": "조정",
+        "v139_added_title": "추가",
+        "v139_official_sharing": "조정 - 호환성을 높이기 위해 공유 코드 가져오기와 내보내기에 공식 새 실행기의 형식을 사용합니다.",
+        "v139_hide_folders": "추가 - 폴더 숨기기 기능으로 일시적으로 폴더 구분 없이 MOD 목록을 표시할 수 있습니다.",
+        "v139_diagnostics_entry": "조정 - 자동 진단 버튼을 설정 > 기능으로 이동했습니다. 이 기능은 제약이 많으므로 실제로 필요하고 기능의 의미를 이해하는 플레이어에게만 권장합니다.",
         "v138_added_title": "추가",
         "v138_audio_pool_expansion": "추가 - 설정에서 오디오 메모리 풀을 확장할 수 있습니다. 특정 모드를 사용하다 게임 소리가 갑자기 사라지면 이 기능을 켜 보세요.",
         "v137_adjusted_title": '조정',
@@ -1680,6 +1704,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v139_adjusted_title": "Изменено",
+        "v139_added_title": "Добавлено",
+        "v139_official_sharing": "Изменено - Для улучшения совместимости импорт и экспорт кодов теперь используют формат нового официального менеджера.",
+        "v139_hide_folders": "Добавлено - Функция скрытия папок позволяет временно показывать список модов без группировки по папкам.",
+        "v139_diagnostics_entry": "Изменено - Кнопка автоматической диагностики перенесена в «Настройки > Функции». У этой функции много ограничений; она рекомендуется только игрокам, которым она действительно нужна и которые понимают её назначение.",
         "v138_added_title": "Добавлено",
         "v138_audio_pool_expansion": "Добавлено — в настройках можно включить расширение аудиопамяти. Если при игре с некоторыми модами внезапно пропадает звук, попробуйте включить эту функцию.",
         "v137_adjusted_title": 'Изменено',
@@ -1969,6 +1998,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v139_adjusted_title": "調整",
+        "v139_added_title": "追加",
+        "v139_official_sharing": "調整 - 互換性を高めるため、共有コードのインポートとエクスポートに新しい公式ランチャーの形式を使用するようにしました。",
+        "v139_hide_folders": "追加 - フォルダーを非表示にして、一時的にフォルダー分けなしでMOD一覧を表示できるようにしました。",
+        "v139_diagnostics_entry": "調整 - 自動診断ボタンを「設定 > 機能」に移動しました。この機能には多くの制限があるため、本当に必要で機能の意味を理解しているプレイヤーにのみ使用をお勧めします。",
         "v138_added_title": "追加",
         "v138_audio_pool_expansion": "追加 - 設定でオーディオメモリプールを拡張できるようになりました。特定のMODで遊んでいるときに突然ゲームの音が消える場合は、この機能を有効にしてみてください。",
         "v137_adjusted_title": '調整',
@@ -2258,6 +2292,11 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v139_adjusted_title": "Ajustado",
+        "v139_added_title": "Añadido",
+        "v139_official_sharing": "Ajustado - La importación y exportación de códigos compartidos ahora utiliza el formato del nuevo gestor oficial para mejorar la compatibilidad.",
+        "v139_hide_folders": "Añadido - La función Ocultar carpetas permite mostrar temporalmente la lista de MODs sin agruparlos por carpetas.",
+        "v139_diagnostics_entry": "Ajustado - El botón de diagnóstico automático se ha movido a Ajustes > Funciones. Esta función tiene muchas limitaciones y solo se recomienda a jugadores que la necesiten y entiendan su propósito.",
         "v138_added_title": "Añadido",
         "v138_audio_pool_expansion": "Añadido - Ahora puedes ampliar la memoria de audio desde Ajustes. Si el juego se queda sin sonido de repente al usar ciertos mods, prueba a activar esta función.",
         "v137_adjusted_title": 'Ajustado',

@@ -1,4 +1,6 @@
 export const folderEntries = {
+  'folders.hide': ['隐藏文件夹', 'Hide folders', '폴더 숨기기', 'Скрыть папки', 'フォルダーを非表示', 'Ocultar carpetas'],
+  'folders.hideHelp': ['平铺显示所有 MOD，忽略文件夹筛选和分组位置；取消勾选后恢复文件夹视图。', 'Show MODs as a flat list, ignoring folder filters and group positions. Uncheck to restore folders.', '폴더 필터와 그룹 위치를 무시하고 MOD를 목록으로 표시합니다. 해제하면 폴더 보기를 복원합니다.', 'Показать моды плоским списком без фильтров и расположения папок. Снимите флажок, чтобы вернуть папки.', 'フォルダーの絞り込みや配置を使わずにMODを一覧表示します。解除するとフォルダー表示に戻ります。', 'Muestra los MODs en una lista sin filtros ni posiciones de carpetas. Desmarca para restaurar las carpetas.'],
   'folders.filter': ['文件夹筛选', 'Filter by folder', '폴더 필터', 'Фильтр по папке', 'フォルダーで絞り込み', 'Filtrar por carpeta'],
   'folders.all': ['全部文件夹', 'All folders', '모든 폴더', 'Все папки', 'すべてのフォルダー', 'Todas las carpetas'],
   'folders.ungrouped': ['未归类 MOD', 'Ungrouped MODs', '미분류 MOD', 'Моды без папки', '未分類のMOD', 'MODs sin carpeta'],

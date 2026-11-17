@@ -112,4 +112,46 @@ describe('folder movement and playset recovery through the actual lists', () => 
     expect(store.toast.type).toBe('error')
     expect(store.busy).toBe('')
   })
+
+  it('defaults to folders, then ignores grouping and folder filters in the flat view without changing saved data', async () => {
+    store.activeIds = ['c', 'b', 'a']
+    store.modFolderLayouts.active = ['folder:ui', 'mod:b', 'folder:units']
+    wrapper = mount(App, { global: { plugins: [pinia] } })
+    await flushPromises()
+    const toggle = wrapper.get('[data-testid="hide-mod-folders"]')
+    const active = wrapper.get('.active-panel')
+    expect(toggle.element.checked).toBe(false)
+    expect(active.findAll('.mod-folder-row')).toHaveLength(2)
+    store.setModFolderFilter('active', 'ui')
+    await flushPromises()
+    expect(active.findAll('.mod-row').map(row => row.get('.row-title').text())).toEqual(['a'])
+    const before = JSON.stringify({ folders: store.modFolders, layouts: store.modFolderLayouts, order: store.activeIds })
+    invokeMock.mockClear()
+    await toggle.setValue(true)
+    expect(active.find('.mod-folder-row').exists()).toBe(false)
+    expect(active.find('[data-testid="active-folder-filter"]').exists()).toBe(false)
+    expect(active.findAll('.mod-row').map(row => row.get('.row-title').text())).toEqual(['c', 'b', 'a'])
+    expect(JSON.stringify({ folders: store.modFolders, layouts: store.modFolderLayouts, order: store.activeIds })).toBe(before)
+    expect(invokeMock).not.toHaveBeenCalled()
+    await toggle.setValue(false)
+    expect(active.find('[data-testid="mod-folder-ui"]').exists()).toBe(true)
+    expect(store.modFolderFilter('active')).toBe('ui')
+  })
+
+  it('makes collapsed inactive folder members available to search and dragging in flat view', async () => {
+    store.activeIds = ['b']
+    wrapper = mount(App, { global: { plugins: [pinia] } })
+    await flushPromises()
+    const inactive = wrapper.get('.list-panel:not(.active-panel)')
+    expect(inactive.findAll('.mod-row')).toHaveLength(0)
+    await wrapper.get('[data-testid="hide-mod-folders"]').setValue(true)
+    expect(inactive.findAll('.mod-row').map(row => row.get('.row-title').text())).toEqual(['a', 'c'])
+    store.selectedIds = ['a']
+    const rows = inactive.findAll('.mod-row')
+    await rows[0].trigger('dragstart')
+    await rows[1].trigger('drop', { clientY: 1 })
+    await flushPromises()
+    expect(invokeMock.mock.calls.some(([method]) => method === 'assign_mod_folder')).toBe(false)
+    expect(store.modFolders[0].mod_ids).toEqual(['a'])
+  })
 })

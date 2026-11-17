@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { encyclopediaEntries } from './encyclopediaLanguages'
 import { diagnosticsEntries } from './diagnosticsLanguages'
 import { folderEntries } from './folderLanguages'
+import { shareEntries } from './shareLanguages'
 import { schemaEntries } from './schemaLanguages'
 import { launchComparisonEntries } from './launchComparisonLanguages'
 import { exceptionProbeEntries } from './exceptionProbeLanguages'
@@ -1849,7 +1850,7 @@ for (const [key, variants] of Object.entries(diagnosticsEntries)) {
   spanishEntries[key] = variants[5]
 }
 
-for (const [key, variants] of Object.entries({ ...folderEntries, ...schemaEntries, ...launchComparisonEntries, ...exceptionProbeEntries, ...audioPoolEntries, ...aiAnalysisEntries, ...voiceCompatibilityEntries })) {
+for (const [key, variants] of Object.entries({ ...folderEntries, ...shareEntries, ...schemaEntries, ...launchComparisonEntries, ...exceptionProbeEntries, ...audioPoolEntries, ...aiAnalysisEntries, ...voiceCompatibilityEntries })) {
   entries[key] = variants.slice(0, 5)
   spanishEntries[key] = variants[5]
 }
@@ -1934,6 +1935,10 @@ const scanNoticeEnglish = value => {
 
 export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
   const value = String(message || '').trim()
+  const shareError = value.match(/^(share\.[A-Za-z]+)(?:: (.+))?$/)
+  if (shareError && Object.prototype.hasOwnProperty.call(shareEntries, shareError[1])) {
+    return t(shareError[1], { name: shareError[2] || '' })
+  }
   if (Object.prototype.hasOwnProperty.call(aiAnalysisEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(diagnosticsEntries, value)) return t(value)
   if (Object.prototype.hasOwnProperty.call(folderEntries, value)) return t(value)

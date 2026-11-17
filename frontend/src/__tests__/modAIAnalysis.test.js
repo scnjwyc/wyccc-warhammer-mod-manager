@@ -73,15 +73,13 @@ describe('enabled MOD Workshop AI analysis', () => {
     await flushPromises()
   }
 
-  it('removes DATA sync, places AI analysis immediately after diagnostics and starts with all enabled IDs', async () => {
+  it('keeps AI analysis in the footer and starts with all enabled IDs', async () => {
     wrapper = mount(App, { global: { plugins: [pinia] } })
     await flushPromises()
     expect(wrapper.find('[data-testid="sync-data-button"]').exists()).toBe(false)
-    const footer = wrapper.get('.footer-left').findAll('button')
-    const diagnosticsIndex = footer.findIndex(button => button.attributes('data-testid') === 'mod-diagnostics-button')
-    expect(footer[diagnosticsIndex + 1].attributes('data-testid')).toBe('ai-analysis-button')
+    expect(wrapper.get('.footer-left').find('[data-testid="mod-diagnostics-button"]').exists()).toBe(false)
     expect(wrapper.get('.footer-analysis-actions').findAll('button').map(button => button.attributes('data-testid')))
-      .toEqual(['mod-diagnostics-button', 'ai-analysis-button'])
+      .toEqual(['ai-analysis-button'])
     store.activeSearch = 'does not match'
     await wrapper.get('[data-testid="ai-analysis-button"]').trigger('click')
     await flushPromises()

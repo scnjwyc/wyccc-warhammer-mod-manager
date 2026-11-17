@@ -34,6 +34,19 @@ const localizedValues = key => languageCodes.map(language => {
 afterEach(() => applyInterfaceLanguage('zh-CN'))
 
 describe('built-in interface languages', () => {
+  it('explains official sharing, flat lists and manual diagnostics in every language', () => {
+    for (const key of ['share.help', 'share.placeholder', 'share.generate', 'share.invalidOfficial',
+      'share.wrongGame', 'share.tooLarge', 'share.unreadablePack', 'share.outsideGame',
+      'share.unsupportedGame', 'folders.hide', 'folders.hideHelp', 'diagnostics.manualOpenHelp']) {
+      expect(hasTranslation(key), key).toBe(true)
+    }
+    for (const language of languageCodes) {
+      applyInterfaceLanguage(language)
+      expect(t('share.placeholder')).not.toContain('WMM1')
+      expect(localizeBackendMessage('share.invalidOfficial')).toBe(t('share.invalidOfficial'))
+      expect(localizeBackendMessage('share.unreadablePack: example.pack')).toBe(t('share.unreadablePack', { name: 'example.pack' }))
+    }
+  })
   it('localizes automatic profile preparation failures in all six languages', () => {
     for (const key of ['launchProfile.prepareFailed', 'launchProfile.invalidPaths', 'launchProfile.networkPath']) {
       const messages = []

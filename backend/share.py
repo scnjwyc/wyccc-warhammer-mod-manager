@@ -1,99 +1,77 @@
 from __future__ import annotations
 
-import base64
-import json
+import hashlib
+import struct
 import urllib.parse
-import zlib
+from pathlib import Path
 from typing import Any
 
 from .models import ModAsset
 from .games import DEFAULT_GAME_ID, game_definitions
+from .mod_profiles import parse_mod_profile_text
+from .steam_paths import parse_vdf
 
-PREFIX = "WMM1"
-LEGACY_PREFIXES = ("WWM1", "WWMM1")
 PENDING_WORKSHOP_PREFIX = "pending:steam:"
 
 
-def export_share(mods: list[ModAsset], game_id: str = DEFAULT_GAME_ID) -> str:
-    if game_id not in {game.id for game in game_definitions()}:
-        raise ValueError("不支持的分享码版本或游戏")
-    payload = {
-        "schema_version": 2,
-        "game": game_id,
-        "mods": [
-            {
-                "id": mod.id,
-                "workshop_id": mod.workshop_id,
-                "pack_name": mod.pack_name,
-                "source": mod.source,
-            }
-            for mod in mods
-        ],
-    }
-    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    compressed = zlib.compress(raw, level=9)
-    checksum = zlib.crc32(compressed) & 0xFFFFFFFF
-    encoded = base64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
-    return f"{PREFIX}-{checksum:08X}-{encoded}"
+def quick_checksum(path: str | Path) -> str:
+    path = Path(path)
+    size = path.stat().st_size
+    digest = hashlib.md5(struct.pack("<Q", size))
+    with path.open("rb") as stream:
+        digest.update(stream.read(min(size, 1024 * 1024)))
+        if size > 1024 * 1024:
+            stream.seek(size - 1024 * 1024)
+            digest.update(stream.read(1024 * 1024))
+    return digest.hexdigest()
+
+
+def export_share(
+    mods: list[ModAsset], game_id: str = DEFAULT_GAME_ID, game_path: str | Path = "",
+) -> str:
+    game = next((game for game in game_definitions() if game.id == game_id), None)
+    if not game or game.mod_format != "pack":
+        raise ValueError("share.unsupportedGame")
+    lines = ["# TW Mod Profile", "", ""]
+    workshop_updates: dict[str, Any] = {}
+    workshop_manifest_loaded = False
+    for mod in mods:
+        path = Path(mod.path)
+        try:
+            checksum = quick_checksum(path)
+        except OSError as exc:
+            raise ValueError(f"share.unreadablePack: {mod.pack_name}") from exc
+        if mod.source == "workshop" and mod.workshop_id.isdigit():
+            updated_at = max(0, int(mod.workshop_updated_at)) // 1000
+            if not updated_at and not workshop_manifest_loaded:
+                workshop_manifest_loaded = True
+                for parent in path.parents:
+                    manifest = parent / f"appworkshop_{game.app_id}.acf"
+                    if manifest.is_file():
+                        try:
+                            workshop_updates = parse_vdf(manifest.read_text("utf-8-sig"))["AppWorkshop"].get("WorkshopItemsInstalled", {})
+                        except (OSError, ValueError, KeyError):
+                            workshop_updates = {}
+                        break
+            if not updated_at:
+                updated_at = int(workshop_updates.get(mod.workshop_id, {}).get("timeupdated") or 0)
+            location = f"steam_workshop:{game.app_id}/{mod.workshop_id}@{updated_at}/{mod.pack_name}"
+        else:
+            try:
+                if not game_path:
+                    raise ValueError("No game directory")
+                relative = path.resolve().relative_to(Path(game_path).resolve()).as_posix()
+            except ValueError as exc:
+                raise ValueError(f"share.outsideGame: {mod.pack_name}") from exc
+            location = f"game_dir:{relative}"
+        if not mod.pack_name.casefold().endswith(".pack") or any(c in location for c in "\r\n"):
+            raise ValueError("share.invalidOfficial")
+        lines.append(f"mod_lookup_key://{checksum}@{location}")
+    return "\n".join(lines) + "\n"
 
 
 def parse_share(value: str, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
-    text = value.strip()
-    matched_prefix = next(
-        (
-            candidate
-            for candidate in (PREFIX, *LEGACY_PREFIXES)
-            if text.startswith(f"{candidate}-")
-        ),
-        "",
-    )
-    if matched_prefix:
-        parts = text.split("-", 2)
-        if len(parts) != 3:
-            raise ValueError("分享码格式错误")
-        _, checksum_text, encoded = parts
-        padding = "=" * (-len(encoded) % 4)
-        try:
-            compressed = base64.urlsafe_b64decode(encoded + padding)
-            expected = int(checksum_text, 16)
-            if zlib.crc32(compressed) & 0xFFFFFFFF != expected:
-                raise ValueError("分享码校验失败")
-            payload = json.loads(zlib.decompress(compressed).decode("utf-8"))
-        except (ValueError, TypeError, json.JSONDecodeError, zlib.error) as exc:
-            raise ValueError(f"无法解析分享码：{exc}") from exc
-        if not isinstance(payload, dict):
-            raise ValueError("分享码内容无效")
-        version = payload.get("schema_version")
-        shared_game = payload.get("game")
-        if version == 1 and shared_game == "wh3":
-            shared_game = DEFAULT_GAME_ID
-        elif version != 2 or not isinstance(shared_game, str) or shared_game not in {game.id for game in game_definitions()}:
-            raise ValueError("不支持的分享码版本或游戏")
-        if shared_game != game_id:
-            raise ValueError("分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入")
-        mods = payload.get("mods", [])
-        if not isinstance(mods, list):
-            raise ValueError("分享码内容无效")
-        return [item for item in mods if isinstance(item, dict)]
-
-    # Compatibility with WH3-Mod-Manager's workshopId[;loadOrder]|... format.
-    if game_id != DEFAULT_GAME_ID:
-        raise ValueError("旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码")
-    result = []
-    for index, token in enumerate(part.strip() for part in text.split("|")):
-        if not token:
-            continue
-        workshop_id, _, load_order = token.partition(";")
-        result.append(
-            {
-                "workshop_id": workshop_id.strip(),
-                "position": int(load_order) if load_order.strip().isdigit() else index,
-                "legacy_workshop_project": True,
-            }
-        )
-    if not result:
-        raise ValueError("未识别到可导入的 MOD")
-    return sorted(result, key=lambda item: item.get("position", 0))
+    return parse_mod_profile_text(value, game_id)["references"]
 
 
 def resolve_share(
@@ -160,17 +138,6 @@ def _resolve_reference(
     reference: dict[str, Any],
     assets: dict[str, ModAsset],
 ) -> list[ModAsset]:
-    if reference.get("legacy_workshop_project"):
-        workshop_id = str(reference.get("workshop_id") or "")
-        return sorted(
-            (
-                asset
-                for asset in assets.values()
-                if workshop_id and asset.workshop_id == workshop_id
-            ),
-            key=lambda item: (item.pack_name.casefold(), item.id),
-        )
-
     selected = assets.get(str(reference.get("id") or ""))
     if selected:
         return [selected]
@@ -183,6 +150,9 @@ def _resolve_reference(
         if (not workshop_id or asset.workshop_id == workshop_id)
         and (not pack_name or asset.pack_name.casefold() == pack_name)
         and (not source or asset.source == source)
+        and (not reference.get("relative_path") or asset.path.replace("\\", "/").casefold().endswith(
+            "/" + str(reference["relative_path"]).casefold()
+        ))
     ]
     selected = sorted(candidates, key=lambda item: item.id)[0] if candidates else None
     return [selected] if selected else []

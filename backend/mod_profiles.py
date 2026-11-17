@@ -3,17 +3,55 @@ from __future__ import annotations
 import os
 import re
 import urllib.parse
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .constants import WH3_APP_ID
+from .games import DEFAULT_GAME_ID, get_game_definition
 
 
 _PROFILE_LINE_RE = re.compile(
-    r"^mod_lookup_key://.*?@steam_workshop:(?P<app_id>\d+)/"
-    r"(?P<workshop_id>\d+)@[^/]+/(?P<pack_path>.+\.pack)\s*$",
+    r"^mod_lookup_key://(?P<checksum>[0-9a-f]{32})@"
+    r"(?:steam_workshop:(?P<app_id>\d+)/(?P<workshop_id>\d+)@(?P<updated_at>\d+)/"
+    r"(?P<workshop_path>.+\.pack)|game_dir:(?P<local_path>.+\.pack))$",
     re.IGNORECASE,
 )
+
+
+def parse_mod_profile_text(content: str, game_id: str = DEFAULT_GAME_ID) -> dict[str, Any]:
+    if len(content.encode("utf-8")) > 5 * 1024 * 1024:
+        raise ValueError("share.tooLarge")
+    references: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    has_header = False
+    for raw_line in content.lstrip("\ufeff").splitlines():
+        line = raw_line.strip()
+        if line == "# TW Mod Profile":
+            has_header = True
+        if not line or line.startswith("#"):
+            continue
+        matched = _PROFILE_LINE_RE.fullmatch(line)
+        if not matched:
+            raise ValueError("share.invalidOfficial")
+        workshop_id = matched.group("workshop_id") or ""
+        if workshop_id and matched.group("app_id") != get_game_definition(game_id).app_id:
+            raise ValueError("share.wrongGame")
+        pack_path = urllib.parse.unquote(matched.group("workshop_path") or matched.group("local_path"))
+        path = PurePosixPath(pack_path.replace("\\", "/"))
+        if path.is_absolute() or ".." in path.parts or ":" in pack_path:
+            raise ValueError("share.invalidOfficial")
+        reference = {"pack_name": path.name, "checksum": matched.group("checksum").lower()}
+        if workshop_id:
+            reference.update(workshop_id=workshop_id)
+        else:
+            source = "data" if path.parts[0].casefold() == "data" else "local"
+            reference.update(source=source, relative_path=path.as_posix())
+        key = (workshop_id, pack_path.casefold())
+        if key not in seen:
+            seen.add(key)
+            references.append(reference)
+    if not references and not has_header:
+        raise ValueError("share.invalidOfficial")
+    return {"references": references, "unrecognized_lines": []}
 
 
 def default_mod_profile_directory() -> Path:
@@ -41,31 +79,7 @@ def parse_mod_profile(profile_path: str | Path) -> dict[str, Any]:
     except OSError as exc:
         raise ValueError(f"无法读取官方启动器配置：{exc}") from exc
 
-    references: list[dict[str, str]] = []
-    unrecognized_lines: list[str] = []
-    seen: set[tuple[str, str]] = set()
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        matched = _PROFILE_LINE_RE.match(line)
-        if not matched or matched.group("app_id") != WH3_APP_ID:
-            unrecognized_lines.append(line)
-            continue
-        workshop_id = matched.group("workshop_id")
-        decoded_path = urllib.parse.unquote(matched.group("pack_path"))
-        pack_name = Path(decoded_path.replace("\\", "/")).name.strip()
-        if not pack_name.casefold().endswith(".pack"):
-            unrecognized_lines.append(line)
-            continue
-        key = (workshop_id, pack_name.casefold())
-        if key in seen:
-            continue
-        seen.add(key)
-        references.append({"workshop_id": workshop_id, "pack_name": pack_name})
-
-    if not references:
-        raise ValueError("配置中未识别到 Warhammer III 工坊 MOD")
+    parsed = parse_mod_profile_text(content)
     return {
         "profile": {
             "name": path.stem,
@@ -75,6 +89,5 @@ def parse_mod_profile(profile_path: str | Path) -> dict[str, Any]:
         },
         "name": path.stem,
         "path": str(path.resolve(strict=False)),
-        "references": references,
-        "unrecognized_lines": unrecognized_lines,
+        **parsed,
     }

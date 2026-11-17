@@ -2572,7 +2572,8 @@ class API:
     def _export_share(self, ordered_mod_ids: list[str]) -> dict[str, str]:
         with self._context_lock:
             mods = [self._require_asset(mod_id) for mod_id in ordered_mod_ids]
-            return {"share_code": export_share(mods, self._active_game().id)}
+            paths = self.settings_service.resolve_game_paths()
+            return {"share_code": export_share(mods, self._active_game().id, paths.game_path)}
 
     def _preview_import_share(self, share_code: str) -> dict[str, Any]:
         with self._context_lock:
@@ -2744,6 +2745,7 @@ class API:
         references_by_workshop_id = {
             str(reference["workshop_id"]): reference
             for reference in references
+            if reference.get("workshop_id")
         }
         language = steam_language_for_interface(
             str(self.settings_service.get().get("language") or "")
@@ -2753,7 +2755,7 @@ class API:
                 list(references_by_workshop_id),
                 language,
                 app_id=int(self._active_game().app_id),
-            )
+            ) if references_by_workshop_id else []
         except SteamworksBridgeError as exc:
             raise ValueError(f"无法检查官方配置中的 Workshop 订阅状态：{exc}") from exc
         unsubscribed = []

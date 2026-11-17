@@ -1064,7 +1064,7 @@ const refreshDiagnostics = async (open = true) => {
       crashDiagnosis.value = diagnosis
       diagnosticHistory.value = history
     }
-    if (open || session.running || crashDiagnosis.value.should_notify) showDiagnostics.value = true
+    if (open) showDiagnostics.value = true
   } catch (error) {
     if (open) store.notify(error.message, 'error')
   } finally { diagnosticsPolling = false }
@@ -1182,6 +1182,10 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="header-actions">
+        <label class="header-button flat-list-toggle" :title="t('folders.hideHelp')">
+          <input v-model="store.hideModFolders" type="checkbox" data-testid="hide-mod-folders" />
+          <span>{{ t('folders.hide') }}</span>
+        </label>
         <span class="header-mod-count">
           {{ t('app.packCount', { count: store.mods.length }) }} · {{ t('app.enabledCount', { count: store.activeIds.length }) }}
         </span>
@@ -1211,8 +1215,8 @@ onBeforeUnmount(() => {
       <ModList
         :title="t('app.inactiveMods')"
         :mods="store.inactiveMods"
-        :folders="store.modFolders"
-        :folder-layout="store.modFolderLayouts.inactive"
+        :folders="store.hideModFolders ? [] : store.modFolders"
+        :folder-layout="store.hideModFolders ? [] : store.modFolderLayouts.inactive"
         :folder-filter="store.modFolderFilter('inactive')"
         :folder-mod-counts="store.modFolderCounts"
         :busy="!!store.busy"
@@ -1267,8 +1271,8 @@ onBeforeUnmount(() => {
         :title="t('app.activeMods')"
         active
         :mods="store.activeMods"
-        :folders="store.modFolders"
-        :folder-layout="store.modFolderLayouts.active"
+        :folders="store.hideModFolders ? [] : store.modFolders"
+        :folder-layout="store.hideModFolders ? [] : store.modFolderLayouts.active"
         :folder-filter="store.modFolderFilter('active')"
         :folder-mod-counts="store.modFolderCounts"
         :busy="!!store.busy"
@@ -1375,9 +1379,6 @@ onBeforeUnmount(() => {
           {{ t('app.compatibilityPatch') }}
         </button>
         <div class="footer-analysis-actions">
-          <button v-if="supportsPackActions" type="button" class="secondary-button sync-data-button footer-diagnostics-button"
-            :disabled="!!store.busy || !store.pathHealth.game_ready" data-testid="mod-diagnostics-button"
-            @click="refreshDiagnostics(true)">{{ t('diagnostics.title') }}</button>
           <button type="button" class="secondary-button sync-data-button footer-ai-analysis-button"
             :disabled="!!store.busy" data-testid="ai-analysis-button"
             @click="showAIAnalysis = true">{{ t('aiAnalysis.title') }}</button>
@@ -1457,6 +1458,7 @@ onBeforeUnmount(() => {
       @detect="detectPaths"
       @check-update="checkForUpdates"
       @show-changelog="openChangelog"
+      @open-diagnostics="showSettings = false; refreshDiagnostics(true)"
     />
 
     <GameDataModificationModal

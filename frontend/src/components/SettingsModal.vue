@@ -26,7 +26,7 @@ const props = defineProps({
   busy: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'save', 'detect', 'check-update', 'show-changelog'])
+const emit = defineEmits(['close', 'save', 'detect', 'check-update', 'show-changelog', 'open-diagnostics'])
 const store = useAppStore()
 const draft = reactive({})
 const activeTab = ref('basic')
@@ -64,6 +64,9 @@ const activeInstallation = computed(() => (
 const requiresManualPath = computed(() => !props.health.game_ready)
 const exceptionProbeSupported = computed(() => selectedGameOption.value.id === 'warhammer3')
 const audioPoolSupported = computed(() => selectedGameOption.value.id === 'warhammer3')
+const diagnosticsSupported = computed(() => (
+  (GAME_OPTIONS.find(game => game.id === (props.settings.selected_game || 'warhammer3'))?.modFormat || 'pack') === 'pack'
+))
 const memreaderPlusReady = computed(() => {
   const active = new Set(store.activeIds)
   return store.mods.some(mod => active.has(mod.id)
@@ -358,6 +361,13 @@ const closeSettings = () => {
           </section>
 
           <section v-show="activeTab === 'features'" class="settings-page" data-testid="settings-page-features">
+            <div v-if="diagnosticsSupported" class="settings-feature-card">
+              <button type="button" class="secondary-button" data-testid="mod-diagnostics-button"
+                :disabled="!!busy || !health.game_ready" @click="closeSettings(); emit('open-diagnostics')">
+                {{ t('diagnostics.title') }}
+              </button>
+              <p class="settings-page-note">{{ t('diagnostics.manualOpenHelp') }}</p>
+            </div>
             <div class="settings-page-heading">
               <span class="eyebrow">{{ t('settings.featuresEyebrow') }}</span>
               <h3>{{ t('settings.tabFeaturesDetail') }}</h3>
