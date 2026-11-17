@@ -253,8 +253,8 @@ const entries = {
   'share.aria': ['导入导出', 'Import and export', '가져오기 및 내보내기', 'Импорт и экспорт', 'インポートとエクスポート'],
   'share.eyebrow': ['加载顺序传输', 'LOAD ORDER TRANSFER', '로드 순서 전송', 'ПЕРЕНОС ПОРЯДКА ЗАГРУЗКИ', '読み込み順の転送'],
   'share.title': ['分享加载顺序', 'Share load order', '로드 순서 공유', 'Поделиться порядком загрузки', '読み込み順を共有'],
-  'share.help': ['分享码保存启用 Pack 的顺序和创意工坊身份。导入前会检查未订阅项目；确认后可由 Steam 自动订阅，下载完成并重新扫描后会按原顺序加入当前播放集。', 'The share code stores enabled Pack order and Workshop identities. Unsubscribed items are checked before import; after confirmation Steam can subscribe automatically, and a rescan after download restores the shared order in the current playset.', '공유 코드는 활성화된 Pack 순서와 창작마당 ID를 저장합니다. 가져오기 전에 미구독 항목을 확인하고, 동의하면 Steam이 자동으로 구독합니다. 다운로드 후 다시 검색하면 현재 플레이 세트에 원래 순서로 추가됩니다.', 'Код хранит порядок включённых Pack и идентификаторы Мастерской. Перед импортом проверяются отсутствующие подписки; после подтверждения Steam оформит их автоматически, а повторное сканирование после загрузки восстановит порядок в текущем наборе.', '共有コードには有効な Pack の順序とワークショップ識別情報が保存されます。インポート前に未購読項目を確認し、同意すると Steam が自動購読します。ダウンロード後に再スキャンすると現在のプレイセットへ元の順序で追加されます。'],
-  'share.placeholder': ['点击“生成分享码”，或粘贴收到的 WMM1 分享码', 'Click “Generate share code” or paste a received WMM1 share code', '“공유 코드 생성”을 클릭하거나 받은 WMM1 공유 코드를 붙여넣으세요', 'Нажмите «Создать код» или вставьте полученный код WMM1', '「共有コードを生成」をクリックするか、受け取った WMM1 共有コードを貼り付けてください'],
+  'share.help': ['分享码保存启用 Pack 的顺序和创意工坊身份。导入前会检查未订阅项目；确认后可由 Steam 自动订阅，下载完成并重新扫描后会按原顺序加入当前播放集。也可直接粘贴官方启动器 mod_lookup_key:// 多行内容或旧版战锤3 分享码。', 'The share code stores enabled Pack order and Workshop identities. Unsubscribed items are checked before import; after confirmation Steam can subscribe automatically, and a rescan after download restores the shared order in the current playset. You can also paste multi-line official launcher mod_lookup_key:// content or a legacy Warhammer III share code.', '공유 코드는 활성화된 Pack 순서와 창작마당 ID를 저장합니다. 가져오기 전에 미구독 항목을 확인하고, 동의하면 Steam이 자동으로 구독합니다. 다운로드 후 다시 검색하면 현재 플레이 세트에 원래 순서로 추가됩니다. 공식 런처의 mod_lookup_key:// 여러 줄 내용이나 이전 워해머 3 공유 코드도 바로 붙여넣을 수 있습니다.', 'Код хранит порядок включённых Pack и идентификаторы Мастерской. Перед импортом проверяются отсутствующие подписки; после подтверждения Steam оформит их автоматически, а повторное сканирование после загрузки восстановит порядок в текущем наборе. Также можно вставить многострочное содержимое mod_lookup_key:// из официального лаунчера или старый код Warhammer III.', '共有コードには有効な Pack の順序とワークショップ識別情報が保存されます。インポート前に未購読項目を確認し、同意すると Steam が自動購読します。ダウンロード後に再スキャンすると現在のプレイセットへ元の順序で追加されます。公式ランチャーの mod_lookup_key:// 複数行や旧形式のウォーハンマー3 共有コードもそのまま貼り付けられます。'],
+  'share.placeholder': ['点击“生成分享码”，或粘贴 WMM1 分享码、旧版战锤3 分享码或官方启动器 mod_lookup_key:// 多行内容', 'Click “Generate share code”, or paste a WMM1 code, a legacy Warhammer III code, or official launcher mod_lookup_key:// lines', '“공유 코드 생성”을 클릭하거나 WMM1 코드, 이전 워해머 3 코드, 공식 런처의 mod_lookup_key:// 여러 줄을 붙여넣으세요', 'Нажмите «Создать код» или вставьте код WMM1, старый код Warhammer III либо строки mod_lookup_key:// из официального лаунчера', '「共有コードを生成」をクリックするか、WMM1 コード、旧形式のウォーハンマー3 コード、公式ランチャーの mod_lookup_key:// 複数行を貼り付けてください'],
   'share.generate': ['生成分享码', 'Generate share code', '공유 코드 생성', 'Создать код', '共有コードを生成'],
   'share.importCurrent': ['导入到当前播放集', 'Import into current playset', '현재 플레이 세트로 가져오기', 'Импортировать в текущий набор', '現在のプレイセットへインポート'],
   'share.collectionInput': ['创意工坊 MOD 合集', 'Workshop MOD collection', '창작마당 MOD 컬렉션', 'Коллекция MOD Мастерской', 'ワークショップ MOD コレクション'],
@@ -273,6 +273,10 @@ const entries = {
   'official.subscribeMissing': ['自动订阅缺失的工坊 MOD', 'Subscribe to missing Workshop MODs', '누락된 창작마당 MOD 자동 구독', 'Подписаться на отсутствующие MOD', '不足しているワークショップ MOD を購読'],
   'official.subscribeMissingHelp': ['将请求 Steam 订阅 {count} 个项目；下载后会自动加入原位置。', 'Steam will subscribe to {count} items; downloaded MODs will return to their original positions.', 'Steam에 {count}개 항목 구독을 요청하며 다운로드 후 원래 위치에 추가됩니다.', 'Steam оформит подписку на {count} элементов; после загрузки они займут исходные позиции.', 'Steam に {count} 件の購読を要求し、ダウンロード後に元の位置へ追加します。'],
   'official.pendingHelp': ['未安装项目会作为缺失占位保留，不会打乱配置中的加载顺序。', 'Uninstalled items remain as missing placeholders so the profile order is preserved.', '설치되지 않은 항목은 누락 자리표시자로 남아 프로필 순서를 유지합니다.', 'Неустановленные элементы сохраняются как отсутствующие позиции, не нарушая порядок.', '未インストール項目は不足項目として保持され、プロファイルの順序は変わりません。'],
+  'official.profileInvalidFile': ['请选择有效的官方启动器 .twmods 配置', 'Choose a valid official launcher .twmods profile file.', '유효한 공식 런처 .twmods 프로필을 선택하세요.', 'Выберите допустимый файл профиля .twmods официального лаунчера.', '有効な公式ランチャー .twmods プロファイルを選択してください。'],
+  'official.profileTooLarge': ['官方启动器配置文件过大', 'The official launcher profile file is too large.', '공식 런처 프로필 파일이 너무 큽니다.', 'Файл профиля официального лаунчера слишком большой.', '公式ランチャーのプロファイルファイルが大きすぎます。'],
+  'official.profileNoMods': ['配置中未识别到 Warhammer III 工坊 MOD', 'No Warhammer III Workshop MOD was recognized in this profile.', '이 프로필에서 워해머 3 창작마당 MOD를 찾지 못했습니다.', 'В этом профиле не найдено MOD Мастерской Warhammer III.', 'このプロファイルにウォーハンマー3のワークショップ MOD が見つかりません。'],
+  'official.profileUnreadable': ['无法读取官方启动器配置：{detail}', 'Unable to read the official launcher profile: {detail}', '공식 런처 프로필을 읽을 수 없습니다: {detail}', 'Не удалось прочитать профиль официального лаунчера: {detail}', '公式ランチャーのプロファイルを読み取れません：{detail}'],
   'official.replaceCurrent': ['覆盖当前播放集', 'Replace current playset', '현재 플레이 세트 덮어쓰기', 'Заменить текущий набор', '現在のプレイセットを置換'],
   'official.createNew': ['新建播放集（推荐）', 'Create new playset (recommended)', '새 플레이 세트 만들기(권장)', 'Создать новый набор (рекомендуется)', '新しいプレイセットを作成（推奨）'],
 
@@ -1035,8 +1039,8 @@ const spanishEntries = {
   "share.aria": "Importar y exportar",
   "share.eyebrow": "TRANSFERENCIA DE ORDEN DE CARGA",
   "share.title": "Compartir orden de carga",
-  "share.help": "Las tiendas de códigos compartidos habilitaron Pack las identidades de pedido y taller. Los artículos dados de baja se verifican antes de importarlos; después de la confirmación Steam puede suscribirse automáticamente, y una nueva exploración después de la descarga restaura el orden compartido en el juego actual.",
-  "share.placeholder": "Haga clic en \"Generar código compartido\" o pegue un código compartido WMM1 recibido",
+  "share.help": "El código compartido guarda el orden de los Packs activados y las identidades del Taller. Los elementos sin suscripción se comprueban antes de importarlos; tras confirmarlo, Steam puede suscribirse automáticamente y un nuevo escaneo después de la descarga restablece el orden compartido en el juego actual. También puedes pegar varias líneas mod_lookup_key:// del lanzador oficial o un código antiguo de Warhammer III.",
+  "share.placeholder": "Haz clic en \"Generar código compartido\" o pega un código WMM1, un código antiguo de Warhammer III o varias líneas mod_lookup_key:// del lanzador oficial",
   "share.generate": "Generar código compartido",
   "share.importCurrent": "Importar al juego actual",
   "share.collectionInput": "Colección de MODs del Taller",
@@ -1635,7 +1639,7 @@ Object.assign(spanishEntries, {
   'context.copyToData': 'Copiar MOD a la carpeta Data',
   'context.inData': 'Ya está en Data',
 
-  'share.help': 'El código compartido guarda el orden de los Packs activados y las identidades del Taller. Los elementos sin suscripción se comprueban antes de importarlos; tras confirmarlo, Steam puede suscribirse automáticamente y un nuevo escaneo después de la descarga restablece el orden compartido en el conjunto actual.',
+  'share.help': 'El código compartido guarda el orden de los Packs activados y las identidades del Taller. Los elementos sin suscripción se comprueban antes de importarlos; tras confirmarlo, Steam puede suscribirse automáticamente y un nuevo escaneo después de la descarga restablece el orden compartido en el conjunto actual. También puedes pegar varias líneas mod_lookup_key:// del lanzador oficial o un código antiguo de Warhammer III.',
   'share.importCurrent': 'Importar en el conjunto actual',
   'official.missing': 'No instalado localmente',
   'official.missingTitle': 'MODs del Taller no instalados',
@@ -1643,6 +1647,10 @@ Object.assign(spanishEntries, {
   'official.subscribeMissingHelp': 'Steam se suscribirá a {count} elementos; los MODs descargados volverán a sus posiciones originales.',
   'official.replaceCurrent': 'Reemplazar el conjunto actual',
   'official.createNew': 'Crear nuevo conjunto (recomendado)',
+  'official.profileInvalidFile': 'Elige un archivo de perfil .twmods válido del lanzador oficial.',
+  'official.profileTooLarge': 'El archivo de perfil del lanzador oficial es demasiado grande.',
+  'official.profileNoMods': 'No se ha reconocido ningún MOD del Taller de Warhammer III en este perfil.',
+  'official.profileUnreadable': 'No se pudo leer el perfil del lanzador oficial: {detail}',
 
   'delete.title': 'Confirmar eliminación de archivos MOD',
   'delete.summary': 'Se procesarán {data} archivos de Data y {workshop} archivos del Taller.',
@@ -1830,6 +1838,11 @@ Object.assign(spanishEntries, {
 Object.assign(entries, {
   'share.wrongGame': ['分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入', 'This share code belongs to another game. Switch to that game before importing.', '다른 게임의 공유 코드입니다. 해당 게임으로 전환한 후 가져오세요.', 'Код предназначен для другой игры. Переключитесь на неё перед импортом.', '別のゲームの共有コードです。対応するゲームに切り替えてからインポートしてください。'],
   'share.legacyGame': ['旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码', 'Legacy share codes only support Warhammer III. Switch games or use a new code that includes the game.', '이전 공유 코드는 워해머 3만 지원합니다. 게임을 전환하거나 게임 정보가 포함된 새 코드를 사용하세요.', 'Старые коды поддерживают только Warhammer III. Переключите игру или используйте новый код с указанием игры.', '旧形式の共有コードはウォーハンマー3専用です。ゲームを切り替えるか、ゲーム情報を含む新しいコードを使用してください。'],
+  'share.emptyInput': ['请粘贴分享码后再导入', 'Paste a share code before importing.', '가져오기 전에 공유 코드를 붙여넣으세요.', 'Вставьте код перед импортом.', 'インポートする前に共有コードを貼り付けてください。'],
+  'share.textTooLong': ['分享码文本过长，请只粘贴分享码内容', 'The pasted text is too long. Paste only the share code content.', '붙여넣은 텍스트가 너무 깁니다. 공유 코드 내용만 붙여넣으세요.', 'Вставленный текст слишком длинный. Вставьте только содержимое кода.', '貼り付けたテキストが長すぎます。共有コードの内容だけを貼り付けてください。'],
+  'share.unknown': ['未识别到可导入的 MOD', 'No importable MOD was recognized.', '가져올 수 있는 MOD를 찾지 못했습니다.', 'Не удалось распознать MOD для импорта.', 'インポートできる MOD が見つかりません。'],
+  'share.foreignApp': ['官方启动器分享码属于其他游戏（App ID {ids}），请切换游戏后导入', 'These official launcher lines belong to another game (App ID {ids}). Switch to that game before importing.', '공식 런처 공유 코드가 다른 게임(App ID {ids})에 속합니다. 해당 게임으로 전환한 후 가져오세요.', 'Эти строки официального лаунчера относятся к другой игре (App ID {ids}). Переключитесь на неё перед импортом.', '公式ランチャーの共有コードは別のゲーム（App ID {ids}）のものです。対応するゲームに切り替えてからインポートしてください。'],
+  'share.noOfficialLines': ['官方启动器分享码中没有有效的 MOD 行，需要以 .pack 结尾且 App ID 匹配', 'No usable MOD line in these official launcher lines. Each line must end with .pack and match the current App ID.', '공식 런처 공유 코드에 유효한 MOD 줄이 없습니다. 각 줄은 .pack으로 끝나고 App ID가 일치해야 합니다.', 'В строках официального лаунчера нет допустимых MOD. Каждая строка должна заканчиваться на .pack и соответствовать текущему App ID.', '公式ランチャーの共有コードに有効な MOD 行がありません。各行は .pack で終わり、App ID が一致している必要があります。'],
   'warnings.duplicatePack': ['存在多个同名 Pack，已保留为独立项目；请只启用一个来源', 'Multiple Packs have the same filename and are listed separately. Enable only one source.', '파일 이름이 같은 Pack을 별도 항목으로 유지했습니다. 하나의 출처만 활성화하세요.', 'Несколько Pack имеют одинаковое имя и показаны отдельно. Включите только один источник.', '同名のPackを別項目として保持しています。有効にするのは1つの入手元だけにしてください。'],
   'errors.duplicatePack': ['不能同时启用多个同名 Pack：{name}', 'Cannot enable multiple Packs with the same filename: {name}', '이름이 같은 Pack을 동시에 활성화할 수 없습니다: {name}', 'Нельзя одновременно включить Pack с одинаковым именем: {name}', '同名のPackを同時に有効にできません：{name}'],
   'errors.packIndex': ['Pack 索引无效或不完整：{name}', 'Invalid or incomplete Pack index: {name}', 'Pack 인덱스가 유효하지 않거나 불완전합니다: {name}', 'Некорректный или неполный индекс Pack: {name}', 'Packのインデックスが無効または不完全です：{name}'],
@@ -1838,6 +1851,11 @@ Object.assign(entries, {
 Object.assign(spanishEntries, {
   'share.wrongGame': 'Este código pertenece a otro juego. Cambia a ese juego antes de importarlo.',
   'share.legacyGame': 'Los códigos antiguos solo admiten Warhammer III. Cambia de juego o usa un código nuevo que incluya el juego.',
+  'share.emptyInput': 'Pega un código compartido antes de importar.',
+  'share.textTooLong': 'El texto pegado es demasiado largo. Pega solo el contenido del código.',
+  'share.unknown': 'No se ha reconocido ningún MOD importable.',
+  'share.foreignApp': 'Estas líneas del lanzador oficial pertenecen a otro juego (App ID {ids}). Cambia a ese juego antes de importarlas.',
+  'share.noOfficialLines': 'Ninguna línea del lanzador oficial es un MOD utilizable: cada línea debe terminar en .pack y coincidir con el App ID actual.',
   'warnings.duplicatePack': 'Varios Pack tienen el mismo nombre y se muestran por separado. Activa solo un origen.',
   'errors.duplicatePack': 'No se pueden activar varios Pack con el mismo nombre: {name}',
   'errors.packIndex': 'Índice de Pack no válido o incompleto: {name}',
@@ -1951,10 +1969,21 @@ export const localizeBackendMessage = (message, fallbackKey = 'common.backendFai
     '游戏运行期间不能修改 MOD 文件': 'context.gameRunningBlocked',
     '分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入': 'share.wrongGame',
     '旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码': 'share.legacyGame',
+    '请粘贴分享码后再导入': 'share.emptyInput',
+    '分享码文本过长，请只粘贴分享码内容': 'share.textTooLong',
+    '未识别到可导入的 MOD': 'share.unknown',
+    '官方启动器分享码中没有有效的 MOD 行，需要以 .pack 结尾且 App ID 匹配': 'share.noOfficialLines',
+    '请选择有效的官方启动器 .twmods 配置': 'official.profileInvalidFile',
+    '官方启动器配置文件过大': 'official.profileTooLarge',
+    '配置中未识别到 Warhammer III 工坊 MOD': 'official.profileNoMods',
     '存在多个同名 Pack，已保留为独立项目；请只启用一个来源': 'warnings.duplicatePack',
     '无法读取当前 Steam 账号的订阅清单，已跳过工坊 MOD；请启动 Steam 后刷新': 'warnings.workshopSubscriptionsUnavailable',
   }
   if (knownMessages[value]) return t(knownMessages[value])
+  const profileUnreadable = value.match(/^无法读取官方启动器配置：(.+)$/)
+  if (profileUnreadable) return t('official.profileUnreadable', { detail: profileUnreadable[1] })
+  const foreignApp = value.match(/^官方启动器分享码属于其他游戏（App ID (.+)），请切换游戏后导入$/)
+  if (foreignApp) return t('share.foreignApp', { ids: foreignApp[1] })
   const duplicate = value.match(/^不能同时启用多个同名 Pack：(.+)$/)
   if (duplicate) return t('errors.duplicatePack', { name: duplicate[1] })
   const invalidIndex = value.match(/^Pack (?:索引无效|索引不完整|文件索引损坏)：(.+)$/)

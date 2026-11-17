@@ -269,6 +269,41 @@ describe('built-in interface languages', () => {
     )
   })
 
+  it('explains share-code import failures in the selected language', () => {
+    const cases = [
+      ['请粘贴分享码后再导入', 'share.emptyInput', {}],
+      ['分享码文本过长，请只粘贴分享码内容', 'share.textTooLong', {}],
+      ['未识别到可导入的 MOD', 'share.unknown', {}],
+      ['官方启动器分享码中没有有效的 MOD 行，需要以 .pack 结尾且 App ID 匹配', 'share.noOfficialLines', {}],
+      ['官方启动器分享码属于其他游戏（App ID 594570），请切换游戏后导入', 'share.foreignApp', { ids: '594570' }],
+    ]
+    for (const language of languageCodes) {
+      applyInterfaceLanguage(language)
+      for (const [source, key, params] of cases) {
+        expect(localizeBackendMessage(source), `${language}: ${key}`).toBe(t(key, params))
+      }
+    }
+    applyInterfaceLanguage('en-US')
+    expect(localizeBackendMessage(cases[4][0])).toContain('594570')
+  })
+
+  it('explains official launcher profile failures in the selected language', () => {
+    const cases = [
+      ['请选择有效的官方启动器 .twmods 配置', 'official.profileInvalidFile', {}],
+      ['官方启动器配置文件过大', 'official.profileTooLarge', {}],
+      ['配置中未识别到 Warhammer III 工坊 MOD', 'official.profileNoMods', {}],
+      ['无法读取官方启动器配置：Permission denied', 'official.profileUnreadable', { detail: 'Permission denied' }],
+    ]
+    for (const language of languageCodes) {
+      applyInterfaceLanguage(language)
+      for (const [source, key, params] of cases) {
+        expect(localizeBackendMessage(source), `${language}: ${key}`).toBe(t(key, params))
+      }
+    }
+    applyInterfaceLanguage('en-US')
+    expect(localizeBackendMessage(cases[3][0])).toContain('Permission denied')
+  })
+
   it('explains an unavailable game data subscription check in English', () => {
     applyInterfaceLanguage('en-US')
     const message = localizeBackendMessage(

@@ -77,11 +77,15 @@ from .table_schema import load_latest_schema
 from .scanner import ModScanner, is_internal_feature_mod
 from .save_games import SaveGameService
 from .share import (
-    export_share,
     parse_pending_workshop_mod_id,
-    parse_share,
     resolve_share,
     resolve_share_with_pending,
+)
+from .share_code import (
+    DEFAULT_EXPORT_FORMAT_ID,
+    default_share_code_service,
+    share_context,
+    share_mods_from_assets,
 )
 from .workshop_collections import fetch_workshop_collection
 from .storage import StateRepository
@@ -204,6 +208,7 @@ class API:
         self.scanner = ModScanner(self.workshop_service)
         self.load_order = LoadOrderService(self.data_dir / "backups")
         self.launch_path_aliases = LaunchPathAliases()
+        self.share_codes = default_share_code_service()
         self._sync_save_games()
         self._assets: dict[str, ModAsset] = {}
         self._asset_aliases: dict[str, str] = {}
@@ -2571,13 +2576,19 @@ class API:
 
     def _export_share(self, ordered_mod_ids: list[str]) -> dict[str, str]:
         with self._context_lock:
+            game = self._active_game()
             mods = [self._require_asset(mod_id) for mod_id in ordered_mod_ids]
-            return {"share_code": export_share(mods, self._active_game().id)}
+            share_code = self.share_codes.serialize(
+                share_mods_from_assets(mods),
+                share_context(game.id),
+                format_id=DEFAULT_EXPORT_FORMAT_ID,
+            )
+            return {"share_code": share_code}
 
     def _preview_import_share(self, share_code: str) -> dict[str, Any]:
         with self._context_lock:
             game = self._active_game()
-            references = parse_share(share_code, game.id)
+            references = self.share_codes.references(share_code, share_context(game.id))
             ordered_ids, missing = resolve_share(references, self._assets)
         references_by_workshop_id: dict[str, dict[str, Any]] = {}
         for reference in references:
@@ -2620,11 +2631,10 @@ class API:
 
     def _import_share(self, share_code: str) -> dict[str, Any]:
         with self._context_lock:
-            references = parse_share(share_code, self._active_game().id)
+            game = self._active_game()
+            references = self.share_codes.references(share_code, share_context(game.id))
             ordered_ids, missing = resolve_share_with_pending(references, self._assets)
-            self.state_repository.update_current_playset(
-                ordered_ids, self._active_game().id
-            )
+            self.state_repository.update_current_playset(ordered_ids, game.id)
             pending_workshop_ids = list(
                 dict.fromkeys(
                     str(reference.get("workshop_id") or "")
@@ -2738,7 +2748,10 @@ class API:
             "supports_official_profile_import",
             "Official launcher profile import",
         )
-        parsed = parse_mod_profile(profile_path)
+        game = self._active_game()
+        parsed = parse_mod_profile(
+            profile_path, share_context(game.id), self.share_codes
+        )
         references = parsed["references"]
         ordered_ids, missing = resolve_share(references, self._assets)
         references_by_workshop_id = {
@@ -2752,7 +2765,7 @@ class API:
             statuses = query_workshop_subscription_status(
                 list(references_by_workshop_id),
                 language,
-                app_id=int(self._active_game().app_id),
+                app_id=int(game.app_id),
             )
         except SteamworksBridgeError as exc:
             raise ValueError(f"无法检查官方配置中的 Workshop 订阅状态：{exc}") from exc
@@ -2786,7 +2799,9 @@ class API:
         game_id = self._active_game().id
         if mode not in {"new", "replace"}:
             raise ValueError("官方配置导入模式无效")
-        parsed = parse_mod_profile(profile_path)
+        parsed = parse_mod_profile(
+            profile_path, share_context(game_id), self.share_codes
+        )
         references = parsed["references"]
         ordered_ids, missing = resolve_share_with_pending(references, self._assets)
         if mode == "new":

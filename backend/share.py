@@ -1,99 +1,45 @@
 from __future__ import annotations
 
-import base64
-import json
 import urllib.parse
-import zlib
 from typing import Any
 
+from .games import DEFAULT_GAME_ID
 from .models import ModAsset
-from .games import DEFAULT_GAME_ID, game_definitions
+from .share_adapters import LEGACY_PREFIXES, PREFIX
+from .share_code import (
+    DEFAULT_EXPORT_FORMAT_ID,
+    default_share_code_service,
+    share_context,
+    share_mods_from_assets,
+)
 
-PREFIX = "WMM1"
-LEGACY_PREFIXES = ("WWM1", "WWMM1")
 PENDING_WORKSHOP_PREFIX = "pending:steam:"
+
+__all__ = [
+    "LEGACY_PREFIXES",
+    "PENDING_WORKSHOP_PREFIX",
+    "PREFIX",
+    "export_share",
+    "parse_pending_workshop_mod_id",
+    "parse_share",
+    "pending_workshop_mod_id",
+    "resolve_share",
+    "resolve_share_with_pending",
+]
 
 
 def export_share(mods: list[ModAsset], game_id: str = DEFAULT_GAME_ID) -> str:
-    if game_id not in {game.id for game in game_definitions()}:
-        raise ValueError("不支持的分享码版本或游戏")
-    payload = {
-        "schema_version": 2,
-        "game": game_id,
-        "mods": [
-            {
-                "id": mod.id,
-                "workshop_id": mod.workshop_id,
-                "pack_name": mod.pack_name,
-                "source": mod.source,
-            }
-            for mod in mods
-        ],
-    }
-    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    compressed = zlib.compress(raw, level=9)
-    checksum = zlib.crc32(compressed) & 0xFFFFFFFF
-    encoded = base64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
-    return f"{PREFIX}-{checksum:08X}-{encoded}"
+    """Compatibility wrapper: serialize through the default WMM1 adapter."""
+    return default_share_code_service().serialize(
+        share_mods_from_assets(mods),
+        share_context(game_id),
+        format_id=DEFAULT_EXPORT_FORMAT_ID,
+    )
 
 
 def parse_share(value: str, game_id: str = DEFAULT_GAME_ID) -> list[dict[str, Any]]:
-    text = value.strip()
-    matched_prefix = next(
-        (
-            candidate
-            for candidate in (PREFIX, *LEGACY_PREFIXES)
-            if text.startswith(f"{candidate}-")
-        ),
-        "",
-    )
-    if matched_prefix:
-        parts = text.split("-", 2)
-        if len(parts) != 3:
-            raise ValueError("分享码格式错误")
-        _, checksum_text, encoded = parts
-        padding = "=" * (-len(encoded) % 4)
-        try:
-            compressed = base64.urlsafe_b64decode(encoded + padding)
-            expected = int(checksum_text, 16)
-            if zlib.crc32(compressed) & 0xFFFFFFFF != expected:
-                raise ValueError("分享码校验失败")
-            payload = json.loads(zlib.decompress(compressed).decode("utf-8"))
-        except (ValueError, TypeError, json.JSONDecodeError, zlib.error) as exc:
-            raise ValueError(f"无法解析分享码：{exc}") from exc
-        if not isinstance(payload, dict):
-            raise ValueError("分享码内容无效")
-        version = payload.get("schema_version")
-        shared_game = payload.get("game")
-        if version == 1 and shared_game == "wh3":
-            shared_game = DEFAULT_GAME_ID
-        elif version != 2 or not isinstance(shared_game, str) or shared_game not in {game.id for game in game_definitions()}:
-            raise ValueError("不支持的分享码版本或游戏")
-        if shared_game != game_id:
-            raise ValueError("分享码所属游戏与当前游戏不一致，请切换到对应游戏后导入")
-        mods = payload.get("mods", [])
-        if not isinstance(mods, list):
-            raise ValueError("分享码内容无效")
-        return [item for item in mods if isinstance(item, dict)]
-
-    # Compatibility with WH3-Mod-Manager's workshopId[;loadOrder]|... format.
-    if game_id != DEFAULT_GAME_ID:
-        raise ValueError("旧版分享码仅支持战锤3，请切换游戏或使用包含游戏信息的新版分享码")
-    result = []
-    for index, token in enumerate(part.strip() for part in text.split("|")):
-        if not token:
-            continue
-        workshop_id, _, load_order = token.partition(";")
-        result.append(
-            {
-                "workshop_id": workshop_id.strip(),
-                "position": int(load_order) if load_order.strip().isdigit() else index,
-                "legacy_workshop_project": True,
-            }
-        )
-    if not result:
-        raise ValueError("未识别到可导入的 MOD")
-    return sorted(result, key=lambda item: item.get("position", 0))
+    """Compatibility wrapper: deserialize through the adapter chain."""
+    return default_share_code_service().references(value, share_context(game_id))
 
 
 def resolve_share(
