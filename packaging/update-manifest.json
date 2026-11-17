@@ -1,25 +1,43 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.3.8",
-  "published_at": "2026-11-16",
+  "version": "1.3.9",
+  "published_at": "2026-11-17",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.8/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.9/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.8/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.3.8/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.9/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.3.9/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "E762C414A8CA30C60E041D8C37E6818AB8B0EA11F9F531B8E2A8949B5C650B7B",
-    "size": 65661881
+    "sha256": "5D438FDE54EB34F7AEA596C8AA7135D157B33B728DB5D28C0824303C82E6E0FD",
+    "size": 65665351
   },
   "changelog": [
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "调整-分享码导入导出功能改为使用官方新启动器的分享码，以提高适配性"
+        }
+      ]
+    },
     {
       "title": "新增",
       "changes": [
         {
           "type": "feature",
-          "text": "新增-设置中支持音频池扩容，如果你在玩某些mod遇到突然游戏没声音了的问题，可以试着开启这个功能"
+          "text": "新增-隐藏文件夹功能，可以暂时不按照文件夹来展示列表"
+        }
+      ]
+    },
+    {
+      "title": "调整",
+      "changes": [
+        {
+          "type": "improvement",
+          "text": "调整-自动排障按钮移到了设置-功能里面，这个功能局限性太大，只建议真正有需要且懂得这个功能意义的玩家使用"
         }
       ]
     }
