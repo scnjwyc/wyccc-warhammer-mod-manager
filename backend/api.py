@@ -1500,7 +1500,7 @@ class API:
         ordered_mod_ids: list[str],
         expected_token: str = "",
     ) -> dict[str, Any]:
-        with self._order_lock:
+        with self._order_lock, self._context_lock:
             return self._save_load_order_locked(ordered_mod_ids, expected_token)
 
     def _save_load_order_locked(
@@ -1509,6 +1509,10 @@ class API:
         expected_token: str = "",
     ) -> dict[str, Any]:
         paths = self.settings_service.resolve_game_paths()
+        ordered_mod_ids = [
+            mod_id for mod_id in self._canonicalize_mod_ids(ordered_mod_ids)
+            if not parse_pending_workshop_mod_id(mod_id)
+        ]
         if not paths.game_definition.uses_mod_list:
             plan = self._directory_mod_plan(ordered_mod_ids)
             game_id = paths.game_id
@@ -1539,7 +1543,6 @@ class API:
             paths.workshop_path,
         )
         game_id = paths.game_id
-        ordered_mod_ids = self._canonicalize_mod_ids(ordered_mod_ids)
         plan = self.load_order.build_plan(
             paths.game_path,
             paths.data_path,
@@ -2621,23 +2624,71 @@ class API:
 
     def _import_share(self, share_code: str) -> dict[str, Any]:
         with self._context_lock:
-            references = parse_share(share_code, self._active_game().id)
+            game = self._active_game()
+            revision = self._game_context_revision
+            playset_id = self.state_repository.get_current_playset_id(game.id)
+            references = parse_share(share_code, game.id)
             ordered_ids, missing = resolve_share_with_pending(references, self._assets)
-            self.state_repository.update_current_playset(
-                ordered_ids, self._active_game().id
-            )
-            pending_workshop_ids = list(
-                dict.fromkeys(
-                    str(reference.get("workshop_id") or "")
-                    for reference in missing
-                    if str(reference.get("workshop_id") or "").isdigit()
-                )
-            )
+        workshop_ids = list(dict.fromkeys(
+            reference["workshop_id"] for reference in missing if reference.get("workshop_id")
+        ))
+        try:
+            _, _, subscription_failures = self._subscribe_workshop_import_items(workshop_ids, int(game.app_id))
+        except SteamworksBridgeError as exc:
+            raise ValueError(f"share.subscriptionFailed: {' '.join(str(exc).splitlines())}") from exc
+
+        with self._context_lock:
+            if (
+                revision != self._game_context_revision
+                or playset_id != self.state_repository.get_current_playset_id(game.id)
+            ):
+                return {"discarded": True}
+            if workshop_ids:
+                ordered_ids, missing = resolve_share_with_pending(references, self._assets)
+            if subscription_failures:
+                failed_ids = {item["workshop_id"] for item in subscription_failures}
+                ordered_ids = [
+                    mod_id for mod_id in ordered_ids
+                    if not (pending := parse_pending_workshop_mod_id(mod_id)) or pending[0] not in failed_ids
+                ]
+                if not ordered_ids:
+                    raise ValueError("share.subscriptionFailed")
+            self.state_repository.update_playset(playset_id, ordered_ids, game.id)
+            payload = self._current_playset_payload()
             return {
-                **self._current_playset_payload(),
+                **payload,
                 "missing": missing,
-                "pending_workshop_ids": pending_workshop_ids,
+                "pending_workshop_ids": list(dict.fromkeys(
+                    pending[0] for mod_id in payload["missing_mod_ids"]
+                    if (pending := parse_pending_workshop_mod_id(mod_id))
+                )),
+                "subscription_failures": subscription_failures,
             }
+
+    @staticmethod
+    def _subscribe_workshop_import_items(
+        workshop_ids: list[str], app_id: int,
+    ) -> tuple[list[str], list[str], list[dict[str, str]]]:
+        subscribed_ids: list[str] = []
+        already_subscribed_ids: list[str] = []
+        failures: list[dict[str, str]] = []
+        for start in range(0, len(workshop_ids), 200):
+            result = subscribe_workshop_items(workshop_ids[start : start + 200], app_id=app_id)
+            subscribed_ids.extend(str(item) for item in result.get("subscribed", []))
+            already_subscribed_ids.extend(str(item) for item in result.get("already_subscribed", []))
+            failed = result.get("failed")
+            if not isinstance(failed, list):
+                continue
+            for item in failed:
+                if not isinstance(item, dict):
+                    continue
+                workshop_id = str(item.get("workshop_id") or "").strip()
+                if workshop_id.isdigit():
+                    failures.append({
+                        "workshop_id": workshop_id,
+                        "error": str(item.get("error") or "").strip(),
+                    })
+        return subscribed_ids, already_subscribed_ids, failures
 
     def _import_workshop_collection(self, collection_value: str) -> dict[str, Any]:
         collection = fetch_workshop_collection(
@@ -2668,32 +2719,10 @@ class API:
             for workshop_id in dict.fromkeys(workshop_ids)
             if not subscription_by_workshop_id.get(workshop_id, False)
         ]
-        subscribed_ids: list[str] = []
-        already_subscribed_ids: list[str] = []
-        subscription_failures: list[dict[str, str]] = []
         try:
-            for start in range(0, len(unsubscribed_ids), 200):
-                result = subscribe_workshop_items(
-                    unsubscribed_ids[start : start + 200],
-                    app_id=int(self._active_game().app_id),
-                )
-                subscribed_ids.extend(str(item) for item in result.get("subscribed", []))
-                already_subscribed_ids.extend(
-                    str(item) for item in result.get("already_subscribed", [])
-                )
-                failed = result.get("failed")
-                if isinstance(failed, list):
-                    for item in failed:
-                        if not isinstance(item, dict):
-                            continue
-                        workshop_id = str(item.get("workshop_id") or "").strip()
-                        if workshop_id.isdigit():
-                            subscription_failures.append(
-                                {
-                                    "workshop_id": workshop_id,
-                                    "error": str(item.get("error") or "").strip(),
-                                }
-                            )
+            subscribed_ids, already_subscribed_ids, subscription_failures = self._subscribe_workshop_import_items(
+                unsubscribed_ids, int(self._active_game().app_id),
+            )
         except SteamworksBridgeError as exc:
             raise ValueError(f"自动订阅合集 MOD 失败：{exc}") from exc
 

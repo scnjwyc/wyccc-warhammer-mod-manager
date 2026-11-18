@@ -18,8 +18,8 @@ import {
 } from './modSearch'
 
 let playsetWriteQueue = Promise.resolve()
-let collectionImportPollTimer = 0
-const COLLECTION_IMPORT_POLL_INTERVAL_MS = 4_000
+let workshopImportPollTimer = 0
+const WORKSHOP_IMPORT_POLL_INTERVAL_MS = 4_000
 const LIST_UNDO_HISTORY_LIMIT = 30
 const WORKSHOP_ELIGIBILITY_BATCH_SIZE = 500
 
@@ -92,7 +92,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.3.9',
+    appVersion: '1.3.10',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -134,7 +134,7 @@ export const useAppStore = defineStore('app', {
     pendingWorkshopRefreshAll: false,
     pendingWorkshopRefreshForce: false,
     liveModRefreshing: false,
-    collectionImportSync: null,
+    workshopImportSync: null,
     warnings: [],
     ignoredScanWarningCodes: [],
     warningsOnly: false,
@@ -466,7 +466,7 @@ export const useAppStore = defineStore('app', {
     },
     beginGameContextChange() {
       this.gameContextRevision += 1
-      this.stopCollectionImportDownloadSync()
+      this.stopWorkshopImportDownloadSync()
       this.workshopRefreshing = false
       this.liveModRefreshing = false
       return this.gameContextRevision
@@ -549,6 +549,9 @@ export const useAppStore = defineStore('app', {
         this.modRevision = Number(data.mod_revision ?? this.modRevision)
         this.playsets = data.playsets || this.playsets
         this.currentPlaysetId = data.current_playset?.id || this.currentPlaysetId
+        if (this.workshopImportSync?.playsetId !== this.currentPlaysetId) {
+          this.startWorkshopImportDownloadSync(this.missingEnabledIds.map(pendingWorkshopId))
+        }
         this.modFolders = data.mod_folders || []
         this.modFolderLayouts = data.mod_folder_layouts || { active: [], inactive: [] }
         if (!this.selectedId || !installed.has(this.selectedId)) {
@@ -800,7 +803,9 @@ export const useAppStore = defineStore('app', {
       this.refreshMissingDependencyWarnings()
       const playsetId = this.currentPlaysetId
       const snapshot = this.playsetOrderSnapshot()
-      const activeSnapshot = [...this.activeIds]
+      const activeIds = new Set(this.activeIds)
+      // The backend can resolve downloads that finish before this queued save runs.
+      const orderToSave = snapshot.filter(id => activeIds.has(id) || pendingWorkshopId(id))
       if (!playsetId) return Promise.resolve()
       this.orderSavePending += 1
       this.orderSaving = true
@@ -815,7 +820,7 @@ export const useAppStore = defineStore('app', {
               this.applyMissingDependencyWarnings(data.missing_dependency_warnings)
             }
           }
-          const saved = await invoke('save_load_order', activeSnapshot, this.orderToken)
+          const saved = await invoke('save_load_order', orderToSave, this.orderToken)
           this.orderToken = saved.order_token
           if (saved.backup) this.backups.unshift(saved.backup)
           succeeded = true
@@ -877,9 +882,9 @@ export const useAppStore = defineStore('app', {
       if (!playsetId || playsetId === this.currentPlaysetId) return this.currentPlayset
       await this.flushPlaysetUpdates()
       return this.withBusy(t('busy.switchPlayset'), async () => {
-        this.stopCollectionImportDownloadSync()
         const data = await invoke('switch_playset', playsetId)
         this.applyPlaysetPayload(data)
+        this.startWorkshopImportDownloadSync(this.missingEnabledIds.map(pendingWorkshopId))
         this.dirty = true
         this.recordCurrentPlaysetChange()
         if (data.missing_mod_ids.length) {
@@ -1731,9 +1736,6 @@ export const useAppStore = defineStore('app', {
     async exportShare() {
       return invoke('export_share', this.activeIds)
     },
-    async previewShareImport(value) {
-      return this.withBusy(t('busy.previewShare'), () => invoke('preview_import_share', value))
-    },
     async subscribeWorkshopItems(workshopIds) {
       return this.withBusy(t('busy.subscribeWorkshop'), async () => {
         const data = await invoke('subscribe_workshop_items', workshopIds)
@@ -1807,22 +1809,25 @@ export const useAppStore = defineStore('app', {
       })
     },
     async importShare(value) {
+      const revision = this.gameContextRevision
       await this.flushPlaysetUpdates()
+      if (revision !== this.gameContextRevision) return null
       return this.withBusy(t('busy.importShare'), async () => {
         const data = await invoke('import_share', value)
+        if (!this.isCurrentGameResult(data, revision)) return null
         this.applyPlaysetPayload(data)
         this.dirty = true
         this.recordCurrentPlaysetChange()
-        if ((data.pending_workshop_ids || []).length) {
-          this.notify(
-            t('toast.pendingDownloads', { count: data.pending_workshop_ids.length }),
-            'warning',
-          )
-        } else if ((data.missing || []).length) {
-          this.notify(t('toast.localMissing', { count: data.missing.length }), 'warning')
-        } else {
-          this.notify(t('toast.playsetUpdated', { name: localizedPlaysetName(data.current_playset) }))
-        }
+        this.startWorkshopImportDownloadSync(data.pending_workshop_ids)
+        const pending = data.pending_workshop_ids?.length || 0
+        const failed = data.subscription_failures?.length || 0
+        const localMissing = (data.missing || []).filter(item => !item.workshop_id).length
+        const messages = []
+        if (failed) messages.push(t('share.subscriptionPartial', { count: failed }))
+        if (pending) messages.push(t('share.pendingDownloads', { count: pending }))
+        if (localMissing) messages.push(t('toast.localMissing', { count: localMissing }))
+        if (messages.length) this.notify(messages.join(' '), 'warning')
+        else this.notify(t('toast.playsetUpdated', { name: localizedPlaysetName(data.current_playset) }))
         return data
       })
     },
@@ -1847,11 +1852,8 @@ export const useAppStore = defineStore('app', {
             'warning',
           )
         }
+        this.startWorkshopImportDownloadSync(data.pending_workshop_ids, data.subscription_failures)
         if ((data.pending_workshop_ids || []).length) {
-          this.startCollectionImportDownloadSync(
-            data.pending_workshop_ids,
-            data.subscription_failures,
-          )
           this.notify(
             t('toast.pendingDownloads', { count: data.pending_workshop_ids.length }),
             'warning',
@@ -1911,7 +1913,7 @@ export const useAppStore = defineStore('app', {
         () => invoke('preview_delete_mod_files', modIds),
       )
     },
-    startCollectionImportDownloadSync(pendingWorkshopIds, subscriptionFailures = []) {
+    startWorkshopImportDownloadSync(pendingWorkshopIds, subscriptionFailures = []) {
       const failedIds = new Set(
         (subscriptionFailures || [])
           .map(item => String(item?.workshop_id || ''))
@@ -1919,72 +1921,53 @@ export const useAppStore = defineStore('app', {
       )
       const pendingIds = [...new Set((pendingWorkshopIds || []).map(String))]
         .filter(value => /^\d+$/.test(value) && !failedIds.has(value))
-      if (!pendingIds.length) return
-      this.collectionImportSync = {
+      if (!pendingIds.length) {
+        this.stopWorkshopImportDownloadSync()
+        return
+      }
+      this.workshopImportSync = {
         playsetId: this.currentPlaysetId,
         pendingWorkshopIds: pendingIds,
       }
-      this.scheduleCollectionImportDownloadRefresh()
+      this.scheduleWorkshopImportDownloadRefresh()
     },
-    stopCollectionImportDownloadSync() {
-      this.collectionImportSync = null
-      if (collectionImportPollTimer) {
-        window.clearTimeout(collectionImportPollTimer)
-        collectionImportPollTimer = 0
+    stopWorkshopImportDownloadSync() {
+      this.workshopImportSync = null
+      if (workshopImportPollTimer) {
+        window.clearTimeout(workshopImportPollTimer)
+        workshopImportPollTimer = 0
       }
     },
-    scheduleCollectionImportDownloadRefresh() {
-      if (collectionImportPollTimer || !this.collectionImportSync) return
-      collectionImportPollTimer = window.setTimeout(async () => {
-        collectionImportPollTimer = 0
-        await this.refreshCollectionImportDownloads()
-      }, COLLECTION_IMPORT_POLL_INTERVAL_MS)
+    scheduleWorkshopImportDownloadRefresh() {
+      if (workshopImportPollTimer || !this.workshopImportSync) return
+      workshopImportPollTimer = window.setTimeout(async () => {
+        workshopImportPollTimer = 0
+        await this.refreshWorkshopImportDownloads()
+      }, WORKSHOP_IMPORT_POLL_INTERVAL_MS)
     },
-    updateCollectionImportProgress(data) {
-      const sync = this.collectionImportSync
+    updateWorkshopImportProgress(data) {
+      const sync = this.workshopImportSync
       if (!sync || sync.playsetId !== this.currentPlaysetId) return
       const pendingIds = new Set(
         (data.missing_enabled_ids || []).map(pendingWorkshopId).filter(Boolean),
       )
       const remaining = sync.pendingWorkshopIds.filter(id => pendingIds.has(id))
-      this.collectionImportSync = remaining.length
+      this.workshopImportSync = remaining.length
         ? { ...sync, pendingWorkshopIds: remaining }
         : null
     },
-    async refreshCollectionImportDownloads() {
-      const revision = this.gameContextRevision
-      const sync = this.collectionImportSync
+    async refreshWorkshopImportDownloads() {
+      const sync = this.workshopImportSync
       if (!sync) return null
-      if (sync.playsetId !== this.currentPlaysetId || this.runtime.running) {
-        this.stopCollectionImportDownloadSync()
+      if (sync.playsetId !== this.currentPlaysetId) {
+        this.stopWorkshopImportDownloadSync()
         return null
       }
-      if (this.liveModRefreshing || this.workshopRefreshing || this.busy) {
-        this.scheduleCollectionImportDownloadRefresh()
-        return null
-      }
-      this.liveModRefreshing = true
       try {
-        await this.flushPlaysetUpdates()
-        if (revision !== this.gameContextRevision) return null
-        const previousActiveIds = [...this.activeIds]
-        const data = await invoke('scan_mods', false)
-        if (!this.isCurrentGameResult(data, revision)) return null
-        await this.applyExternalScan(data, { forcePlaysetOrder: true, revision })
-        if (!this.isCurrentGameResult(data, revision)) return null
-        this.updateCollectionImportProgress(data)
-        if (!sameIds(previousActiveIds, this.activeIds)) {
-          this.dirty = true
-          this.recordCurrentPlaysetChange()
-        }
-        return data
-      } catch {
-        return null
+        if (this.workshopRefreshing || this.runtime.running || this.runtime.diagnostics_running) return null
+        return await this.refreshModsInBackground({ quiet: true })
       } finally {
-        if (revision === this.gameContextRevision) {
-          this.liveModRefreshing = false
-          this.scheduleCollectionImportDownloadRefresh()
-        }
+        this.scheduleWorkshopImportDownloadRefresh()
       }
     },
     async applyExternalScan(data, {
@@ -2020,7 +2003,7 @@ export const useAppStore = defineStore('app', {
       if (!this.isCurrentGameResult(data, revision)) return
       void this.loadThumbnails()
     },
-    async refreshModsInBackground() {
+    async refreshModsInBackground({ quiet = false } = {}) {
       const revision = this.gameContextRevision
       const folderRevision = this.modFolderRevision
       if (
@@ -2031,24 +2014,30 @@ export const useAppStore = defineStore('app', {
       this.liveModRefreshing = true
       try {
         await this.flushPlaysetUpdates()
-        if (revision !== this.gameContextRevision) return null
+        if (revision !== this.gameContextRevision || this.busy) return null
+        const sync = this.workshopImportSync
+        const playsetId = this.currentPlaysetId
+        const forcePlaysetOrder = sync?.playsetId === playsetId
+        const previousActiveIds = [...this.activeIds]
         const previousWorkshopIds = new Set(
           this.mods
             .map(mod => String(mod?.workshop_id || '').trim())
             .filter(Boolean),
         )
         const data = await invoke('scan_mods', false)
-        if (!this.isCurrentGameResult(data, revision)) return null
+        if (
+          !this.isCurrentGameResult(data, revision) || this.busy
+          || playsetId !== this.currentPlaysetId || sync !== this.workshopImportSync
+          || (forcePlaysetOrder && !sameIds(previousActiveIds, this.activeIds))
+        ) return null
         const newWorkshopIds = (data.mods || []).filter(mod => {
           const workshopId = String(mod?.workshop_id || '').trim()
           return mod?.source === 'workshop' && workshopId && !previousWorkshopIds.has(workshopId)
         }).map(mod => String(mod.workshop_id))
-        const forcePlaysetOrder = this.collectionImportSync?.playsetId === this.currentPlaysetId
-        const previousActiveIds = [...this.activeIds]
         await this.applyExternalScan(data, { forcePlaysetOrder, revision, folderRevision })
         if (!this.isCurrentGameResult(data, revision)) return null
-        if (forcePlaysetOrder) {
-          this.updateCollectionImportProgress(data)
+        if (forcePlaysetOrder && sync === this.workshopImportSync && playsetId === this.currentPlaysetId) {
+          this.updateWorkshopImportProgress(data)
           if (!sameIds(previousActiveIds, this.activeIds)) {
             this.dirty = true
             this.recordCurrentPlaysetChange()
@@ -2059,7 +2048,9 @@ export const useAppStore = defineStore('app', {
         }
         return data
       } catch (error) {
-        if (revision === this.gameContextRevision) this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
+        if (!quiet && revision === this.gameContextRevision) {
+          this.notify(error.message || t('toast.liveModRefreshFailed'), 'warning')
+        }
         return null
       } finally {
         if (revision === this.gameContextRevision) this.liveModRefreshing = false

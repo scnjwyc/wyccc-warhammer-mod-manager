@@ -9,6 +9,13 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.3.10",
+        "date": "2026-11-18",
+        "entries": (
+            ("v1310_adjusted_title", (("improvement", "v1310_share_subscription"),)),
+        ),
+    },
+    {
         "version": "1.3.9",
         "date": "2026-11-17",
         "entries": (
@@ -822,6 +829,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v1310_adjusted_title": "调整",
+        "v1310_share_subscription": "调整-导入分享码时会自动订阅缺失的工坊 MOD，下载完成后自动启用并按分享顺序排序",
         "v139_adjusted_title": "调整",
         "v139_added_title": "新增",
         "v139_official_sharing": "调整-分享码导入导出功能改为使用官方新启动器的分享码，以提高适配性",
@@ -1116,6 +1125,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v1310_adjusted_title": "Adjusted",
+        "v1310_share_subscription": "Adjusted - Importing a share code now subscribes to missing Workshop MODs automatically and enables them in the shared order once the download finishes.",
         "v139_adjusted_title": "Adjusted",
         "v139_added_title": "Added",
         "v139_official_sharing": "Adjusted - Share-code import and export now use the official new launcher's format for better compatibility.",
@@ -1410,6 +1421,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v1310_adjusted_title": "조정",
+        "v1310_share_subscription": "조정 - 공유 코드를 가져오면 누락된 창작마당 MOD를 자동으로 구독하고, 다운로드가 끝나면 공유된 순서대로 활성화합니다.",
         "v139_adjusted_title": "조정",
         "v139_added_title": "추가",
         "v139_official_sharing": "조정 - 호환성을 높이기 위해 공유 코드 가져오기와 내보내기에 공식 새 실행기의 형식을 사용합니다.",
@@ -1704,6 +1717,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v1310_adjusted_title": "Изменено",
+        "v1310_share_subscription": "Изменено - При импорте кода пропускающиеся моды Мастерской подписываются автоматически и включаются в указанном порядке после загрузки.",
         "v139_adjusted_title": "Изменено",
         "v139_added_title": "Добавлено",
         "v139_official_sharing": "Изменено - Для улучшения совместимости импорт и экспорт кодов теперь используют формат нового официального менеджера.",
@@ -1998,6 +2013,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v1310_adjusted_title": "調整",
+        "v1310_share_subscription": "調整 - 共有コードをインポートすると、不足しているワークショップ MOD を自動で購読し、ダウンロード後に共有された順序で有効化するようにしました。",
         "v139_adjusted_title": "調整",
         "v139_added_title": "追加",
         "v139_official_sharing": "調整 - 互換性を高めるため、共有コードのインポートとエクスポートに新しい公式ランチャーの形式を使用するようにしました。",
@@ -2292,6 +2309,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v1310_adjusted_title": "Ajustado",
+        "v1310_share_subscription": "Ajustado - Al importar un código compartido, los MODs del Taller que faltan se suscriben automáticamente y se activan en el orden compartido cuando termina la descarga.",
         "v139_adjusted_title": "Ajustado",
         "v139_added_title": "Añadido",
         "v139_official_sharing": "Ajustado - La importación y exportación de códigos compartidos ahora utiliza el formato del nuevo gestor oficial para mejorar la compatibilidad.",

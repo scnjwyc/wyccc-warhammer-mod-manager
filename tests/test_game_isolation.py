@@ -88,6 +88,24 @@ class GameIsolationTests(unittest.TestCase):
         exported = self.api.call("export_share", [[asset.id]])["data"]["share_code"]
         self.assertEqual(parse_share(exported, "three_kingdoms")[0]["pack_name"], asset.pack_name)
 
+    def test_share_import_does_not_apply_to_a_playset_switched_during_subscription(self):
+        game, _ = self.select_game()
+        self.api.state_repository.update_current_playset(["original-order"])
+        another_playset = self.api.state_repository.create_playset("Other", ["other-order"])
+        self.api.state_repository.switch_playset("default")
+        asset = make_asset(write_pack(game / "downloaded.pack"), "example", "workshop", "123")
+
+        def subscribe(workshop_ids, *, app_id):
+            self.api.state_repository.switch_playset(another_playset["id"])
+            return {"subscribed": workshop_ids}
+
+        with patch("backend.api.subscribe_workshop_items", side_effect=subscribe) as subscribe_mock:
+            imported = self.api.call("import_share", [export_share([asset])])
+
+        self.assertTrue(imported["data"]["discarded"])
+        self.assertEqual(self.api.state_repository.get_enabled_order(), ["other-order"])
+        subscribe_mock.assert_called_once_with(["123"], app_id=1_142_710)
+
     def test_three_kingdoms_mod_with_warhammer_feature_name_is_visible_and_enableable(self):
         game, _ = self.select_game("three_kingdoms")
         pack_name = GAME_DATA_FEATURE_WORKSHOP_ITEMS["unit_size"]["pack_name"]

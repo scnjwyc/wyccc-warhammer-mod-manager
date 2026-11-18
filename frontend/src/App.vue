@@ -443,29 +443,7 @@ const exportShare = async () => {
 
 const importShare = async value => {
   try {
-    const preview = await store.previewShareImport(value)
-    const unsubscribed = preview.unsubscribed || []
-    if (unsubscribed.length) {
-      const visibleItems = unsubscribed.slice(0, 20).map(item => {
-        const name = item.title || item.pack_name || t('app.workshopItem', { id: item.workshop_id })
-        return t('app.subscriptionItem', { name, id: item.workshop_id })
-      })
-      if (unsubscribed.length > visibleItems.length) {
-        visibleItems.push(t('app.moreUnsubscribed', { count: unsubscribed.length - visibleItems.length }))
-      }
-      const confirmed = await requestConfirmation({
-        message: t('app.confirmSubscribe', { items: visibleItems.join('\n') }),
-      })
-      if (!confirmed) return
-      await store.subscribeWorkshopItems(unsubscribed.map(item => item.workshop_id))
-    }
-    await store.importShare(value)
-    if (unsubscribed.length) {
-      store.notify(
-        t('app.subscribedRescan', { count: unsubscribed.length }),
-      )
-    }
-    showShare.value = false
+    if (await store.importShare(value)) showShare.value = false
   } catch {
     // Store actions surface failures through the shared toast.
   }

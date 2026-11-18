@@ -23,11 +23,11 @@ beforeEach(() => {
   invokeMock.mockReset()
 })
 afterEach(() => {
-  useAppStore().stopCollectionImportDownloadSync()
+  useAppStore().stopWorkshopImportDownloadSync()
   applyInterfaceLanguage('zh-CN')
 })
 
-it.each(['refreshWorkshopInBackground', 'refreshModsInBackground', 'refreshCollectionImportDownloads'])(
+it.each(['refreshWorkshopInBackground', 'refreshModsInBackground', 'refreshWorkshopImportDownloads'])(
   'discards old game results from %s even after switching away and back', async method => {
     const oldScan = deferred()
     const started = deferred()
@@ -42,14 +42,14 @@ it.each(['refreshWorkshopInBackground', 'refreshModsInBackground', 'refreshColle
     })
     const store = useAppStore()
     store.settings = { selected_game: 'warhammer3', fetch_workshop_metadata: false }
-    store.collectionImportSync = { playsetId: store.currentPlaysetId, pendingWorkshopIds: ['123'] }
+    store.workshopImportSync = { playsetId: store.currentPlaysetId, pendingWorkshopIds: ['123'] }
     vi.spyOn(store, 'loadPreview').mockResolvedValue()
     vi.spyOn(store, 'loadThumbnails').mockResolvedValue()
     vi.spyOn(store, 'refreshWorkshopUpdateEligibility').mockResolvedValue()
     const pending = store[method]()
     await started.promise
     await store.saveSettings({ selected_game: 'three_kingdoms' })
-    expect(store.collectionImportSync).toBeNull()
+    expect(store.workshopImportSync).toBeNull()
     await store.saveSettings({ selected_game: 'warhammer3' })
     await store.applyExternalScan(scanPayload('warhammer3', 'new'))
     oldScan.resolve(scanPayload('warhammer3', 'old'))

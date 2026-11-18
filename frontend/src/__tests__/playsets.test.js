@@ -330,14 +330,14 @@ describe('playset state', () => {
     store.activeIds = ['installed-id']
     store.missingEnabledIds = [pending]
     store.dirty = true
-    store.collectionImportSync = { playsetId: 'default', pendingWorkshopIds: ['456'] }
+    store.workshopImportSync = { playsetId: 'default', pendingWorkshopIds: ['456'] }
     store.recordCurrentPlaysetChange = vi.fn(() => Promise.resolve())
 
-    await store.refreshCollectionImportDownloads()
+    await store.refreshWorkshopImportDownloads()
 
     expect(store.activeIds).toEqual(['installed-id', 'downloaded-id'])
     expect(store.missingEnabledIds).toEqual([])
-    expect(store.collectionImportSync).toBeNull()
+    expect(store.workshopImportSync).toBeNull()
     expect(store.recordCurrentPlaysetChange).toHaveBeenCalledOnce()
   })
 
@@ -357,26 +357,59 @@ describe('playset state', () => {
     expect(store.recordCurrentPlaysetChange).toHaveBeenCalledTimes(2)
   })
 
-  it('previews share subscriptions and forwards accepted bulk subscriptions', async () => {
-    invokeMock.mockImplementation(async (method, value) => {
-      if (method === 'preview_import_share') {
-        return { unsubscribed: [{ workshop_id: '123', title: 'Missing Mod' }] }
+  it('scans for shared Workshop downloads and saves their enabled order without a manual refresh', async () => {
+    const store = useAppStore()
+    const pending = 'pending:steam:123:downloaded.pack'
+    const imported = { ...defaultPlayset, mod_ids: ['a', pending, 'b'] }
+    const installed = { ...defaultPlayset, mod_ids: ['a', 'downloaded', 'b'] }
+    const mods = [{ id: 'a' }, { id: 'b' }]
+    const downloadedMod = { id: 'downloaded', pack_name: 'downloaded.pack', workshop_id: '123', source: 'workshop' }
+    let downloadFinished = false
+    invokeMock.mockImplementation(async (method, _playsetId, modIds) => {
+      if (method === 'import_share') return {
+        playsets: [imported], current_playset: imported, ordered_mod_ids: ['a', 'b'],
+        missing_mod_ids: [pending], pending_workshop_ids: ['123'],
       }
-      if (method === 'subscribe_workshop_items') {
-        return { subscribed: value, already_subscribed: [] }
+      if (method === 'scan_mods') return downloadFinished ? {
+        mods: [...mods, downloadedMod], enabled_order: installed.mod_ids, missing_enabled_ids: [],
+        playsets: [installed], current_playset: installed, order_token: 'scan-token',
+      } : {
+        mods, enabled_order: ['a', 'b'], missing_enabled_ids: [pending],
+        playsets: [imported], current_playset: imported, order_token: 'scan-token',
       }
+      if (method === 'update_playset') return { playsets: [{ ...defaultPlayset, mod_ids: modIds }] }
+      if (method === 'save_load_order') return { order_token: 'saved-token' }
+      if (method === 'get_mod_preview') return { url: '' }
       throw new Error(`unexpected method: ${method}`)
     })
-    const store = useAppStore()
+    store.settings = { live_mod_detection: false, fetch_workshop_metadata: false }
+    store.mods = mods
+    store.playsets = [defaultPlayset]
+    store.currentPlaysetId = 'default'
+    vi.spyOn(store, 'loadThumbnails').mockResolvedValue()
 
-    const preview = await store.previewShareImport('share-code')
-    const subscribed = await store.subscribeWorkshopItems(['123'])
+    vi.useFakeTimers()
+    try {
+      await store.importShare('share-code')
+      await store.flushPlaysetUpdates()
+      expect(store.currentPlayset.mod_ids).toEqual(imported.mod_ids)
+      expect(invokeMock).toHaveBeenCalledWith('save_load_order', imported.mod_ids, 'missing')
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect(store.activeIds).toEqual(['a', 'b'])
+      expect(invokeMock).toHaveBeenCalledWith('scan_mods', false)
 
-    expect(preview.unsubscribed[0].workshop_id).toBe('123')
-    expect(subscribed.subscribed).toEqual(['123'])
-    expect(invokeMock.mock.calls).toEqual([
-      ['preview_import_share', 'share-code'],
-      ['subscribe_workshop_items', ['123']],
-    ])
+      downloadFinished = true
+      await vi.advanceTimersByTimeAsync(4_000)
+      await store.flushPlaysetUpdates()
+      expect(store.activeIds).toEqual(installed.mod_ids)
+      expect(store.missingEnabledIds).toEqual([])
+      expect(invokeMock).toHaveBeenCalledWith('save_load_order', installed.mod_ids, 'scan-token')
+
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect(invokeMock.mock.calls.filter(([method]) => method === 'scan_mods')).toHaveLength(2)
+    } finally {
+      store.beginGameContextChange()
+      vi.useRealTimers()
+    }
   })
 })

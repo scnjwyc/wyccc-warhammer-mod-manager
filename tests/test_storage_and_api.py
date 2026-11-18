@@ -2138,69 +2138,93 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(result["data"]["steam_language"], "schinese")
         refresh.assert_called_once_with(["123"], "zh-CN", app_id=1_142_710)
 
-    def test_share_import_warns_subscribes_and_resolves_downloaded_workshop_mods(self) -> None:
+    def test_share_import_subscribes_missing_workshop_items_and_preserves_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            exported_asset = make_asset(
-                write_pack(root / "exported" / "123" / "shared.pack"),
-                "exported-id",
-                SOURCE_WORKSHOP,
-                "123",
-            )
-            share_code = export_share([exported_asset])
+            game = root / "Total War WARHAMMER III"
+            data = game / "data"
+            workshop = root / "workshop" / "1142710"
+            data.mkdir(parents=True)
+            workshop.mkdir(parents=True)
+            (game / "Warhammer3.exe").write_bytes(b"")
+            (data / "manifest.txt").write_text("data.pack\t0\n", encoding="utf-8")
+            write_pack(data / "data.pack")
+            write_pack(data / "installed.pack")
             api = API(root / "state")
-
-            with patch(
-                "backend.api.query_workshop_subscription_status",
-                return_value=[
-                    {
-                        "workshop_id": "123",
-                        "title": "Shared Workshop Mod",
-                        "subscribed": False,
-                    }
-                ],
-            ) as query_status:
-                preview = api.call("preview_import_share", [share_code])
-
-            self.assertTrue(preview["ok"])
-            self.assertEqual(preview["data"]["unsubscribed"][0]["workshop_id"], "123")
-            query_status.assert_called_once_with(["123"], "schinese", app_id=1_142_710)
+            self.assertTrue(api.call("save_settings", [{
+                "game_path": str(game), "workshop_path": str(workshop),
+                "live_mod_detection": False, "fetch_workshop_metadata": False,
+            }])["ok"])
+            self.addCleanup(api.close)
+            scan = api.call("scan_mods", [False])
+            self.assertTrue(scan["ok"], scan)
+            installed_id = scan["data"]["mods"][0]["id"]
+            checksum = "0" * 32
+            share_code = "\n".join([
+                "# TW Mod Profile",
+                f"mod_lookup_key://{checksum}@steam_workshop:1142710/123@0/second.pack",
+                f"mod_lookup_key://{checksum}@game_dir:data/installed.pack",
+                f"mod_lookup_key://{checksum}@steam_workshop:1142710/456@0/already.pack",
+                f"mod_lookup_key://{checksum}@steam_workshop:1142710/123@0/first.pack",
+                f"mod_lookup_key://{checksum}@steam_workshop:1142710/789@0/unavailable.pack",
+                f"mod_lookup_key://{checksum}@game_dir:data/missing-local.pack",
+            ])
 
             with patch(
                 "backend.api.subscribe_workshop_items",
                 return_value={
-                    "operation": "subscribe_many",
                     "subscribed": ["123"],
-                    "already_subscribed": [],
+                    "already_subscribed": ["456"],
+                    "failed": [{"workshop_id": "789", "error": "access denied"}],
                 },
             ) as subscribe:
-                accepted = api.call("subscribe_workshop_items", [["123"]])
-            self.assertTrue(accepted["ok"])
-            subscribe.assert_called_once_with(["123"], app_id=1_142_710)
+                imported = api.call("import_share", [share_code])
 
-            imported = api.call("import_share", [share_code])
-            self.assertTrue(imported["ok"])
-            pending_id = imported["data"]["missing_mod_ids"][0]
-            self.assertEqual(parse_pending_workshop_mod_id(pending_id), ("123", "shared.pack"))
+            self.assertTrue(imported["ok"], imported)
+            subscribe.assert_called_once_with(["123", "456", "789"], app_id=1_142_710)
+            self.assertEqual(imported["data"]["ordered_mod_ids"], [installed_id])
+            self.assertEqual(imported["data"]["pending_workshop_ids"], ["123", "456"])
+            self.assertEqual(imported["data"]["subscription_failures"][0]["workshop_id"], "789")
+            pending = imported["data"]["missing_mod_ids"]
             self.assertEqual(
-                api.state_repository.get_current_playset()["mod_ids"],
-                [pending_id],
+                [parse_pending_workshop_mod_id(mod_id) for mod_id in pending],
+                [("123", "second.pack"), ("456", "already.pack"), ("123", "first.pack")],
             )
+            self.assertEqual(api.state_repository.get_enabled_order(), [
+                pending[0], installed_id, pending[1], pending[2],
+            ])
 
-            downloaded_asset = make_asset(
-                write_pack(root / "installed" / "123" / "shared.pack"),
-                "installed-id",
-                SOURCE_WORKSHOP,
-                "123",
-            )
-            api._assets = {downloaded_asset.id: downloaded_asset}
-            resolved = api._current_playset_payload()
-            self.assertEqual(resolved["ordered_mod_ids"], ["installed-id"])
-            self.assertEqual(resolved["missing_mod_ids"], [])
-            self.assertEqual(
-                api.state_repository.get_current_playset()["mod_ids"],
-                ["installed-id"],
-            )
+            write_pack(workshop / "456" / "already.pack")
+            downloaded = api.call("scan_mods", [False])["data"]
+            packs = {item["id"]: item["pack_name"] for item in downloaded["mods"]}
+            self.assertEqual([packs[mod_id] for mod_id in downloaded["enabled_order"]], [
+                "installed.pack", "already.pack",
+            ])
+            write_pack(workshop / "123" / "first.pack")
+            write_pack(workshop / "123" / "second.pack")
+            downloaded = api.call("scan_mods", [False])["data"]
+            packs = {item["id"]: item["pack_name"] for item in downloaded["mods"]}
+            final_order = downloaded["enabled_order"]
+            self.assertEqual([packs[mod_id] for mod_id in final_order], [
+                "second.pack", "installed.pack", "already.pack", "first.pack",
+            ])
+            self.assertEqual(downloaded["missing_enabled_ids"], [])
+            self.assertEqual(api.state_repository.get_enabled_order(), final_order)
+
+    def test_share_import_keeps_current_playset_when_all_subscriptions_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, closing(API(Path(temporary) / "state")) as api:
+            api.state_repository.update_current_playset(["existing-mod"])
+            share_code = f"mod_lookup_key://{'0' * 32}@steam_workshop:1142710/123@0/missing.pack"
+            with patch("backend.api.subscribe_workshop_items", return_value={
+                "subscribed": [],
+                "already_subscribed": [],
+                "failed": [{"workshop_id": "123", "error": "access denied"}],
+            }):
+                imported = api.call("import_share", [share_code])
+
+            self.assertFalse(imported["ok"])
+            self.assertEqual(imported["error"]["message"], "share.subscriptionFailed")
+            self.assertEqual(api.state_repository.get_enabled_order(), ["existing-mod"])
 
     def test_collection_import_subscribes_missing_items_and_preserves_collection_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2293,10 +2317,10 @@ class ApiContractTests(unittest.TestCase):
 
             saved_order = api.call(
                 "save_load_order",
-                [[installed_id], scan["data"]["order_token"]],
+                [[installed_id, pending_id], scan["data"]["order_token"]],
             )
 
-            self.assertTrue(saved_order["ok"])
+            self.assertTrue(saved_order["ok"], saved_order)
             self.assertEqual(
                 api.state_repository.get_current_playset()["mod_ids"],
                 [installed_id, pending_id],
@@ -2318,6 +2342,15 @@ class ApiContractTests(unittest.TestCase):
                 api.state_repository.get_current_playset()["mod_ids"],
                 [installed_id, downloaded_id],
             )
+            # The UI can queue a reordered snapshot just before a scan resolves its pending entry.
+            reordered_ids = [pending_id, installed_id]
+            self.assertTrue(api.call("update_playset", [current_playset_id, reordered_ids])["ok"])
+            saved_after_download = api.call(
+                "save_load_order", [reordered_ids, downloaded_scan["data"]["order_token"]],
+            )
+            self.assertTrue(saved_after_download["ok"], saved_after_download)
+            self.assertEqual(saved_after_download["data"]["plan"]["ordered_mod_ids"], [downloaded_id, installed_id])
+            self.assertEqual(api.state_repository.get_enabled_order(), [downloaded_id, installed_id])
 
     def test_switching_playset_persists_its_order_through_the_next_scan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
