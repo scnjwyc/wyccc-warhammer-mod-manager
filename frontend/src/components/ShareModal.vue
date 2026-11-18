@@ -9,9 +9,19 @@ const props = defineProps({
   canImportOfficialProfile: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['close', 'export', 'import', 'import-collection', 'import-official'])
+const emit = defineEmits([
+  'close',
+  'export',
+  'import',
+  'import-collection',
+  'import-official',
+  'export-json',
+  'import-json',
+])
 const value = ref('')
 const collectionValue = ref('')
+const includeDescriptions = ref(false)
+const importMode = ref('new')
 
 watch(
   () => props.exportValue,
@@ -69,6 +79,45 @@ const copyValue = async () => {
           </div>
           <small class="field-help">{{ t('share.collectionHelp') }}</small>
         </div>
+        <div class="share-json">
+          <label class="field-label">
+            <span>{{ t('share.jsonSection') }}</span>
+          </label>
+          <p class="muted-copy">{{ t('share.jsonHelp') }}</p>
+          <div class="share-json-controls">
+            <label class="share-json-check">
+              <input v-model="includeDescriptions" type="checkbox" :disabled="!!busy" />
+              {{ t('share.includeDescriptions') }}
+            </label>
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="!!busy"
+              data-testid="share-export-json"
+              @click="emit('export-json', includeDescriptions)"
+            >
+              {{ t('share.exportJson') }}
+            </button>
+          </div>
+          <div class="share-json-controls">
+            <label class="share-json-mode">
+              <span>{{ t('share.importMode') }}</span>
+              <select v-model="importMode" :disabled="!!busy">
+                <option value="new">{{ t('share.importModeNew') }}</option>
+                <option value="current">{{ t('share.importModeCurrent') }}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="!!busy"
+              data-testid="share-import-json"
+              @click="emit('import-json', importMode)"
+            >
+              {{ t('share.importJson') }}
+            </button>
+          </div>
+        </div>
         <div class="button-row">
           <button
             v-if="canImportOfficialProfile"
@@ -94,3 +143,30 @@ const copyValue = async () => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.share-json {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.share-json-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.share-json-check,
+.share-json-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.share-json-mode select {
+  height: 32px;
+  padding: 0 8px;
+}
+</style>
