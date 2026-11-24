@@ -15,14 +15,19 @@ const unit = (key, name, overrides = {}) => ({
   morale: 60, speed: 30, melee_attack: 32, melee_defence: 32, weapon_strength: 28, charge_bonus: 14,
   recruitment_cost: 375, upkeep_cost: 100, melee_damage: 21, melee_ap_damage: 7, range: 0,
   features: [{ key: 'hide', name: '于森林中隐蔽', description: '森林隐蔽', icon: '' }],
-  source_chain: ['原版', 'Test MOD'], icon: 'ui/card.png', portrait: 'ui/portrait.png', ...overrides,
+  source_chain: ['原版', 'Test MOD'], mod_name: 'Test MOD', tier: 3, tier_icon: 'ui/tier3.png',
+  melee_bonus_v_large: 30, melee_bonus_v_infantry: 20, weapon_length: 2, melee_attack_interval: 4.3,
+  contact_phase: 'wh_main_unit_contact_poison', contact_effect: '中毒！',
+  icon: 'ui/card.png', portrait: 'ui/portrait.png', ...overrides,
 })
 const data = () => ({
   token: 'session', source_count: 2, source_pack_names: ['db.pack', 'test.pack'], art: {}, asset_warnings: [],
   races: [{ key: 'empire', name: '帝国', count: 2, image: 'ui/race.png', crest: '' },
     { key: 'cathay', name: '震旦', count: 1, image: '', crest: '' }],
   units: [unit('sword', '剑士'), unit('bow', '弓箭手', { range: 160, ammo: 24, missile_strength: 22,
-    missile_damage: 18, missile_ap_damage: 4, firing_interval: 9.5, projectile_count: 6 }), unit('jade', '玉勇', { races: ['cathay'] })],
+    missile_damage: 18, missile_ap_damage: 4, firing_interval: 9.5, projectile_count: 6, shots_per_volley: 3,
+    explosion_damage: 20, explosion_ap_damage: 5, explosion_radius: 5 }),
+    unit('jade', '玉勇', { races: ['cathay'], mod_name: '苍龙 MOD', source_chain: ['苍龙 MOD'] })],
 })
 let wrapper
 let host
@@ -74,6 +79,18 @@ describe('unit encyclopedia', () => {
     expect(wrapper.findAll('[data-unit]')).toHaveLength(1)
   })
 
+  it('finds units by MOD name and lists the factions that own them', async () => {
+    await open()
+    await wrapper.get('input[type="search"]').setValue('苍龙')
+    expect(wrapper.findAll('[data-race]')).toHaveLength(1)
+    expect(wrapper.get('[data-race]').attributes('data-race')).toBe('cathay')
+    await wrapper.get('[data-race="cathay"]').trigger('click')
+    expect(wrapper.findAll('[data-unit]')).toHaveLength(1)
+    expect(wrapper.get('[data-unit]').attributes('data-unit')).toBe('jade')
+    await wrapper.get('input[type="search"]').setValue('Test MOD')
+    expect(wrapper.findAll('[data-unit]')).toHaveLength(0)
+  })
+
   it('shows all units in exactly two roster tabs without numbered pagination', async () => {
     const result = data()
     result.units = [...Array.from({ length: 190 }, (_, i) => unit(`unit_${i}`, `单位 ${i}`)),
@@ -92,6 +109,66 @@ describe('unit encyclopedia', () => {
     await wrapper.get('input[type="search"]').setValue('英雄')
     expect(wrapper.get('[data-unit]').attributes('data-unit')).toBe('hero')
     expect(wrapper.get('[data-roster="characters"]').attributes('aria-selected')).toBe('true')
+  })
+
+  it('shows the vanilla tier icon before the unit name', async () => {
+    invoke.mockImplementation(async (method, _token, names) => {
+      if (method === 'get_unit_encyclopedia') return data()
+      if (method === 'get_unit_encyclopedia_images') {
+        return Object.fromEntries((names || []).map(name => [name, 'data:image/png;base64,iVBORw0KGgo=']))
+      }
+      return {}
+    })
+    await open()
+    await wrapper.get('[data-race="empire"]').trigger('click')
+    await flushPromises()
+
+    const title = wrapper.get('.encyclopedia-detail-title')
+    expect(title.element.firstElementChild.className).toContain('encyclopedia-tier')
+    expect(title.get('.encyclopedia-tier').attributes('src')).toBe('data:image/png;base64,iVBORw0KGgo=')
+    expect(title.get('.encyclopedia-tier').attributes('alt')).toBe('等级 3')
+    expect(title.get('h3').text()).toBe('剑士')
+    expect(invoke).toHaveBeenCalledWith('get_unit_encyclopedia_images', 'session',
+      expect.arrayContaining(['ui/tier3.png']))
+  })
+
+  it('shows the melee bonuses, weapon length and attack interval', async () => {
+    await open()
+    await wrapper.get('[data-race="empire"]').trigger('click')
+
+    const stats = wrapper.get('.encyclopedia-weapon-stats').text()
+    expect(stats).toContain('反大型加成')
+    expect(stats).toContain('+30')
+    expect(stats).toContain('反步兵加成')
+    expect(stats).toContain('+20')
+    expect(stats).toContain('武器长度')
+    expect(stats).toContain('2')
+    expect(stats).toContain('近战攻击间隔')
+    expect(stats).toContain('4.3 秒')
+    expect(stats).toContain('接触效果')
+    expect(stats).toContain('中毒！')
+  })
+
+  it('shows the ranged volley count and explosion values', async () => {
+    await open()
+    await wrapper.get('[data-race="empire"]').trigger('click')
+    await wrapper.get('[data-unit="bow"]').trigger('click')
+
+    const stats = wrapper.get('.encyclopedia-ranged-stats').text()
+    expect(stats).toContain('射击间隔')
+    expect(stats).toContain('9.5 秒')
+    expect(stats).toContain('每发弹丸数')
+    expect(stats).toContain('6')
+    expect(stats).toContain('每轮射击次数')
+    expect(stats).toContain('3')
+    expect(stats).toContain('每轮弹丸数')
+    expect(stats).toContain('2,160')
+    expect(stats).toContain('远程爆炸伤害')
+    expect(stats).toContain('20')
+    expect(stats).toContain('远程破甲爆炸伤害')
+    expect(stats).toContain('5')
+    expect(stats).toContain('爆炸范围')
+    expect(wrapper.find('.encyclopedia-weapon-stats').exists()).toBe(true)
   })
 
   it('uses the returned snapshot token for images and survives missing art', async () => {

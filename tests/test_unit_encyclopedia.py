@@ -60,6 +60,42 @@ def loc_payload(rows):
     return output
 
 
+def mod_source(name: str = "测试 MOD"):
+    """A MOD layer that adds one unit and rebalances a vanilla unit."""
+    return DbSource(f'MOD "{name}" [pack: mod.pack, source: Data]', (
+        table("main_units_tables", [
+            {"unit": "mod_unit", "land_unit": "custom_land", "num_men": 100,
+             "caste": "melee_infantry", "in_encyclopedia": True, "tier": 3,
+             "recruitment_cost": 300, "ui_unit_group_land": "infantry_sword"},
+            {"unit": "custom_unit", "land_unit": "custom_land", "num_men": 120,
+             "caste": "melee_infantry", "in_encyclopedia": True, "tier": 4,
+             "recruitment_cost": 500, "ui_unit_group_land": "infantry_sword"},
+        ]),
+        table("land_units_tables", [{"key": "custom_land", "bonus_hit_points": 50, "melee_attack": 25,
+                                     "man_entity": "man", "primary_melee_weapon": "sword",
+                                     "attribute_group": "attrs", "shield": "shield"}]),
+        table("battle_entities_tables", [{"key": "man", "hit_points": 8, "run_speed": 3, "mass": 100}]),
+        table("melee_weapons_tables", [{"key": "sword", "damage": 18, "ap_damage": 6,
+                                        "bonus_v_large": 30, "bonus_v_infantry": 20,
+                                        "weapon_length": 2.0, "melee_attack_interval": 3.5,
+                                        "contact_phase": "wh_main_unit_contact_poison"}]),
+        table("unit_abilities_tables", [{"key": "mod_ability", "icon_name": "mod_ability",
+                                         "type": "wh_type_magic_missiles"}]),
+        table("land_units_to_unit_abilites_junctions_tables", [
+            {"ability": "mod_ability", "land_unit": "custom_land", "culture": "*"},
+        ]),
+        table("unit_shield_types_tables", [{"key": "shield", "missile_block_chance": 20}]),
+        table("ui_unit_groupings_tables", [{"key": "infantry_sword", "parent_group": "infantry",
+                                             "icon": "infantry_sword"}]),
+        table("unit_variants_tables", [{"unit": "custom_land", "unit_card": "mod_card"}]),
+        table("factions_tables", [{"key": "faction", "subculture": "sub"}]),
+        table("cultures_subcultures_tables", [{"subculture": "sub", "culture": "race"}]),
+        table("units_custom_battle_permissions_tables", [{"unit": "mod_unit", "faction": "faction"}]),
+        table("unit_attributes_to_groups_junctions_tables", [{"attribute": "hide_forest",
+                                                               "attribute_group": "attrs"}]),
+    ), role="mod")
+
+
 class CatalogueTests(unittest.TestCase):
     def test_catalogue_reads_lzma_compressed_mod_localisation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -82,6 +118,49 @@ class CatalogueTests(unittest.TestCase):
                 collect_catalogue_loc(root, [pack], "cn")[name],
                 "Compressed unit name",
             )
+
+    def test_units_expose_the_mod_name_that_owns_them(self) -> None:
+        result = build_catalogue([mod_source(), base_source()], {}, {}, EncyclopediaAssets([]))
+        units = {row["key"]: row for row in result["units"]}
+
+        self.assertEqual(units["mod_unit"]["mod_name"], "测试 MOD")
+        self.assertEqual(units["custom_unit"]["mod_name"], "原版")
+        self.assertIn("测试 MOD", units["custom_unit"]["source_chain"])
+
+    def test_units_expose_the_vanilla_tier_icon(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tier_three = "ui/skins/default/unit_tier_3.png"
+            tier_four = "ui/skins/default/unit_tier_4.png"
+            pack = write_pack(root / "ui.pack", entries=[
+                (tier_three, png("red")), (tier_four, png("blue")),
+            ])
+            result = build_catalogue([mod_source(), base_source()], {}, {}, EncyclopediaAssets([pack]))
+            units = {row["key"]: row for row in result["units"]}
+
+            self.assertEqual(units["mod_unit"]["tier"], 3)
+            self.assertEqual(units["mod_unit"]["tier_icon"], tier_three)
+            self.assertEqual(units["custom_unit"]["tier"], 4)
+            self.assertEqual(units["custom_unit"]["tier_icon"], tier_four)
+
+    def test_units_expose_the_melee_weapon_details(self) -> None:
+        result = build_catalogue([mod_source(), base_source()], {}, {}, EncyclopediaAssets([]))
+        units = {row["key"]: row for row in result["units"]}
+
+        self.assertEqual(units["mod_unit"]["melee_bonus_v_large"], 30)
+        self.assertEqual(units["mod_unit"]["melee_bonus_v_infantry"], 20)
+        self.assertEqual(units["mod_unit"]["weapon_length"], 2.0)
+        self.assertEqual(units["mod_unit"]["melee_attack_interval"], 3.5)
+
+    def test_units_expose_mod_abilities_and_the_contact_effect(self) -> None:
+        loc = {"special_ability_phases_onscreen_name_wh_main_unit_contact_poison": "中毒！"}
+        result = build_catalogue([mod_source(), base_source()], {}, loc, EncyclopediaAssets([]))
+        units = {row["key"]: row for row in result["units"]}
+        mod_unit = units["mod_unit"]
+
+        self.assertIn("mod_ability", [feature["key"] for feature in mod_unit["features"]])
+        self.assertEqual(mod_unit["contact_phase"], "wh_main_unit_contact_poison")
+        self.assertEqual(mod_unit["contact_effect"], "中毒！")
 
     def test_culture_crest_follows_related_factions_flags_path(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -325,9 +404,38 @@ class CatalogueTests(unittest.TestCase):
             table("land_units_to_unit_abilites_junctions_tables", [
                 {"land_unit": "custom_land", "ability": key, "culture": "other" if key == "foreign" else ""}
                 for key in ("visible", "hidden", "locked", "foreign")]),
-        ))
+        ), role="vanilla")
         unit = build_catalogue([source, base_source()], {}, {}, EncyclopediaAssets([]))["units"][0]
         self.assertEqual([f["key"] for f in unit["features"]], ["hide_forest", "visible"])
+
+    def test_mod_abilities_stay_visible_when_they_wait_for_an_effect(self):
+        source = DbSource("mod skills", (
+            table("unit_abilities_tables", [{"key": "mod_locked", "requires_effect_enabling": True}]),
+            table("land_units_to_unit_abilites_junctions_tables", [
+                {"land_unit": "custom_land", "ability": "mod_locked", "culture": ""}]),
+        ), role="mod")
+        unit = build_catalogue([source, base_source()], {}, {}, EncyclopediaAssets([]))["units"][0]
+        self.assertIn("mod_locked", [feature["key"] for feature in unit["features"]])
+
+    def test_units_expose_the_ranged_volley_and_explosion_values(self):
+        source = DbSource("ranged", (
+            table("land_units_tables", [{"key": "custom_land", "bonus_hit_points": 10, "melee_attack": 20,
+                                         "man_entity": "man", "primary_melee_weapon": "sword",
+                                         "primary_missile_weapon": "bow", "attribute_group": "attrs"}]),
+            table("missile_weapons_tables", [{"key": "bow", "default_projectile": "arrow"}]),
+            table("projectiles_tables", [{"key": "arrow", "projectile_number": 6, "shots_per_volley": 3,
+                                          "effective_range": 200, "base_reload_time": 9.5,
+                                          "explosion_type": "blast"}]),
+            table("projectiles_explosions_tables", [{"key": "blast", "detonation_damage": 20.0,
+                                                     "detonation_damage_ap": 5.0, "detonation_radius": 4.5}]),
+        ), role="vanilla")
+        unit = build_catalogue([source, base_source()], {}, {}, EncyclopediaAssets([]))["units"][0]
+        self.assertEqual(unit["range"], 200)
+        self.assertEqual(unit["projectile_count"], 6)
+        self.assertEqual(unit["shots_per_volley"], 3)
+        self.assertEqual(unit["explosion_damage"], 20.0)
+        self.assertEqual(unit["explosion_ap_damage"], 5.0)
+        self.assertEqual(unit["explosion_radius"], 4.5)
 
     def test_reads_only_enabled_mod_data_and_art_plus_automatic_movie(self):
         with tempfile.TemporaryDirectory() as tmp:

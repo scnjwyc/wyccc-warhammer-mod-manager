@@ -27,13 +27,17 @@ const format = value => value == null ? '—' : Number(value).toLocaleString(cur
 const raceName = race => race?.key === 'unassigned' ? t('encyclopedia.unassigned')
   : race?.prologue ? t('encyclopedia.prologueName', { name: race.name }) : race?.name || ''
 const selectedRace = computed(() => catalogue.value?.races.find(r => r.key === raceKey.value))
+const searchTerm = computed(() => search.value.trim().toLocaleLowerCase())
+const matchesSearch = text => text.toLocaleLowerCase().includes(searchTerm.value)
+const unitSearchText = unit => [
+  unit.name, unit.key, unit.category, unit.mod_name, ...(unit.source_chain || []),
+].filter(Boolean).join(' ')
 const filteredRaces = computed(() => (catalogue.value?.races || []).filter(r => (
-  `${raceName(r)} ${r.key}`.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())
+  matchesSearch(`${raceName(r)} ${r.key}`)
+  || (catalogue.value?.units || []).some(u => u.races.includes(r.key) && matchesSearch(unitSearchText(u)))
 )))
 const raceUnits = computed(() => (catalogue.value?.units || []).filter(u => u.races.includes(raceKey.value)))
-const filteredUnits = computed(() => raceUnits.value.filter(u => (
-  `${u.name} ${u.key} ${u.category}`.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())
-)))
+const filteredUnits = computed(() => raceUnits.value.filter(u => matchesSearch(unitSearchText(u))))
 const groupOrder = ['lord', 'hero', 'infantry', 'missile_infantry', 'cavalry_chariots', 'monsters', 'artillery_war_machines']
 const sortedUnits = computed(() => [...filteredUnits.value].sort((a, b) => {
   const rank = key => groupOrder.includes(key) ? groupOrder.indexOf(key) : groupOrder.length
@@ -86,6 +90,65 @@ const statRows = computed(() => {
     icon: art(key === 'missile_strength' ? 'missile_damage' : key),
   }))
 })
+const weaponStats = computed(() => {
+  const u = selectedUnit.value
+  if (!u) return []
+  const stats = []
+  if (Number(u.melee_bonus_v_large) > 0) {
+    stats.push({ key: 'melee_bonus_v_large', label: t('unitData.meleeBonusVLarge'), value: '+' + u.melee_bonus_v_large })
+  }
+  if (Number(u.melee_bonus_v_infantry) > 0) {
+    stats.push({ key: 'melee_bonus_v_infantry', label: t('unitData.meleeBonusVInfantryWh3'), value: '+' + u.melee_bonus_v_infantry })
+  }
+  if (u.weapon_length) {
+    stats.push({ key: 'weapon_length', label: t('encyclopedia.weaponLength'), value: format(u.weapon_length) })
+  }
+  if (u.melee_attack_interval) {
+    stats.push({ key: 'melee_attack_interval', label: t('encyclopedia.meleeAttackInterval'), value: t('encyclopedia.seconds', { value: format(u.melee_attack_interval) }) })
+  }
+  if (u.contact_phase) {
+    stats.push({ key: 'contact_effect', label: t('encyclopedia.contactEffect'), value: u.contact_effect || u.contact_phase })
+  }
+  return stats
+})
+const rangedStats = computed(() => {
+  const u = selectedUnit.value
+  if (!u || !(u.range > 0)) return []
+  const stats = []
+  const perShot = Number(u.projectile_count || 0)
+  const shots = Number(u.shots_per_volley || 0)
+  const models = Number(u.model_count || 0)
+  if (u.firing_interval != null) {
+    stats.push({ key: 'firing_interval', testid: 'firing-interval', title: t('encyclopedia.firingIntervalHelp'),
+      label: t('encyclopedia.firingInterval'), value: t('encyclopedia.seconds', { value: format(u.firing_interval) }) })
+  }
+  if (perShot > 0) {
+    stats.push({ key: 'projectile_count', testid: 'projectile-count', title: t('encyclopedia.projectileCountHelp'),
+      label: t('encyclopedia.projectileCount'), value: format(perShot) })
+  }
+  if (shots > 1) {
+    stats.push({ key: 'shots_per_volley', testid: 'shots-per-volley', title: t('encyclopedia.shotsPerVolleyHelp'),
+      label: t('encyclopedia.shotsPerVolley'), value: format(shots) })
+  }
+  const volley = perShot * (shots || 1) * models
+  if (volley > 0) {
+    stats.push({ key: 'volley_projectiles', testid: 'volley-projectiles', title: t('encyclopedia.volleyProjectilesHelp'),
+      label: t('encyclopedia.volleyProjectiles'), value: format(volley) })
+  }
+  if (u.explosion_radius != null) {
+    stats.push({ key: 'explosion_radius', testid: 'explosion-radius', title: t('encyclopedia.explosionRadiusHelp'),
+      label: t('encyclopedia.explosionRadius'), value: format(u.explosion_radius) })
+  }
+  if (Number(u.explosion_damage || 0) > 0) {
+    stats.push({ key: 'explosion_damage', testid: 'explosion-damage',
+      label: t('encyclopedia.explosionDamage'), value: format(u.explosion_damage) })
+  }
+  if (Number(u.explosion_ap_damage || 0) > 0) {
+    stats.push({ key: 'explosion_ap_damage', testid: 'explosion-ap-damage',
+      label: t('encyclopedia.explosionApDamage'), value: format(u.explosion_ap_damage) })
+  }
+  return stats
+})
 const resistances = computed(() => ['shield', 'physical_resistance', 'missile_resistance', 'magic_resistance', 'fire_resistance', 'ward_save']
   .filter(key => selectedUnit.value?.[key]).map(key => ({ key, value: selectedUnit.value[key], label: t({
     shield: 'unitData.missileBlockChance', physical_resistance: 'unitData.physicalResistance',
@@ -100,7 +163,7 @@ const visibleAssets = computed(() => {
   } else {
     paths.push(selectedRace.value?.crest)
     if (selectedUnit.value) paths.push(selectedUnit.value.portrait, selectedUnit.value.category_icon,
-      ...selectedUnit.value.features.map(f => f.icon))
+      selectedUnit.value.tier_icon, ...selectedUnit.value.features.map(f => f.icon))
     for (const unit of visibleUnits.value) paths.push(unit.icon)
   }
   return [...new Set(paths.filter(Boolean))]
@@ -279,6 +342,9 @@ onBeforeUnmount(() => { generation += 1 })
               </div>
               <div class="encyclopedia-detail-copy">
                 <div class="encyclopedia-detail-title">
+                  <img v-if="image(selectedUnit.tier_icon)" class="encyclopedia-tier"
+                    :src="image(selectedUnit.tier_icon)" :alt="t('encyclopedia.tier', { value: selectedUnit.tier })"
+                    :title="t('encyclopedia.tier', { value: selectedUnit.tier })">
                   <h3>{{ selectedUnit.name }}</h3>
                   <button type="button" class="encyclopedia-edit" data-testid="encyclopedia-edit-unit"
                     :disabled="editDisabled" :title="t('encyclopedia.editUnit', { name: selectedUnit.name })"
@@ -298,10 +364,13 @@ onBeforeUnmount(() => { generation += 1 })
                 <div class="encyclopedia-damage-breakdown">
                   {{ t('encyclopedia.damageParts', { base: format(selectedUnit.melee_damage), ap: format(selectedUnit.melee_ap_damage) }) }}
                   <span v-if="selectedUnit.range > 0">{{ t('encyclopedia.rangedParts', { base: format(selectedUnit.missile_damage), ap: format(selectedUnit.missile_ap_damage) }) }}</span>
-                  <template v-if="selectedUnit.range > 0">
-                    <span data-testid="firing-interval" :title="t('encyclopedia.firingIntervalHelp')">{{ t('encyclopedia.firingInterval') }} <b>{{ t('encyclopedia.seconds', { value: format(selectedUnit.firing_interval) }) }}</b></span>
-                    <span data-testid="projectile-count" :title="t('encyclopedia.projectileCountHelp')">{{ t('encyclopedia.projectileCount') }} <b>{{ format(selectedUnit.projectile_count) }}</b></span>
-                  </template>
+                </div>
+                <div v-if="rangedStats.length" class="encyclopedia-ranged-stats">
+                  <span v-for="stat in rangedStats" :key="stat.key" :data-testid="stat.testid"
+                    :title="stat.title">{{ stat.label }} <b>{{ stat.value }}</b></span>
+                </div>
+                <div v-if="weaponStats.length" class="encyclopedia-weapon-stats">
+                  <span v-for="stat in weaponStats" :key="stat.key">{{ stat.label }} <b>{{ stat.value }}</b></span>
                 </div>
                 <div v-if="resistances.length" class="encyclopedia-resistances"><span v-for="resistance in resistances" :key="resistance.key">{{ resistance.label }} <b>{{ resistance.value }}%</b></span></div>
                 <h4 v-if="selectedUnit.features.length">{{ t('encyclopedia.features') }}</h4>
@@ -345,6 +414,7 @@ onBeforeUnmount(() => { generation += 1 })
 .encyclopedia { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; color: #e6ddc7; background: #151817; border: 1px solid #8c7347; box-shadow: inset 0 0 0 3px #201f19; outline: none; }
 .encyclopedia-detail-title { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
 .encyclopedia-detail-title h3 { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.encyclopedia-tier { flex: none; align-self: center; width: 24px; height: 24px; object-fit: contain; }
 .encyclopedia-edit { flex: none; padding: 6px 12px; border: 1px solid #8c7045; border-radius: 2px; background: #695034; color: #fff0cc; font-size: 12px !important; box-shadow: inset 0 1px #ffffff18; }
 .encyclopedia-edit:hover:not(:disabled) { background: #80613c; border-color: #5c432a; }
 .encyclopedia button { font: inherit; cursor: pointer; }
@@ -394,6 +464,8 @@ onBeforeUnmount(() => { generation += 1 })
 .encyclopedia-damage-breakdown { font-size: 10px; line-height: 1.7; color: #6b5539; border-top: 1px solid #947b5055; padding-top: 6px; }
 .encyclopedia-damage-breakdown span { display: block; }
 .encyclopedia-resistances { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 12px; font-size: 11px; }
+.encyclopedia-weapon-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 8px; font-size: 11px; color: #5b412c; font-weight: 700; }
+.encyclopedia-ranged-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 6px; font-size: 11px; color: #5b412c; font-weight: 700; }
 .encyclopedia-detail h4 { margin: 18px 0 8px; font-size: 12px; border-bottom: 1px solid #98805777; padding-bottom: 6px; }
 .encyclopedia-features { list-style: none; margin: 0; padding: 0; }
 .encyclopedia-features li { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 11px; }

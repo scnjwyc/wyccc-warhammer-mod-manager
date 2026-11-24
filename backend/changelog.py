@@ -9,6 +9,16 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.4.0",
+        "date": "2026-11-24",
+        "entries": (
+            (
+                "v140_adjusted_title",
+                (("improvement", "v140_large_pack_indexes"), ("improvement", "v140_unit_encyclopedia")),
+            ),
+        ),
+    },
+    {
         "version": "1.3.10",
         "date": "2026-11-18",
         "entries": (
@@ -829,6 +839,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v140_adjusted_title": "调整",
+        "v140_large_pack_indexes": "提高对拥有大索引头的 MOD 的兼容性",
+        "v140_unit_encyclopedia": "优化单位图鉴，现在能显示更多的单位属性",
         "v1310_adjusted_title": "调整",
         "v1310_share_subscription": "调整-导入分享码时会自动订阅缺失的工坊 MOD，下载完成后自动启用并按分享顺序排序",
         "v139_adjusted_title": "调整",
@@ -1125,6 +1138,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v140_adjusted_title": "Adjusted",
+        "v140_large_pack_indexes": "Improved compatibility with mods that have large Pack indexes.",
+        "v140_unit_encyclopedia": "The unit encyclopedia now displays more unit attributes.",
         "v1310_adjusted_title": "Adjusted",
         "v1310_share_subscription": "Adjusted - Importing a share code now subscribes to missing Workshop MODs automatically and enables them in the shared order once the download finishes.",
         "v139_adjusted_title": "Adjusted",
@@ -1421,6 +1437,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v140_adjusted_title": "조정",
+        "v140_large_pack_indexes": "Pack 인덱스가 큰 모드의 호환성을 개선했습니다.",
+        "v140_unit_encyclopedia": "이제 유닛 도감에서 더 많은 유닛 속성을 확인할 수 있습니다.",
         "v1310_adjusted_title": "조정",
         "v1310_share_subscription": "조정 - 공유 코드를 가져오면 누락된 창작마당 MOD를 자동으로 구독하고, 다운로드가 끝나면 공유된 순서대로 활성화합니다.",
         "v139_adjusted_title": "조정",
@@ -1717,6 +1736,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v140_adjusted_title": "Изменено",
+        "v140_large_pack_indexes": "Улучшена совместимость с модами, у которых большой индекс в файле Pack.",
+        "v140_unit_encyclopedia": "Энциклопедия отрядов теперь показывает больше характеристик отрядов.",
         "v1310_adjusted_title": "Изменено",
         "v1310_share_subscription": "Изменено - При импорте кода пропускающиеся моды Мастерской подписываются автоматически и включаются в указанном порядке после загрузки.",
         "v139_adjusted_title": "Изменено",
@@ -2013,6 +2035,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v140_adjusted_title": "調整",
+        "v140_large_pack_indexes": "Pack インデックスが大きい MOD との互換性を向上しました。",
+        "v140_unit_encyclopedia": "ユニット図鑑で、より多くのユニットの属性を確認できるようになりました。",
         "v1310_adjusted_title": "調整",
         "v1310_share_subscription": "調整 - 共有コードをインポートすると、不足しているワークショップ MOD を自動で購読し、ダウンロード後に共有された順序で有効化するようにしました。",
         "v139_adjusted_title": "調整",
@@ -2309,6 +2334,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v140_adjusted_title": "Ajustado",
+        "v140_large_pack_indexes": "Se ha mejorado la compatibilidad con los mods que tienen índices de Pack grandes.",
+        "v140_unit_encyclopedia": "La enciclopedia de unidades ahora muestra más atributos de cada unidad.",
         "v1310_adjusted_title": "Ajustado",
         "v1310_share_subscription": "Ajustado - Al importar un código compartido, los MODs del Taller que faltan se suscriben automáticamente y se activan en el orden compartido cuando termina la descarga.",
         "v139_adjusted_title": "Ajustado",

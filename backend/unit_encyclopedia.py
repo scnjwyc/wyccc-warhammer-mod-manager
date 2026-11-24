@@ -100,9 +100,16 @@ def build_catalogue(
     abilities = defaultdict(list)
     for candidate in effective["land_units_to_unit_abilites_junctions_tables"].values():
         row = candidate.row.values
-        ability = values("unit_abilities_tables", row["ability"])
-        if ability and not ability.get("is_hidden_in_ui") and not ability.get("requires_effect_enabling"):
-            abilities[row["land_unit"]].append((ability, row.get("culture")))
+        ability_candidate = effective["unit_abilities_tables"].get(row["ability"])
+        if ability_candidate is None or ability_candidate.row.values.get("is_hidden_in_ui"):
+            continue
+        ability = ability_candidate.row.values
+        # Vanilla rows that wait for an effect (mutations, spell unlocks) never show on the
+        # unit card, but a MOD stays visible even when it copies that flag.
+        mod_provided = not candidate.source_is_vanilla or not ability_candidate.source_is_vanilla
+        if ability.get("requires_effect_enabling") and not mod_provided:
+            continue
+        abilities[row["land_unit"]].append((ability, row.get("culture")))
 
     # Explicit permissions give custom-key MOD units a home even without a CA prefix.
     permissions = defaultdict(set)
@@ -191,7 +198,8 @@ def build_catalogue(
         seen = set()
         for ability, culture in abilities[row["land_unit"]]:
             key = ability["key"]
-            if key in seen or (culture and culture not in race_keys):
+            # A wildcard culture links the ability to every race; MODs use it for their own units.
+            if key in seen or (culture and culture != "*" and culture not in race_keys):
                 continue
             seen.add(key)
             icon_name = str(ability.get("icon_name") or key)
@@ -212,15 +220,32 @@ def build_catalogue(
             races[key]["count"] += 1
         missile = _unit_missile_weapon(effective, land)
         projectile = values("projectiles_tables", missile.row.values.get("default_projectile")) if missile else {}
+        explosion = values("projectiles_explosions_tables", projectile.get("explosion_type")) if projectile else {}
+        tier_value = int(main.get("tier") or 0)
+        tier = tier_value if 1 <= tier_value <= 5 else 0
+        tier_icon = assets.resolve(f"ui/skins/default/unit_tier_{tier}.png") if tier else ""
+        melee_weapon = values("melee_weapons_tables", land.get("primary_melee_weapon"))
+        contact_phase = str(melee_weapon.get("contact_phase") or "")
+        contact_effect = (
+            loc.get(f"special_ability_phases_onscreen_name_{contact_phase}", "")
+            if contact_phase else ""
+        )
         units.append({
             **{key: row[key] for key in (
                 "key", "name", "caste", "model_count", "recruitment_cost", "upkeep_cost", "armour_value",
                 "morale", "melee_attack", "melee_defence", "charge_bonus", "ammo", "range",
                 "melee_damage", "melee_ap_damage", "missile_damage", "missile_ap_damage", "mass",
                 "missile_resistance", "physical_resistance", "magic_resistance", "fire_resistance", "ward_save",
-                "source_chain", "melee_bonus_v_large", "melee_bonus_v_infantry",
+                "source_chain", "mod_name", "melee_bonus_v_large", "melee_bonus_v_infantry",
             )},
-            "races": race_keys, "group": group,
+            "races": race_keys, "group": group, "tier": tier, "tier_icon": tier_icon,
+            "weapon_length": melee_weapon.get("weapon_length"),
+            "melee_attack_interval": melee_weapon.get("melee_attack_interval"),
+            "contact_phase": contact_phase, "contact_effect": contact_effect,
+            "shots_per_volley": projectile.get("shots_per_volley"),
+            "explosion_damage": explosion.get("detonation_damage"),
+            "explosion_ap_damage": explosion.get("detonation_damage_ap"),
+            "explosion_radius": explosion.get("detonation_radius"),
             "group_name": loc.get(f"ui_unit_groupings_onscreen_{group}", ""),
             "category": loc.get(f"ui_unit_groupings_onscreen_{group_key}", ""),
             "category_icon": assets.resolve(f"ui/common ui/unit_category_icons/{grouping.get('icon') or group_key}.png"),

@@ -14,6 +14,7 @@ PREFIXES = (
     "unit_description_short_texts_text_", "unit_description_historical_texts_text_",
     "ui_unit_groupings_onscreen_", "unit_attributes_bullet_text_",
     "unit_attributes_imued_effect_text_", "unit_abilities_onscreen_name_", "unit_abilities_tooltip_text_",
+    "special_ability_phases_onscreen_name_",
     "ui_text_replacements_localised_text_",
 )
 
