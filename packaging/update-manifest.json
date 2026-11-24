@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.3.10",
-  "published_at": "2026-11-18",
+  "version": "1.4.0",
+  "published_at": "2026-11-24",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.10/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.3.10/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.3.10/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "92696BACD369B2C7725DD37DC8634464E5D8D0E842241C1E0767386CDDBA5181",
-    "size": 65666229
+    "sha256": "07DD31442B4F66781909D4A1814C36446580D3506F67DA0E185DC71161F1D811",
+    "size": 65668926
   },
   "changelog": [
     {
@@ -19,7 +19,11 @@
       "changes": [
         {
           "type": "improvement",
-          "text": "调整-导入分享码时会自动订阅缺失的工坊 MOD，下载完成后自动启用并按分享顺序排序"
+          "text": "提高对拥有大索引头的 MOD 的兼容性"
+        },
+        {
+          "type": "improvement",
+          "text": "优化单位图鉴，现在能显示更多的单位属性"
         }
       ]
     }
