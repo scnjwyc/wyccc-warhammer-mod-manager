@@ -1,29 +1,25 @@
 {
   "schema_version": 1,
   "app": "Wyccc's Mod Manager",
-  "version": "1.4.0",
-  "published_at": "2026-11-24",
+  "version": "1.4.1",
+  "published_at": "2026-11-25",
   "download": {
-    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc's%20Mod%20Manager.exe",
+    "url": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.1/Wyccc's%20Mod%20Manager.exe",
     "mirrors": {
-      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc's%20Mod%20Manager.exe",
-      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.4.0/Wyccc.s.Mod.Manager.exe"
+      "gitee": "https://gitee.com/wyccc2018/wyccc-warhammer-mod-manager/releases/download/1.4.1/Wyccc's%20Mod%20Manager.exe",
+      "github": "https://github.com/scnjwyc/wyccc-warhammer-mod-manager/releases/download/1.4.1/Wyccc.s.Mod.Manager.exe"
     },
     "filename": "Wyccc's Mod Manager.exe",
-    "sha256": "07DD31442B4F66781909D4A1814C36446580D3506F67DA0E185DC71161F1D811",
-    "size": 65668926
+    "sha256": "E1D7F53F61607028EF11274A909D7CC3F4322D3C6994696E9EE399DBE38460A4",
+    "size": 64108403
   },
   "changelog": [
     {
-      "title": "调整",
+      "title": "新增",
       "changes": [
         {
-          "type": "improvement",
-          "text": "提高对拥有大索引头的 MOD 的兼容性"
-        },
-        {
-          "type": "improvement",
-          "text": "优化单位图鉴，现在能显示更多的单位属性"
+          "type": "feature",
+          "text": "创建SFO补丁的功能，在MOD上右键能看到。需要注意的是，本工具创建的SFO补丁仅仅是按照一定的通用规则将单位数值提高到SFO水平，不能解决和SFO之间的硬冲突，也不代表数值真正合理"
         }
       ]
     }
