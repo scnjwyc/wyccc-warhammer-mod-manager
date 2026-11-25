@@ -406,6 +406,8 @@ def write_pfh5_pack(
     entries: Iterable[PackEntry],
     *,
     pack_header_mask: int = 3,
+    dependencies: Sequence[str] = (),
+    overwrite: bool = True,
 ) -> Path:
     normalized = list(entries)
     if not normalized:
@@ -415,18 +417,20 @@ def write_pfh5_pack(
         name = entry.name.encode("utf-8")
         index_parts.append(struct.pack("<iB", len(entry.payload), 0) + name + b"\0")
     index = b"".join(index_parts)
+    dependency_index = b"".join(name.encode("utf-8") + b"\0" for name in dependencies)
     content = b"".join(
         (
             b"PFH5",
             struct.pack(
                 "<6i",
                 int(pack_header_mask),
-                0,
-                0,
+                len(dependencies),
+                len(dependency_index),
                 len(normalized),
                 len(index),
                 0x7FFFFFFF,
             ),
+            dependency_index,
             index,
             *(entry.payload for entry in normalized),
         )
@@ -439,7 +443,12 @@ def write_pfh5_pack(
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        if overwrite:
+            os.replace(temporary, path)
+        elif os.name == "nt":
+            os.rename(temporary, path)  # Windows rename fails if the destination exists.
+        else:
+            os.link(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
     return path

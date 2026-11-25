@@ -92,7 +92,7 @@ const sameListState = (left, right) => (
 export const useAppStore = defineStore('app', {
   state: () => ({
     appName: "Wyccc's Mod Manager",
-    appVersion: '1.4.0',
+    appVersion: '1.4.1',
     settings: {},
     paths: {},
     gameContextRevision: 0,
@@ -2186,6 +2186,16 @@ export const useAppStore = defineStore('app', {
           agreement: agreementNote,
         }))
         return data
+      })
+    },
+    async createSfoPatch(modId) {
+      return this.withBusy(t('sfoPatch.working'), async () => {
+        const report = await invoke('create_sfo_patch', modId)
+        if (report.scan) {
+          await this.applyExternalScan(report.scan, { preservePlaysetOrder: true })
+          if (this.modMap.has(report.mod_id)) await this.selectMod(report.mod_id)
+        }
+        return report
       })
     },
     async updateModTableSchemas(modIds) {

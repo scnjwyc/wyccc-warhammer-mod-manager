@@ -18,6 +18,7 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   keyboardShortcuts: { type: Object, default: () => ({}) },
   packActions: { type: Boolean, default: true },
+  sfoPatchSupported: { type: Boolean, default: false },
   voiceUnitsTableCompatibilitySupported: { type: Boolean, default: true },
   folders: { type: Array, default: () => [] },
 })
@@ -28,6 +29,7 @@ const menuStyle = computed(() => {
   const width = 246
   const height = (props.mod?.workshop_id ? 580 : 540) + (showAiGenerate.value ? 44 : 0)
     + (props.packActions ? 36 : 0) + (showVoiceUnitsCompatibility.value ? 44 : 0)
+    + (showSfoPatch.value ? 38 : 0)
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   return {
@@ -43,6 +45,10 @@ const submenuToLeft = computed(() => {
 
 const hasWorkshop = computed(() => !!props.mod?.workshop_id)
 const showVoiceUnitsCompatibility = computed(() => props.packActions && props.voiceUnitsTableCompatibilitySupported)
+const showSfoPatch = computed(() => (
+  props.packActions && props.sfoPatchSupported && !!props.mod?.path
+  && !/(?:^sfo_grimhammer_3_main|_sfo)\.pack$/i.test(props.mod.pack_name || '')
+))
 const sources = computed(() => new Set(props.mod?.sources?.length ? props.mod.sources : [props.mod?.source]))
 const canCopyToData = computed(() => (
   props.packActions && !props.gameRunning && !!props.mod?.path && !sources.value.has('data')
@@ -365,6 +371,13 @@ const run = (action, value = null, close = true) => {
         data-testid="context-update-schemas" @click="run('update-table-schemas')">
         <span class="context-menu-icon">↻</span>
         <span>{{ batchLabel(t('schemaUpdate.title')) }}</span>
+      </button>
+      <button v-if="showSfoPatch" type="button" class="context-menu-item" role="menuitem"
+        :disabled="isBatchSelection || gameRunning || busy"
+        :title="isBatchSelection ? t('common.singleOnly') : gameRunning ? t('context.gameRunningBlocked') : ''"
+        data-testid="context-create-sfo-patch" @click="run('create-sfo-patch')">
+        <span class="context-menu-icon">＋</span>
+        <span>{{ t('sfoPatch.title') }}</span>
       </button>
       <button type="button" class="context-menu-item" @click="run('toggle-hidden')">
         <span class="context-menu-icon">{{ mod.hidden ? '◉' : '◌' }}</span>

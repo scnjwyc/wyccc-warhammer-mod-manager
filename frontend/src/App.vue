@@ -17,6 +17,7 @@ import ModDetails from './components/ModDetails.vue'
 import ModDiagnosticsModal from './components/ModDiagnosticsModal.vue'
 import ModAIAnalysisModal from './components/ModAIAnalysisModal.vue'
 import SchemaUpdateModal from './components/SchemaUpdateModal.vue'
+import SfoPatchModal from './components/SfoPatchModal.vue'
 import ModList from './components/ModList.vue'
 import OfficialProfileImportModal from './components/OfficialProfileImportModal.vue'
 import SaveGamesModal from './components/SaveGamesModal.vue'
@@ -69,6 +70,7 @@ const officialProfilePreview = ref(null)
 const showDeleteMods = ref(false)
 const deleteModsPreview = ref(null)
 const schemaUpdate = reactive({ open: false, pending: false, report: null, error: '' })
+const sfoPatch = reactive({ open: false, pending: false, report: null, error: '' })
 const updateDialog = reactive({ open: false, mode: 'update' })
 const shareValue = ref('')
 const unitDataSearch = ref('')
@@ -234,6 +236,7 @@ watch(supportsWh3Tools, supported => {
   showUnitEncyclopedia.value = false
   showGameDataModification.value = false
   showCompatibilityPatch.value = false
+  sfoPatch.open = false
   showOfficialProfileImport.value = false
   officialProfilePreview.value = null
 })
@@ -520,6 +523,7 @@ const shortcutsBlocked = () => (
   || showOfficialProfileImport.value
   || showDeleteMods.value
   || schemaUpdate.open
+  || sfoPatch.open
   || updateDialog.open
   || contextMenu.open
   || confirmationDialog.open
@@ -711,6 +715,16 @@ const handleContextAction = async ({ action, value, mod }) => {
         return
       }
       await store.openModInRpfm(mod.id)
+    } else if (action === 'create-sfo-patch') {
+      if (!supportsWh3Tools.value || actionIds.length !== 1 || store.runtime.running || store.busy) return
+      Object.assign(sfoPatch, { open: true, pending: true, report: null, error: '' })
+      try {
+        sfoPatch.report = await store.createSfoPatch(mod.id)
+      } catch (error) {
+        sfoPatch.error = error.message || String(error)
+      } finally {
+        sfoPatch.pending = false
+      }
     } else if (action === 'update-table-schemas') {
       if (store.runtime.running || store.busy) return
       Object.assign(schemaUpdate, { open: true, pending: true, report: null, error: '' })
@@ -1618,6 +1632,7 @@ onBeforeUnmount(() => {
       :keyboard-shortcuts="store.settings.keyboard_shortcuts"
       :busy="!!store.busy"
       :pack-actions="supportsPackActions"
+      :sfo-patch-supported="supportsWh3Tools"
       :voice-units-table-compatibility-supported="supportsWh3Tools"
       :folders="store.modFolders"
       @close="closeModContextMenu"
@@ -1626,6 +1641,8 @@ onBeforeUnmount(() => {
 
     <SchemaUpdateModal :open="schemaUpdate.open" :pending="schemaUpdate.pending"
       :report="schemaUpdate.report" :error="schemaUpdate.error" @close="schemaUpdate.open = false" />
+    <SfoPatchModal :open="sfoPatch.open" :pending="sfoPatch.pending"
+      :report="sfoPatch.report" :error="sfoPatch.error" @close="sfoPatch.open = false" />
 
     <DeleteModsModal
       :open="showDeleteMods"

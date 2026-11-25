@@ -9,6 +9,7 @@ import { exceptionProbeEntries } from './exceptionProbeLanguages'
 import { audioPoolEntries } from './audioPoolLanguages'
 import { aiAnalysisEntries } from './aiAnalysisLanguages'
 import { voiceCompatibilityEntries } from './voiceCompatibilityLanguages'
+import { sfoPatchEntries } from './sfoPatchLanguages'
 
 export const DEFAULT_LANGUAGE = 'en-US'
 
@@ -1846,6 +1847,11 @@ for (const [key, variants] of Object.entries(encyclopediaEntries)) {
   spanishEntries[key] = variants[5]
 }
 
+for (const [key, variants] of Object.entries(sfoPatchEntries)) {
+  entries[key] = variants.slice(0, 5)
+  spanishEntries[key] = variants[5]
+}
+
 const catalogs = Object.fromEntries(languageCodes.map((code, languageIndex) => [
   code,
   code === 'es-ES'
@@ -1921,6 +1927,10 @@ const scanNoticeEnglish = value => {
 
 export const localizeBackendMessage = (message, fallbackKey = 'common.backendFailure') => {
   const value = String(message || '').trim()
+  const sfoError = value.match(/^(sfoPatch\.[A-Za-z]+)(?:\|(.+))?$/)
+  if (sfoError && Object.hasOwn(sfoPatchEntries, sfoError[1])) {
+    return t(sfoError[1], { name: sfoError[2] || '' })
+  }
   const shareError = value.match(/^(share\.[A-Za-z]+)(?:: (.+))?$/)
   if (shareError && Object.prototype.hasOwnProperty.call(shareEntries, shareError[1])) {
     return t(shareError[1], { name: shareError[2] || '' })

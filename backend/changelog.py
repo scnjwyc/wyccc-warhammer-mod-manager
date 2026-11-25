@@ -9,6 +9,11 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.4.1",
+        "date": "2026-11-25",
+        "entries": (("v141_added_title", (("feature", "v141_sfo_patch"),)),),
+    },
+    {
         "version": "1.4.0",
         "date": "2026-11-24",
         "entries": (
@@ -839,6 +844,8 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v141_added_title": "新增",
+        "v141_sfo_patch": "创建SFO补丁的功能，在MOD上右键能看到。需要注意的是，本工具创建的SFO补丁仅仅是按照一定的通用规则将单位数值提高到SFO水平，不能解决和SFO之间的硬冲突，也不代表数值真正合理",
         "v140_adjusted_title": "调整",
         "v140_large_pack_indexes": "提高对拥有大索引头的 MOD 的兼容性",
         "v140_unit_encyclopedia": "优化单位图鉴，现在能显示更多的单位属性",
@@ -1138,6 +1145,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v141_added_title": "Added",
+        "v141_sfo_patch": "Create an SFO patch from a mod’s right-click menu. The tool uses general rules to raise unit stats to SFO levels. It cannot resolve hard conflicts with SFO or guarantee that the resulting stats are well balanced.",
         "v140_adjusted_title": "Adjusted",
         "v140_large_pack_indexes": "Improved compatibility with mods that have large Pack indexes.",
         "v140_unit_encyclopedia": "The unit encyclopedia now displays more unit attributes.",
@@ -1437,6 +1446,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v141_added_title": "추가",
+        "v141_sfo_patch": "모드를 우클릭해 SFO 패치를 만들 수 있습니다. 이 도구는 일반적인 규칙에 따라 유닛 수치를 SFO 수준으로 올립니다. SFO와의 근본적인 충돌을 해결하거나 결과 수치의 밸런스를 보장하지는 않습니다.",
         "v140_adjusted_title": "조정",
         "v140_large_pack_indexes": "Pack 인덱스가 큰 모드의 호환성을 개선했습니다.",
         "v140_unit_encyclopedia": "이제 유닛 도감에서 더 많은 유닛 속성을 확인할 수 있습니다.",
@@ -1736,6 +1747,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v141_added_title": "Добавлено",
+        "v141_sfo_patch": "Патч SFO можно создать из контекстного меню мода. Инструмент повышает характеристики отрядов до уровня SFO по общим правилам. Он не устраняет прямые конфликты с SFO и не гарантирует баланс полученных характеристик.",
         "v140_adjusted_title": "Изменено",
         "v140_large_pack_indexes": "Улучшена совместимость с модами, у которых большой индекс в файле Pack.",
         "v140_unit_encyclopedia": "Энциклопедия отрядов теперь показывает больше характеристик отрядов.",
@@ -2035,6 +2048,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v141_added_title": "追加",
+        "v141_sfo_patch": "MOD の右クリックメニューから SFO パッチを作成できます。このツールは一般的なルールに従ってユニットの数値を SFO 水準に引き上げます。SFO との重大な競合を解消したり、調整後の数値のバランスを保証したりするものではありません。",
         "v140_adjusted_title": "調整",
         "v140_large_pack_indexes": "Pack インデックスが大きい MOD との互換性を向上しました。",
         "v140_unit_encyclopedia": "ユニット図鑑で、より多くのユニットの属性を確認できるようになりました。",
@@ -2334,6 +2349,8 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v141_added_title": "Añadido",
+        "v141_sfo_patch": "Puedes crear un parche para SFO desde el menú contextual de un mod. La herramienta eleva las estadísticas de las unidades al nivel de SFO mediante reglas generales. No resuelve conflictos directos con SFO ni garantiza que las estadísticas resultantes estén equilibradas.",
         "v140_adjusted_title": "Ajustado",
         "v140_large_pack_indexes": "Se ha mejorado la compatibilidad con los mods que tienen índices de Pack grandes.",
         "v140_unit_encyclopedia": "La enciclopedia de unidades ahora muestra más atributos de cada unidad.",

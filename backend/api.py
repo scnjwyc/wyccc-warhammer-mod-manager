@@ -74,7 +74,8 @@ from .mod_watcher import ModChangeMonitor
 from .pack_reader import read_pack_index, read_pack_layout
 from .schema_update import db_table_name, installed_definitions, update_mod_schema
 from .table_schema import load_latest_schema
-from .scanner import ModScanner, is_internal_feature_mod
+from .scanner import ModScanner, _asset_id, is_internal_feature_mod
+from .sfo_patch import SFO_PACK, build_sfo_patch
 from .save_games import SaveGameService
 from .share import (
     export_share,
@@ -94,6 +95,7 @@ from .start_options import (
     build_runtime_options_pack,
     collect_game_data_source_snapshot,
     remove_disabled_runtime_options,
+    write_pfh5_pack,
 )
 from .dynamic_ror_patch_state import ensure_dynamic_ror_compatibility_patch
 from .variant_selector_patch_state import ensure_variant_selector_compatibility_patch
@@ -341,6 +343,7 @@ class API:
             "publish_workshop_item": self._publish_workshop_item,
             "open_mod_in_rpfm": self._open_mod_in_rpfm,
             "update_mod_table_schemas": self._update_mod_table_schemas,
+            "create_sfo_patch": self._create_sfo_patch,
             "copy_mod_to_data": self._copy_mod_to_data,
             "sync_workshop_to_data": self._sync_workshop_to_data,
         }
@@ -3409,6 +3412,92 @@ class API:
             "failed_count": sum(row["status"] == "failed" for row in results),
             "partial_count": sum(row["status"] == "partial" for row in results),
             "scan": self._scan_mods(False),
+        }
+
+    def _sfo_source_dependencies(self, asset: ModAsset, vanilla_name: str) -> list[Path]:
+        installed = list(self._assets.values())
+        by_name = {mod.pack_name.casefold(): mod for mod in installed if Path(mod.path).is_file()}
+        seen = {asset.id}
+        pending = [asset]
+        dependencies = []
+        for mod in pending:
+            if mod.pack_name.casefold() == SFO_PACK:
+                raise ValueError("sfoPatch.requiresSfo")
+            if mod.id != asset.id:
+                dependencies.append(Path(mod.path))
+            related = []
+            for name in mod.dependency_packs:
+                if name.casefold() == vanilla_name.casefold():
+                    continue
+                dependency = by_name.get(name.casefold())
+                if dependency is None:
+                    raise ValueError(f"sfoPatch.missingDependency|{name}")
+                related.append(dependency)
+            for item in mod.required_workshop_items:
+                workshop_id = item.get("workshop_id")
+                matches = [other for other in by_name.values() if other.workshop_id == workshop_id]
+                if not matches:
+                    raise ValueError(f"sfoPatch.missingDependency|{item.get('title') or workshop_id}")
+                related.extend(matches)
+            for dependency in related:
+                if dependency.id not in seen:
+                    seen.add(dependency.id)
+                    pending.append(dependency)
+        return dependencies
+
+    @_requires_idle_game
+    def _create_sfo_patch(self, mod_id: str) -> dict[str, Any]:
+        paths = self.settings_service.resolve_game_paths()
+        if paths.game_id != "warhammer3":
+            raise ValueError("sfoPatch.unsupportedGame")
+        asset = self._require_asset(mod_id)
+        source = Path(asset.path)
+        if (not source.is_file() or source.suffix.casefold() != ".pack"
+                or source.name.casefold() == SFO_PACK or source.stem.casefold().endswith("_sfo")
+                or is_internal_feature_mod(asset, paths.game_id)):
+            raise ValueError("sfoPatch.invalidSource")
+        if not paths.data_path or not (vanilla := Path(paths.data_path) / "db.pack").is_file():
+            raise ValueError("sfoPatch.gameDataMissing")
+        target = vanilla.with_name(f"!{source.stem}_sfo.pack")
+        if target.exists() or any(mod.pack_name.casefold() == target.name.casefold() for mod in self._assets.values()):
+            raise ValueError(f"sfoPatch.exists|{target.name}")
+        sfo = next((Path(mod.path) for mod in self._assets.values()
+                    if mod.pack_name.casefold() == SFO_PACK and Path(mod.path).is_file()), None)
+        if sfo is None:
+            raise ValueError("sfoPatch.sfoMissing")
+        dependencies = self._sfo_source_dependencies(asset, vanilla.name)
+        inputs = (source, vanilla, sfo, *dependencies)
+
+        def fingerprint():
+            return [(stat.st_size, stat.st_mtime_ns) for path in inputs for stat in (path.stat(),)]
+
+        snapshot = fingerprint()
+        entries, reports, skills = build_sfo_patch(source, vanilla, sfo, dependencies)
+        if snapshot != fingerprint():
+            raise ValueError("sfoPatch.sourceChanged")
+        if not entries:
+            return {"path": "", "units": reports, "skills": skills}
+        title = asset.display_name.strip() or source.stem
+        if asset.workshop_id:
+            metadata = self.workshop_service.get_many(
+                [asset.workshop_id], self.interface_language(), app_id=paths.game_definition.app_id,
+            )
+            title = str(metadata.get(asset.workshop_id, {}).get("title") or title)
+        # The alias is user data, independent of the original MOD's own alias.
+        alias = f"{title} SFO补丁"
+        patch_id = _asset_id(SOURCE_DATA, target)
+        try:
+            write_pfh5_pack(target, entries, dependencies=(source.name, sfo.name), overwrite=False)
+        except FileExistsError as exc:
+            raise ValueError(f"sfoPatch.exists|{target.name}") from exc
+        try:
+            self.state_repository.save_user_mod_data(patch_id, alias, "")
+        except Exception:
+            target.unlink()
+            raise
+        return {
+            "path": str(target), "alias": alias, "mod_id": patch_id,
+            "units": reports, "skills": skills, "scan": self._scan_mods(False),
         }
 
     @_requires_idle_game
