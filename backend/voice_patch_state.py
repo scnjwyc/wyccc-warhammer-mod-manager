@@ -27,7 +27,7 @@ from .voice_compatibility import (
     normalized_name,
 )
 
-BUILDER_VERSION = 9
+BUILDER_VERSION = 10
 LOGGER = logging.getLogger(__name__)
 MANIFEST_NAME = "!!!!wyccc_voice_compatibility.json"
 _LANGUAGE_PACKS = {

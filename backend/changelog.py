@@ -9,6 +9,11 @@ SUPPORTED_CHANGELOG_LANGUAGES = frozenset({"zh-CN", "en-US", "ko-KR", "ru-RU", "
 
 CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
     {
+        "version": "1.4.2",
+        "date": "2026-11-28",
+        "entries": (("v142_adjusted_title", (("improvement", "v142_sfo_dependencies"), ("improvement", "v142_voice_override"))),),
+    },
+    {
         "version": "1.4.1",
         "date": "2026-11-25",
         "entries": (("v141_added_title", (("feature", "v141_sfo_patch"),)),),
@@ -844,6 +849,9 @@ CHANGELOG_STRUCTURE: tuple[dict[str, Any], ...] = (
 
 CHANGELOG_TEXT: dict[str, dict[str, str]] = {
     "zh-CN": {
+        "v142_adjusted_title": "调整",
+        "v142_sfo_dependencies": "生成 SFO 补丁时，跳过玩家手动忽略的缺失前置。",
+        "v142_voice_override": "优化语音兼容补丁生成逻辑。同名音库冲突时按加载优先级覆盖，补丁继续生成。",
         "v141_added_title": "新增",
         "v141_sfo_patch": "创建SFO补丁的功能，在MOD上右键能看到。需要注意的是，本工具创建的SFO补丁仅仅是按照一定的通用规则将单位数值提高到SFO水平，不能解决和SFO之间的硬冲突，也不代表数值真正合理",
         "v140_adjusted_title": "调整",
@@ -1145,6 +1153,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "支持自动检查新版本、下载校验、安全替换以及应用内更新日志。",
     },
     "en-US": {
+        "v142_adjusted_title": "Improved",
+        "v142_sfo_dependencies": "SFO patch generation skips missing dependencies that players have manually ignored.",
+        "v142_voice_override": "Conflicting voice banks with the same path now follow load priority, allowing voice compatibility patch generation to continue.",
         "v141_added_title": "Added",
         "v141_sfo_patch": "Create an SFO patch from a mod’s right-click menu. The tool uses general rules to raise unit stats to SFO levels. It cannot resolve hard conflicts with SFO or guarantee that the resulting stats are well balanced.",
         "v140_adjusted_title": "Adjusted",
@@ -1446,6 +1457,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Supports automatic update checks, verified downloads, safe replacement, and an in-app changelog.",
     },
     "ko-KR": {
+        "v142_adjusted_title": "개선",
+        "v142_sfo_dependencies": "SFO 패치를 생성할 때 플레이어가 직접 무시한 누락된 종속성을 건너뜁니다.",
+        "v142_voice_override": "경로가 같은 음성 뱅크가 충돌하면 로드 우선순위에 따라 덮어쓰고 호환성 패치 생성을 계속합니다.",
         "v141_added_title": "추가",
         "v141_sfo_patch": "모드를 우클릭해 SFO 패치를 만들 수 있습니다. 이 도구는 일반적인 규칙에 따라 유닛 수치를 SFO 수준으로 올립니다. SFO와의 근본적인 충돌을 해결하거나 결과 수치의 밸런스를 보장하지는 않습니다.",
         "v140_adjusted_title": "조정",
@@ -1747,6 +1761,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "자동 업데이트 확인, 다운로드 검증, 안전한 교체 및 앱 내 변경 내역을 지원합니다.",
     },
     "ru-RU": {
+        "v142_adjusted_title": "Улучшения",
+        "v142_sfo_dependencies": "При создании патча SFO пропускаются отсутствующие зависимости, которые игрок вручную отметил как игнорируемые.",
+        "v142_voice_override": "При конфликте голосовых банков с одинаковым путём используется банк с более высоким приоритетом загрузки, и создание патча продолжается.",
         "v141_added_title": "Добавлено",
         "v141_sfo_patch": "Патч SFO можно создать из контекстного меню мода. Инструмент повышает характеристики отрядов до уровня SFO по общим правилам. Он не устраняет прямые конфликты с SFO и не гарантирует баланс полученных характеристик.",
         "v140_adjusted_title": "Изменено",
@@ -2048,6 +2065,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "Поддерживаются автоматическая проверка обновлений, проверка загрузки, безопасная замена и журнал изменений в приложении.",
     },
     "ja-JP": {
+        "v142_adjusted_title": "調整",
+        "v142_sfo_dependencies": "SFO パッチの作成時に、プレイヤーが手動で無視した不足依存関係をスキップします。",
+        "v142_voice_override": "同じパスの音声バンクが競合した場合はロード優先順位に従って上書きし、互換パッチの作成を続行します。",
         "v141_added_title": "追加",
         "v141_sfo_patch": "MOD の右クリックメニューから SFO パッチを作成できます。このツールは一般的なルールに従ってユニットの数値を SFO 水準に引き上げます。SFO との重大な競合を解消したり、調整後の数値のバランスを保証したりするものではありません。",
         "v140_adjusted_title": "調整",
@@ -2349,6 +2369,9 @@ CHANGELOG_TEXT: dict[str, dict[str, str]] = {
         "v010_updates": "更新の自動確認、ダウンロード検証、安全な置換、アプリ内更新履歴に対応しました。",
     },
     "es-ES": {
+        "v142_adjusted_title": "Mejoras",
+        "v142_sfo_dependencies": "Al generar un parche de SFO, se omiten las dependencias faltantes que el jugador ha ignorado manualmente.",
+        "v142_voice_override": "Si hay un conflicto entre bancos de voz con la misma ruta, se aplica la prioridad de carga y continúa la generación del parche de compatibilidad.",
         "v141_added_title": "Añadido",
         "v141_sfo_patch": "Puedes crear un parche para SFO desde el menú contextual de un mod. La herramienta eleva las estadísticas de las unidades al nivel de SFO mediante reglas generales. No resuelve conflictos directos con SFO ni garantiza que las estadísticas resultantes estén equilibradas.",
         "v140_adjusted_title": "Ajustado",

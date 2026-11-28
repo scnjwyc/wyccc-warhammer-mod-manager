@@ -1,6 +1,8 @@
 import struct
 from pathlib import Path
 
+import pytest
+
 from backend.api import API
 from backend.schema_update import VERSION_MARKER, _default, _encode_value
 from backend.scanner import read_pack_dependencies
@@ -21,7 +23,8 @@ def table(name, filename, **values):
     return PackEntry(f"db\\{name}\\{filename}", payload)
 
 
-def test_create_sfo_patch_uses_original_damage_and_persists_workshop_alias(tmp_path, monkeypatch):
+@pytest.mark.parametrize("missing_dependency", [None, "pack", "workshop"])
+def test_create_sfo_patch_uses_original_damage_and_persists_workshop_alias(tmp_path, monkeypatch, missing_dependency):
     game = tmp_path / "game"
     data = game / "data"
     workshop = tmp_path / "workshop"
@@ -75,6 +78,16 @@ def test_create_sfo_patch_uses_original_damage_and_persists_workshop_alias(tmp_p
     monkeypatch.setattr(api.workshop_service, "get_many",
                         lambda *args, **kwargs: {"123": {"title": "Workshop Archers"}})
     monkeypatch.setattr(api.workshop_service, "ensure_dependencies", lambda *args, **kwargs: {})
+
+    if missing_dependency:
+        if missing_dependency == "pack":
+            mod.dependency_packs = ["translation.pack"]
+        else:
+            mod.required_workshop_items = [{"workshop_id": "456", "title": "translation.pack"}]
+        blocked = api.call("create_sfo_patch", [mod.id])
+        assert not blocked["ok"] and blocked["error"]["message"] == "sfoPatch.missingDependency|translation.pack"
+        ignored = api.call("set_mod_warning_ignored", [mod.id, "missing_dependency", True])
+        assert ignored["ok"], ignored
 
     result = api.call("create_sfo_patch", [mod.id])
     assert result["ok"], result

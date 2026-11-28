@@ -3426,17 +3426,20 @@ class API:
             if mod.id != asset.id:
                 dependencies.append(Path(mod.path))
             related = []
+            ignore_missing = "missing_dependency" in mod.ignored_warning_codes
             for name in mod.dependency_packs:
                 if name.casefold() == vanilla_name.casefold():
                     continue
                 dependency = by_name.get(name.casefold())
                 if dependency is None:
+                    if ignore_missing:
+                        continue
                     raise ValueError(f"sfoPatch.missingDependency|{name}")
                 related.append(dependency)
             for item in mod.required_workshop_items:
                 workshop_id = item.get("workshop_id")
                 matches = [other for other in by_name.values() if other.workshop_id == workshop_id]
-                if not matches:
+                if not matches and not ignore_missing:
                     raise ValueError(f"sfoPatch.missingDependency|{item.get('title') or workshop_id}")
                 related.extend(matches)
             for dependency in related:

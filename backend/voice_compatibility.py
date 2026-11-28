@@ -9,6 +9,7 @@ so cached global file listings cannot hide their events or playback objects.
 
 from __future__ import annotations
 
+import logging
 import struct
 from collections import defaultdict
 from dataclasses import dataclass, replace
@@ -20,6 +21,7 @@ from .constants import VOICE_COMPATIBILITY_MARKER_ENTRY
 VOICE_RUNTIME_MARKER = VOICE_COMPATIBILITY_MARKER_ENTRY
 VOICE_SETTING_KEY = "voice_compatibility_patch_enabled"
 WH3_BANK_VERSION = 0x80000088
+LOGGER = logging.getLogger(__name__)
 
 
 def normalized_name(name: str) -> str:
@@ -392,6 +394,7 @@ def build_voice_compatibility_entries(
     effective_banks: dict[str, SoundBank] = {}
     effective_events: dict[str, dict[int, DialogueEvent]] = {}
     bank_origins = {}
+    overridden_banks = set()
     localized_bank_names = set()
     candidates = defaultdict(list)
     for priority, source in enumerate(sources):
@@ -417,7 +420,7 @@ def build_voice_compatibility_entries(
             winner = effective_banks.get(name)
             if winner is None:
                 effective_banks[name] = bank
-                bank_origins[name] = {"source": source.name, "role": source.role, "bank": entry.name}
+                bank_origins[name] = source.name
                 effective_events[name] = dict(events)
                 banks.append((entry, bank, effective_events[name], scope))
             elif events:
@@ -427,13 +430,16 @@ def build_voice_compatibility_entries(
                 # lower-priority copy so its dialogue events remain reachable.
                 winner_objects = {payload[:4]: (kind, payload) for kind, payload in winner.objects if kind != 15}
                 incoming_objects = {payload[:4]: (kind, payload) for kind, payload in bank.objects if kind != 15}
-                if any(winner_objects.get(object_id) != value
-                       for object_id, value in incoming_objects.items()
-                       if object_id in winner_objects) or any(
-                    tag in {b"DATA", b"DIDX"} and (tag, data) not in winner.chunks for tag, data in bank.chunks
-                ):
-                    raise VoiceCompatibilityError("bankConflict", [bank_origins[name],
-                        {"source": source.name, "role": source.role, "bank": entry.name}])
+                object_conflict = any(winner_objects[object_id] != value
+                                      for object_id, value in incoming_objects.items()
+                                      if object_id in winner_objects)
+                media_conflict = any(tag in {b"DATA", b"DIDX"} and (tag, data) not in winner.chunks
+                                     for tag, data in bank.chunks)
+                if object_conflict or media_conflict:
+                    overridden_banks.add(name)
+                    LOGGER.warning("Voice bank override: bank=%s kept=%s skipped=%s playback_conflict=%s media_conflict=%s",
+                                   name, bank_origins[name], source.name, object_conflict, media_conflict)
+                    continue
                 merged_objects = list(winner.objects)
                 for kind, payload in bank.objects:
                     if kind != 15 and payload[:4] not in winner_objects:
@@ -551,7 +557,8 @@ def build_voice_compatibility_entries(
 
     entries = []
     for entry, original_bank, events, scope in banks:
-        bank = effective_banks[normalized_name(entry.name)]
+        name = normalized_name(entry.name)
+        bank = effective_banks[name]
         original_ids = {struct.unpack_from("<I", payload)[0] for kind, payload in bank.objects if kind == 15}
         changed = {event_id: replacements[(scope, event_id)] for event_id in events
                    if (scope, event_id) in replacements}
@@ -560,9 +567,9 @@ def build_voice_compatibility_entries(
         payload = entry.payload
         if changed or bank != original_bank:
             payload = bank.replace_dialogues(changed)
-            if payload != entry.payload:
-                entries.append(GameDataEntry(entry.name, payload))
-        basename = normalized_name(entry.name).rpartition("\\")[2]
+        if payload != entry.payload or name in overridden_banks:
+            entries.append(GameDataEntry(entry.name, payload))
+        basename = name.rpartition("\\")[2]
         if (language_scope and not scope
                 and basename.startswith(("campaign_vo_", "battle_vo_", "frontend_vo_"))
                 and basename not in localized_bank_names):
@@ -572,4 +579,5 @@ def build_voice_compatibility_entries(
             # An existing same-name localized file keeps the engine's priority.
             entries.append(GameDataEntry(f"audio\\wwise\\{language_scope}\\{basename}", payload))
     stats["patched_bank_count"] = len(entries)
+    stats["overridden_bank_count"] = len(overridden_banks)
     return entries, stats

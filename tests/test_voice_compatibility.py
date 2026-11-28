@@ -115,12 +115,30 @@ def test_shared_file_path_merges_dialogues_and_retains_lower_unique_events():
     assert event_paths(events[200]) == {(3,): (333, 50, 100)}
 
 
-def test_shared_file_does_not_silently_lose_playback_objects():
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("conflict", ["playback", "media"])
+def test_shared_file_conflict_keeps_the_first_bank_and_merges_unrelated_banks(reverse, conflict):
     name = PREFIX + "shared.bnk"
-    high = DbSource("high", (GameDataEntry(name, bank([event({1: 111})], extras=[(2, b"abcdhigh")])),))
-    low = DbSource("low", (GameDataEntry(name, bank([event({2: 222})], extras=[(2, b"abcdlow")])),))
-    with pytest.raises(ValueError, match="播放对象"):
-        build_voice_compatibility_entries([high, low])
+
+    def shared(label, value):
+        extras = [(2, b"abcd" + label)] if conflict == "playback" else []
+        payload = bank([event({value: value})], extras=extras)
+        if conflict == "media":
+            payload += b"DATA" + struct.pack("<I", len(label)) + label
+        return GameDataEntry(name, payload)
+
+    high = DbSource("high", (shared(b"high", 111), *source("other_high", {1: 111}, event_id=200).entries))
+    low = DbSource("low", (shared(b"low", 222), *source("other_low", {2: 222}, event_id=200).entries))
+    ordered = [low, high] if reverse else [high, low]
+    entries, stats = build_voice_compatibility_entries(ordered)
+    by_name = {entry.name: entry for entry in entries}
+    assert by_name.pop(name) == ordered[0].entries[0]
+    assert len(by_name) == 2
+    for entry in by_name.values():
+        assert event_paths(parse_soundbank(entry.payload).dialogues()[200]) == {
+            (1,): (111, 50, 100), (2,): (222, 50, 100),
+        }
+    assert stats["overridden_bank_count"] == 1
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -967,7 +985,8 @@ def test_missing_vanilla_and_continuously_changing_sources_fail_before_writing(t
         ensure(tmp_path, data, assets)
 
 
-def test_mock_launch_stages_hidden_patch_before_mods_then_removes_it(tmp_path, monkeypatch):
+@pytest.mark.parametrize("same_bank_conflict", [False, True])
+def test_mock_launch_stages_hidden_patch_before_mods_then_removes_it(tmp_path, monkeypatch, same_bank_conflict):
     from backend import api as api_module
     from tests.test_storage_and_api import ApiContractTests
 
@@ -979,9 +998,14 @@ def test_mock_launch_stages_hidden_patch_before_mods_then_removes_it(tmp_path, m
         (data / "audio_en_bnk.pack").write_bytes((fixture_data / "audio_en_bnk.pack").read_bytes())
         for asset in assets.values():
             (data / asset.pack_name).write_bytes(Path(asset.path).read_bytes())
+        if same_bank_conflict:
+            for index, name in enumerate(("high", "low"), 1):
+                payload = bank([event({index: index * 111})], extras=[(2, b"abcd" + name.encode())])
+                write_pack(data / f"{name}.pack", byte_mask=3, entries=[(BASE_NAME, payload)])
         scan = api.call("scan_mods", [False])
         assert scan["ok"], scan
-        ids = [mod["id"] for mod in scan["data"]["mods"] if mod["pack_name"] in {"high.pack", "low.pack"}]
+        by_name = {mod["pack_name"]: mod["id"] for mod in scan["data"]["mods"]}
+        ids = [by_name["high.pack"], by_name["low.pack"]]
         preference = api.call("save_compatibility_patch_settings", [{"voice_compatibility_patch_enabled": "true"}])
         assert preference["ok"] and preference["data"]["settings"]["voice_compatibility_patch_enabled"]
         monkeypatch.setattr(api_module, "launch_game", lambda *args, **kwargs: {"pid": 123})
@@ -993,6 +1017,11 @@ def test_mock_launch_stages_hidden_patch_before_mods_then_removes_it(tmp_path, m
         assert launch["data"]["voice_compatibility_patch"]["status"] == "generated"
         assert launch["data"]["launch_plan"]["ordered_mod_ids"] == ["runtime:voice-compatibility", *ids]
         assert (data / VOICE_COMPATIBILITY_PATCH_NAME).is_file()
+        if same_bank_conflict:
+            assert launch["data"]["voice_compatibility_patch"]["stats"]["overridden_bank_count"] == 1
+            assert read_pack_entries(data / VOICE_COMPATIBILITY_PATCH_NAME, [BASE_NAME]) == read_pack_entries(
+                data / "high.pack", [BASE_NAME],
+            )
         scan = api.call("scan_mods", [False])
         patch = next(mod for mod in scan["data"]["mods"] if mod["pack_name"] == VOICE_COMPATIBILITY_PATCH_NAME)
         assert patch["hidden"]
